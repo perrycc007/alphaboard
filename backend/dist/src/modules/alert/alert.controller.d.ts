@@ -8,20 +8,20 @@ export declare class AlertController {
             id: string;
             ticker: string;
             name: string;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
             sector: string | null;
             industry: string | null;
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         } | null;
     } & {
         id: string;
         createdAt: Date;
-        userId: string;
         stockId: string | null;
+        userId: string;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
@@ -35,8 +35,8 @@ export declare class AlertController {
     }): Promise<{
         id: string;
         createdAt: Date;
-        userId: string;
         stockId: string | null;
+        userId: string;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
@@ -45,8 +45,8 @@ export declare class AlertController {
     remove(id: string): Promise<{
         id: string;
         createdAt: Date;
-        userId: string;
         stockId: string | null;
+        userId: string;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;

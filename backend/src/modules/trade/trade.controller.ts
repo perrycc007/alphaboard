@@ -1,8 +1,10 @@
 import { Controller, Get, Post, Put, Param, Body } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { TradeLifecycleService } from './trade-lifecycle.service';
 import { Direction, Bias } from '@prisma/client';
 
 @Controller('api/trades')
+@AllowAnonymous()
 export class TradeController {
   constructor(private readonly tradeService: TradeLifecycleService) {}
 

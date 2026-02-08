@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Delete, Param, Body, Query } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { WatchlistService } from './watchlist.service';
 
 @Controller('api/watchlists')
+@AllowAnonymous()
 export class WatchlistController {
   constructor(private readonly watchlistService: WatchlistService) {}
 

@@ -1,7 +1,9 @@
 import { Controller, Post, Body } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { RiskEngineService } from './risk-engine.service';
 
 @Controller('api/risk')
+@AllowAnonymous()
 export class RiskController {
   constructor(private readonly riskEngine: RiskEngineService) {}
 

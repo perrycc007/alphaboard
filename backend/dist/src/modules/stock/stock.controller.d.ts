@@ -10,14 +10,14 @@ export declare class StockController {
             id: string;
             ticker: string;
             name: string;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
             sector: string | null;
             industry: string | null;
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         }[];
         total: number;
         page: number;
@@ -27,13 +27,13 @@ export declare class StockController {
         stock: {
             dailyBars: {
                 id: string;
+                stockId: string;
                 date: Date;
                 open: import("@prisma/client-runtime-utils").Decimal;
                 high: import("@prisma/client-runtime-utils").Decimal;
                 low: import("@prisma/client-runtime-utils").Decimal;
                 close: import("@prisma/client-runtime-utils").Decimal;
                 volume: bigint;
-                stockId: string;
                 sma20: import("@prisma/client-runtime-utils").Decimal | null;
                 sma50: import("@prisma/client-runtime-utils").Decimal | null;
                 sma150: import("@prisma/client-runtime-utils").Decimal | null;
@@ -47,27 +47,27 @@ export declare class StockController {
             id: string;
             ticker: string;
             name: string;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
             sector: string | null;
             industry: string | null;
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         };
         stage: import("@prisma/client").$Enums.StageEnum;
         category: import("@prisma/client").$Enums.StockCategory;
         isTemplate: boolean;
         latestBar: {
             id: string;
+            stockId: string;
             date: Date;
             open: import("@prisma/client-runtime-utils").Decimal;
             high: import("@prisma/client-runtime-utils").Decimal;
             low: import("@prisma/client-runtime-utils").Decimal;
             close: import("@prisma/client-runtime-utils").Decimal;
             volume: bigint;
-            stockId: string;
             sma20: import("@prisma/client-runtime-utils").Decimal | null;
             sma50: import("@prisma/client-runtime-utils").Decimal | null;
             sma150: import("@prisma/client-runtime-utils").Decimal | null;
@@ -81,8 +81,8 @@ export declare class StockController {
     findByTicker(ticker: string): Promise<{
         stages: {
             id: string;
-            date: Date;
             stockId: string;
+            date: Date;
             stage: import("@prisma/client").$Enums.StageEnum;
             category: import("@prisma/client").$Enums.StockCategory;
             isTemplate: boolean;
@@ -92,24 +92,24 @@ export declare class StockController {
         id: string;
         ticker: string;
         name: string;
-        isActive: boolean;
-        createdAt: Date;
-        updatedAt: Date;
         sector: string | null;
         industry: string | null;
         exchange: string | null;
         avgVolume: bigint | null;
         marketCap: bigint | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
     }>;
     getDailyBars(ticker: string, limit?: string): Promise<{
         id: string;
+        stockId: string;
         date: Date;
         open: import("@prisma/client-runtime-utils").Decimal;
         high: import("@prisma/client-runtime-utils").Decimal;
         low: import("@prisma/client-runtime-utils").Decimal;
         close: import("@prisma/client-runtime-utils").Decimal;
         volume: bigint;
-        stockId: string;
         sma20: import("@prisma/client-runtime-utils").Decimal | null;
         sma50: import("@prisma/client-runtime-utils").Decimal | null;
         sma150: import("@prisma/client-runtime-utils").Decimal | null;
@@ -121,20 +121,20 @@ export declare class StockController {
     }[]>;
     getIntradayBars(ticker: string): Promise<{
         id: string;
+        stockId: string;
         open: import("@prisma/client-runtime-utils").Decimal;
         high: import("@prisma/client-runtime-utils").Decimal;
         low: import("@prisma/client-runtime-utils").Decimal;
         close: import("@prisma/client-runtime-utils").Decimal;
         volume: bigint;
-        stockId: string;
         ema6: import("@prisma/client-runtime-utils").Decimal | null;
         ema20: import("@prisma/client-runtime-utils").Decimal | null;
         timestamp: Date;
     }[]>;
     getStageHistory(ticker: string): Promise<{
         id: string;
-        date: Date;
         stockId: string;
+        date: Date;
         stage: import("@prisma/client").$Enums.StageEnum;
         category: import("@prisma/client").$Enums.StockCategory;
         isTemplate: boolean;

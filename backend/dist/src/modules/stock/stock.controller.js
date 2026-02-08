@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StockController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const stock_service_1 = require("./services/stock.service");
 const screening_service_1 = require("./services/screening.service");
 const client_1 = require("@prisma/client");
@@ -106,6 +107,7 @@ __decorate([
 ], StockController.prototype, "getStageHistory", null);
 exports.StockController = StockController = __decorate([
     (0, common_1.Controller)('api/stocks'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [stock_service_1.StockService,
         screening_service_1.ScreeningService])
 ], StockController);

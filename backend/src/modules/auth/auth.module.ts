@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { AuthController } from './auth.controller';
+import { AuthModule as BetterAuthModule } from '@thallesp/nestjs-better-auth';
+import { auth } from '../../lib/auth';
 import { AuthService } from './auth.service';
 
 @Module({
-  controllers: [AuthController],
+  imports: [BetterAuthModule.forRoot({ auth })],
   providers: [AuthService],
   exports: [AuthService],
 })

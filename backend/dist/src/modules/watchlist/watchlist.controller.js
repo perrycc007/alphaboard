@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WatchlistController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const watchlist_service_1 = require("./watchlist.service");
 let WatchlistController = class WatchlistController {
     watchlistService;
@@ -66,6 +67,7 @@ __decorate([
 ], WatchlistController.prototype, "removeStock", null);
 exports.WatchlistController = WatchlistController = __decorate([
     (0, common_1.Controller)('api/watchlists'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [watchlist_service_1.WatchlistService])
 ], WatchlistController);
 //# sourceMappingURL=watchlist.controller.js.map

@@ -10,14 +10,14 @@ export declare class SetupController {
             id: string;
             ticker: string;
             name: string;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
             sector: string | null;
             industry: string | null;
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         };
     } & {
         id: string;
@@ -57,14 +57,14 @@ export declare class SetupController {
             id: string;
             ticker: string;
             name: string;
-            isActive: boolean;
-            createdAt: Date;
-            updatedAt: Date;
             sector: string | null;
             industry: string | null;
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isActive: boolean;
+            createdAt: Date;
+            updatedAt: Date;
         };
     } & {
         id: string;

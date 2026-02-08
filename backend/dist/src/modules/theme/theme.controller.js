@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ThemeController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const theme_service_1 = require("./theme.service");
 let ThemeController = class ThemeController {
     themeService;
@@ -75,6 +76,7 @@ __decorate([
 ], ThemeController.prototype, "addStock", null);
 exports.ThemeController = ThemeController = __decorate([
     (0, common_1.Controller)('api/themes'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [theme_service_1.ThemeService])
 ], ThemeController);
 //# sourceMappingURL=theme.controller.js.map

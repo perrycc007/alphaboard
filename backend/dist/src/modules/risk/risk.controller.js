@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RiskController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const risk_engine_service_1 = require("./risk-engine.service");
 let RiskController = class RiskController {
     riskEngine;
@@ -44,6 +45,7 @@ __decorate([
 ], RiskController.prototype, "stopLevels", null);
 exports.RiskController = RiskController = __decorate([
     (0, common_1.Controller)('api/risk'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [risk_engine_service_1.RiskEngineService])
 ], RiskController);
 //# sourceMappingURL=risk.controller.js.map

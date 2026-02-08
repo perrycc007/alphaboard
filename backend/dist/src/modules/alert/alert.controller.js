@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AlertController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const alert_service_1 = require("./alert.service");
 let AlertController = class AlertController {
     alertService;
@@ -54,6 +55,7 @@ __decorate([
 ], AlertController.prototype, "remove", null);
 exports.AlertController = AlertController = __decorate([
     (0, common_1.Controller)('api/alerts'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [alert_service_1.AlertService])
 ], AlertController);
 //# sourceMappingURL=alert.controller.js.map

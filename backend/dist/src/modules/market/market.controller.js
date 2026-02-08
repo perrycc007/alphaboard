@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MarketController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const market_service_1 = require("./market.service");
 const breadth_service_1 = require("./breadth.service");
 let MarketController = class MarketController {
@@ -57,6 +58,7 @@ __decorate([
 ], MarketController.prototype, "getIndexDaily", null);
 exports.MarketController = MarketController = __decorate([
     (0, common_1.Controller)('api/market'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [market_service_1.MarketService,
         breadth_service_1.BreadthService])
 ], MarketController);

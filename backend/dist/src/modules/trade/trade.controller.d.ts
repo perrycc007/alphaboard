@@ -17,8 +17,8 @@ export declare class TradeController {
     }): Promise<{
         id: string;
         createdAt: Date;
-        userId: string | null;
         stockId: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         stopPrice: import("@prisma/client-runtime-utils").Decimal;
         targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
@@ -53,8 +53,8 @@ export declare class TradeController {
     } & {
         id: string;
         createdAt: Date;
-        userId: string | null;
         stockId: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         stopPrice: import("@prisma/client-runtime-utils").Decimal;
         targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
@@ -70,8 +70,8 @@ export declare class TradeController {
         idea: {
             id: string;
             createdAt: Date;
-            userId: string | null;
             stockId: string;
+            userId: string | null;
             direction: import("@prisma/client").$Enums.Direction;
             stopPrice: import("@prisma/client-runtime-utils").Decimal;
             targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
@@ -92,8 +92,8 @@ export declare class TradeController {
     skipIdea(id: string): Promise<{
         id: string;
         createdAt: Date;
-        userId: string | null;
         stockId: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         stopPrice: import("@prisma/client-runtime-utils").Decimal;
         targetPrice: import("@prisma/client-runtime-utils").Decimal | null;

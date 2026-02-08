@@ -1,14 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MarketDataProvider, DailyBarData } from './market-data.provider';
+import YahooFinance from 'yahoo-finance2';
 
 /**
- * yfinance provider for historical daily data.
- * In production, this would call a Python microservice or yfinance REST wrapper.
- * For now, provides the interface and a stub implementation.
+ * Yahoo Finance provider for historical daily OHLCV data.
+ * Uses the yahoo-finance2 Node.js library to fetch bars directly.
  */
 @Injectable()
 export class YFinanceProvider implements MarketDataProvider {
   private readonly logger = new Logger(YFinanceProvider.name);
+  private readonly yf = new YahooFinance({
+    suppressNotices: ['ripHistorical'],
+  });
 
   async fetchDailyBars(
     ticker: string,
@@ -16,14 +19,32 @@ export class YFinanceProvider implements MarketDataProvider {
     to: Date,
   ): Promise<DailyBarData[]> {
     this.logger.log(
-      `Fetching daily bars for ${ticker} from ${from.toISOString()} to ${to.toISOString()}`,
+      `Fetching daily bars for ${ticker} from ${from.toISOString().slice(0, 10)} to ${to.toISOString().slice(0, 10)}`,
     );
 
-    // TODO: Integrate with yfinance Python microservice or REST API
-    // For now, return empty array. In production:
-    // const response = await fetch(`http://yfinance-service/daily?ticker=${ticker}&from=${from}&to=${to}`);
-    // return response.json();
+    try {
+      const result = await this.yf.historical(ticker, {
+        period1: from,
+        period2: to,
+        interval: '1d',
+      });
 
-    return [];
+      const bars: DailyBarData[] = result.map((row) => ({
+        date: row.date,
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        close: row.close,
+        volume: row.volume,
+      }));
+
+      this.logger.log(`Fetched ${bars.length} daily bars for ${ticker}`);
+      return bars;
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch daily bars for ${ticker}: ${(error as Error).message}`,
+      );
+      return [];
+    }
   }
 }

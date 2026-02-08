@@ -1,9 +1,11 @@
 import { Controller, Get, Post, Param, Query } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { SetupOrchestratorService } from './setup-orchestrator.service';
 import { SetupType, Timeframe } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Controller('api')
+@AllowAnonymous()
 export class SetupController {
   constructor(
     private readonly orchestrator: SetupOrchestratorService,

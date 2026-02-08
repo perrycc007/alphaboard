@@ -1,9 +1,11 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { StockService } from './services/stock.service';
 import { ScreeningService, ScreeningFilter } from './services/screening.service';
 import { StageEnum, StockCategory } from '@prisma/client';
 
 @Controller('api/stocks')
+@AllowAnonymous()
 export class StockController {
   constructor(
     private readonly stockService: StockService,

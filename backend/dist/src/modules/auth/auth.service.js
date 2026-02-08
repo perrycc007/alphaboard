@@ -19,23 +19,8 @@ let AuthService = AuthService_1 = class AuthService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async validateUser(email) {
-        const user = await this.prisma.user.findUnique({
-            where: { email },
-        });
-        return user ? { id: user.id, email: user.email } : null;
-    }
-    async createUser(data) {
-        return this.prisma.user.create({
-            data: {
-                email: data.email,
-                name: data.name,
-                preferences: {
-                    create: {},
-                },
-            },
-            include: { preferences: true },
-        });
+    async findUserByEmail(email) {
+        return this.prisma.user.findUnique({ where: { email } });
     }
     async getUserById(id) {
         return this.prisma.user.findUniqueOrThrow({

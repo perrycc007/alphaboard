@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TradeController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const trade_lifecycle_service_1 = require("./trade-lifecycle.service");
 let TradeController = class TradeController {
     tradeService;
@@ -104,6 +105,7 @@ __decorate([
 ], TradeController.prototype, "closePosition", null);
 exports.TradeController = TradeController = __decorate([
     (0, common_1.Controller)('api/trades'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [trade_lifecycle_service_1.TradeLifecycleService])
 ], TradeController);
 //# sourceMappingURL=trade.controller.js.map

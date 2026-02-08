@@ -1,8 +1,10 @@
 import { Controller, Get, Post, Delete, Param, Body, Query } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { AlertService } from './alert.service';
 import { AlertType } from '@prisma/client';
 
 @Controller('api/alerts')
+@AllowAnonymous()
 export class AlertController {
   constructor(private readonly alertService: AlertService) {}
 

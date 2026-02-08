@@ -1,9 +1,17 @@
-import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 
-const prisma = new PrismaClient();
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { stocks, themes } from './seed-data';
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  // Seed indices
+  console.log('Starting seed...\n');
+
+  // ── 1. Indices ──
   const indices = [
     { ticker: 'SPY', name: 'S&P 500 ETF' },
     { ticker: 'QQQ', name: 'Nasdaq 100 ETF' },
@@ -20,72 +28,81 @@ async function main() {
   }
   console.log(`Seeded ${indices.length} indices`);
 
-  // Seed themes
-  const themes = [
-    {
-      name: 'AI',
-      description: 'Artificial Intelligence and Machine Learning',
-      groups: ['Compute/Chips', 'Infrastructure/Hardware', 'Software/SaaS', 'Cloud'],
-    },
-    {
-      name: 'Energy',
-      description: 'Oil, Gas, Renewables, and Nuclear',
-      groups: ['Oil & Gas', 'Solar/Wind', 'Nuclear', 'Utilities'],
-    },
-    {
-      name: 'EV',
-      description: 'Electric Vehicles and Battery Technology',
-      groups: ['OEMs', 'Battery/Materials', 'Charging Infra'],
-    },
-  ];
-
-  for (const theme of themes) {
-    const created = await prisma.theme.upsert({
-      where: { name: theme.name },
-      create: { name: theme.name, description: theme.description },
-      update: {},
-    });
-
-    for (let i = 0; i < theme.groups.length; i++) {
-      await prisma.supplyChainGroup.upsert({
-        where: {
-          themeId_name: { themeId: created.id, name: theme.groups[i] },
-        },
-        create: {
-          themeId: created.id,
-          name: theme.groups[i],
-          sortOrder: i,
-        },
-        update: {},
-      });
-    }
-  }
-  console.log(`Seeded ${themes.length} themes`);
-
-  // Seed sample stocks
-  const stocks = [
-    { ticker: 'NVDA', name: 'NVIDIA Corp', sector: 'Technology', exchange: 'NASDAQ' },
-    { ticker: 'AVGO', name: 'Broadcom Inc', sector: 'Technology', exchange: 'NASDAQ' },
-    { ticker: 'AMD', name: 'Advanced Micro Devices', sector: 'Technology', exchange: 'NASDAQ' },
-    { ticker: 'AAPL', name: 'Apple Inc', sector: 'Technology', exchange: 'NASDAQ' },
-    { ticker: 'MSFT', name: 'Microsoft Corp', sector: 'Technology', exchange: 'NASDAQ' },
-    { ticker: 'TSLA', name: 'Tesla Inc', sector: 'Consumer Discretionary', exchange: 'NASDAQ' },
-    { ticker: 'META', name: 'Meta Platforms', sector: 'Communication Services', exchange: 'NASDAQ' },
-    { ticker: 'GOOGL', name: 'Alphabet Inc', sector: 'Communication Services', exchange: 'NASDAQ' },
-    { ticker: 'AMZN', name: 'Amazon.com', sector: 'Consumer Discretionary', exchange: 'NASDAQ' },
-    { ticker: 'XOM', name: 'Exxon Mobil', sector: 'Energy', exchange: 'NYSE' },
-  ];
+  // ── 2. Stocks ──
+  const stockMap = new Map<string, string>(); // ticker -> id
 
   for (const stock of stocks) {
-    await prisma.stock.upsert({
+    const created = await prisma.stock.upsert({
       where: { ticker: stock.ticker },
-      create: stock,
-      update: {},
+      create: {
+        ticker: stock.ticker,
+        name: stock.name,
+        sector: stock.sector,
+        industry: stock.industry,
+        exchange: stock.exchange,
+      },
+      update: {
+        name: stock.name,
+        sector: stock.sector,
+        industry: stock.industry,
+        exchange: stock.exchange,
+      },
     });
+    stockMap.set(stock.ticker, created.id);
   }
   console.log(`Seeded ${stocks.length} stocks`);
 
-  // Seed a default user
+  // ── 3. Themes, Groups, and ThemeStock links ──
+  let themeCount = 0;
+  let groupCount = 0;
+  let linkCount = 0;
+
+  for (const theme of themes) {
+    const createdTheme = await prisma.theme.upsert({
+      where: { name: theme.name },
+      create: { name: theme.name, description: theme.description },
+      update: { description: theme.description },
+    });
+    themeCount++;
+
+    for (let i = 0; i < theme.groups.length; i++) {
+      const group = theme.groups[i];
+
+      const createdGroup = await prisma.supplyChainGroup.upsert({
+        where: {
+          themeId_name: { themeId: createdTheme.id, name: group.name },
+        },
+        create: {
+          themeId: createdTheme.id,
+          name: group.name,
+          sortOrder: i,
+        },
+        update: { sortOrder: i },
+      });
+      groupCount++;
+
+      // Link stocks to this group
+      for (const ticker of group.tickers) {
+        const stockId = stockMap.get(ticker);
+        if (!stockId) {
+          console.warn(`  WARN: Ticker ${ticker} not found in stock list, skipping`);
+          continue;
+        }
+
+        await prisma.themeStock.upsert({
+          where: {
+            stockId_groupId: { stockId, groupId: createdGroup.id },
+          },
+          create: { stockId, groupId: createdGroup.id },
+          update: {},
+        });
+        linkCount++;
+      }
+    }
+  }
+  console.log(`Seeded ${themeCount} themes, ${groupCount} groups, ${linkCount} stock-group links`);
+
+  // ── 4. Default user ──
   await prisma.user.upsert({
     where: { email: 'trader@alphaboard.dev' },
     create: {
@@ -96,6 +113,8 @@ async function main() {
     update: {},
   });
   console.log('Seeded default user');
+
+  console.log('\nSeed complete.');
 }
 
 main()

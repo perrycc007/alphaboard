@@ -26,13 +26,13 @@ export declare class ThemeService {
                 stock: {
                     dailyBars: {
                         id: string;
+                        stockId: string;
                         date: Date;
                         open: import("@prisma/client-runtime-utils").Decimal;
                         high: import("@prisma/client-runtime-utils").Decimal;
                         low: import("@prisma/client-runtime-utils").Decimal;
                         close: import("@prisma/client-runtime-utils").Decimal;
                         volume: bigint;
-                        stockId: string;
                         sma20: import("@prisma/client-runtime-utils").Decimal | null;
                         sma50: import("@prisma/client-runtime-utils").Decimal | null;
                         sma150: import("@prisma/client-runtime-utils").Decimal | null;
@@ -44,8 +44,8 @@ export declare class ThemeService {
                     }[];
                     stages: {
                         id: string;
-                        date: Date;
                         stockId: string;
+                        date: Date;
                         stage: import("@prisma/client").$Enums.StageEnum;
                         category: import("@prisma/client").$Enums.StockCategory;
                         isTemplate: boolean;
@@ -55,14 +55,14 @@ export declare class ThemeService {
                     id: string;
                     ticker: string;
                     name: string;
-                    isActive: boolean;
-                    createdAt: Date;
-                    updatedAt: Date;
                     sector: string | null;
                     industry: string | null;
                     exchange: string | null;
                     avgVolume: bigint | null;
                     marketCap: bigint | null;
+                    isActive: boolean;
+                    createdAt: Date;
+                    updatedAt: Date;
                 };
             } & {
                 id: string;
@@ -78,10 +78,10 @@ export declare class ThemeService {
     } & {
         id: string;
         name: string;
-        description: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
+        description: string | null;
     }>;
     create(data: {
         name: string;
@@ -89,10 +89,10 @@ export declare class ThemeService {
     }): Promise<{
         id: string;
         name: string;
-        description: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
+        description: string | null;
     }>;
     update(id: string, data: {
         name?: string;
@@ -100,10 +100,10 @@ export declare class ThemeService {
     }): Promise<{
         id: string;
         name: string;
-        description: string | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;
+        description: string | null;
     }>;
     addStockToGroup(groupId: string, stockId: string): Promise<{
         id: string;

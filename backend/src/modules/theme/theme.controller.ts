@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Put, Param, Body } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { ThemeService } from './theme.service';
 
 @Controller('api/themes')
+@AllowAnonymous()
 export class ThemeController {
   constructor(private readonly themeService: ThemeService) {}
 

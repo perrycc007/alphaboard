@@ -1,8 +1,10 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { MarketService } from './market.service';
 import { BreadthService } from './breadth.service';
 
 @Controller('api/market')
+@AllowAnonymous()
 export class MarketController {
   constructor(
     private readonly marketService: MarketService,

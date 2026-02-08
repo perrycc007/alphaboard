@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SetupController = void 0;
 const common_1 = require("@nestjs/common");
+const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const setup_orchestrator_service_1 = require("./setup-orchestrator.service");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma/prisma.service");
@@ -93,6 +94,7 @@ __decorate([
 ], SetupController.prototype, "getSetupEvidence", null);
 exports.SetupController = SetupController = __decorate([
     (0, common_1.Controller)('api'),
+    (0, nestjs_better_auth_1.AllowAnonymous)(),
     __metadata("design:paramtypes", [setup_orchestrator_service_1.SetupOrchestratorService,
         prisma_service_1.PrismaService])
 ], SetupController);

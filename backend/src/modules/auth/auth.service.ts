@@ -2,9 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
- * Auth service: integrates with Better Auth.
- * Phase 1: email/password authentication.
- * userId is optional FK on trade/alert tables (nullable now, required later).
+ * Auth service: wraps Better Auth for application-level user queries.
+ * Better Auth handles sign-up, login, sessions via /api/auth/* routes.
+ * This service provides user lookup for other modules that need user context.
  */
 @Injectable()
 export class AuthService {
@@ -13,33 +13,14 @@ export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Validate user by email. In production, this delegates to Better Auth.
+   * Find user by email (for internal lookups).
    */
-  async validateUser(email: string): Promise<{ id: string; email: string } | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-    });
-    return user ? { id: user.id, email: user.email } : null;
+  async findUserByEmail(email: string) {
+    return this.prisma.user.findUnique({ where: { email } });
   }
 
   /**
-   * Create a new user (sign up).
-   */
-  async createUser(data: { email: string; name?: string }) {
-    return this.prisma.user.create({
-      data: {
-        email: data.email,
-        name: data.name,
-        preferences: {
-          create: {}, // Use defaults
-        },
-      },
-      include: { preferences: true },
-    });
-  }
-
-  /**
-   * Get user by ID.
+   * Get user by ID (for internal lookups).
    */
   async getUserById(id: string) {
     return this.prisma.user.findUniqueOrThrow({
