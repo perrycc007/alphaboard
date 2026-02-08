@@ -1,0 +1,210 @@
+---
+name: brand-system
+description: Lozi Brand System - Design tokens, components, and guidelines. Use when building UI, creating Pencil designs, or documenting design patterns.
+---
+
+# Lozi Brand System
+
+Comprehensive design system for Lozi - a lesson management platform. Follow these guidelines for all UI development and Pencil design work.
+
+## Brand Identity
+
+**Tagline:** "Your progress, our care."
+**Personality:** Warm, caring, personally invested, gently encouraging, progress-proud
+**Design Philosophy:** Flow - emotional continuity, soft shapes, connected states
+
+## Color Tokens
+
+### Primary - Trust & Guidance (Teal)
+```
+--lozi-primary: #0F766E (teal-700)
+--lozi-primary-light: #14B8A6 (teal-500)
+--lozi-primary-dark: #134E4A (teal-900)
+--lozi-primary-50: #F0FDFA
+--lozi-primary-100: #CCFBF1
+--lozi-primary-200: #99F6E4
+```
+
+### Secondary - Care & Celebration (Rose)
+```
+--lozi-secondary: #FB7185 (rose-400)
+--lozi-secondary-light: #FECDD3 (rose-200)
+--lozi-secondary-dark: #E11D48 (rose-600)
+--lozi-secondary-50: #FFF1F2
+```
+
+### Accent
+```
+--lozi-accent: #F43F5E (rose-500)
+--lozi-tertiary: #5EEAD4 (teal-300)
+```
+
+### Semantic
+```
+--lozi-success: #10B981
+--lozi-warning: #F59E0B
+--lozi-error: #EF4444
+--lozi-info: #3B82F6
+```
+
+### Neutrals
+```
+--lozi-bg: #FAFAFA (warm cream)
+--lozi-bg-elevated: #FFFFFF
+--lozi-bg-muted: #F5F2EE
+--lozi-text: #1E293B
+--lozi-text-secondary: #64748B
+--lozi-text-muted: #94A3B8
+--lozi-border: #E2E8F0
+```
+
+## Typography
+
+### Font Families
+- **Headings:** Outfit (weights: 400-800)
+- **Body:** Inter (weights: 400-700)
+- **Monospace:** JetBrains Mono (weights: 400-500)
+
+### Type Scale
+```
+Display Large: 60px / Outfit 700
+Display Medium: 48px / Outfit 700
+Heading 1: 36px / Outfit 600
+Heading 2: 30px / Outfit 600
+Heading 3: 24px / Outfit 600
+Heading 4: 20px / Outfit 600
+Body Large: 18px / Inter 400
+Body: 16px / Inter 400
+Body Small: 14px / Inter 400
+Caption: 12px / Inter 400
+```
+
+## Spacing Scale (8px base)
+
+```
+space-1: 4px
+space-2: 8px
+space-3: 12px
+space-4: 16px
+space-5: 20px
+space-6: 24px
+space-8: 32px
+space-10: 40px
+space-12: 48px
+space-16: 64px
+space-20: 80px
+space-24: 96px
+```
+
+## Border Radius
+
+```
+radius-sm: 6px
+radius-md: 8px
+radius-lg: 12px
+radius-xl: 16px
+radius-2xl: 24px
+radius-full: 9999px
+```
+
+## Shadows
+
+```
+shadow-sm: 0 1px 2px rgba(0,0,0,0.05)
+shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1)
+shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1)
+shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.1)
+shadow-card: 0 2px 8px rgba(120,100,80,0.08)
+```
+
+## Logo Component
+
+Located: `src/components/ui/logo.tsx`
+
+### Color Variants
+- `primary` - Uses --lozi-primary (auto dark mode)
+- `primary-light` - Uses --lozi-primary-light
+- `white` - For dark/brand backgrounds
+- `dark` - Uses --lozi-primary-dark
+- `current` - Inherits from parent
+
+### Size Presets
+- `xs`: 16px - Very compact
+- `sm`: 20px - Mobile nav
+- `md`: 28px - Standard navbar (default)
+- `lg`: 40px - Large header
+- `xl`: 56px - Hero section
+- `2xl`: 72px - Landing hero
+
+## Component States
+
+### Interactive States
+All interactive components must define:
+1. **Default** - Base appearance
+2. **Hover** - Subtle highlight (opacity or background shift)
+3. **Focus** - Ring outline using --lozi-primary
+4. **Active/Pressed** - Slightly darker/compressed
+5. **Disabled** - 50% opacity, cursor-not-allowed
+6. **Loading** - Skeleton or spinner state
+
+### Form Input States
+1. **Empty** - Placeholder visible
+2. **Filled** - User content visible
+3. **Focused** - Border highlight
+4. **Error** - Red border + error message
+5. **Success** - Green checkmark (optional)
+6. **Disabled** - Grayed out
+
+### Button Variants
+- **Primary**: bg-primary, text-white
+- **Secondary**: bg-secondary, text-white
+- **Outline**: border-primary, text-primary
+- **Ghost**: transparent, text-primary hover:bg-primary/10
+- **Destructive**: bg-error, text-white
+
+## Pencil Design Workflow
+
+When creating UI designs in Pencil:
+
+1. **Use Brand Tokens** - Reference CSS variables for colors
+2. **Document States** - Create frames showing all component states
+3. **Include Spacing** - Show padding/margin annotations
+4. **Add Notes** - Explain interaction patterns
+5. **Screenshot Verification** - Always verify with get_screenshot
+
+### Pencil Sections to Include
+
+For comprehensive brand guides:
+- Logo Usage (variants, clear space, backgrounds)
+- Color Palette (all tokens with hex values)
+- Typography Scale (all sizes with examples)
+- Spacing Rules (visual scale demonstration)
+- Border Radius (visual examples)
+- Shadow Scale (visual examples)
+- Component Library (buttons, inputs, cards, etc.)
+- Component States (all interactive states)
+- Dark Mode Variants
+
+## Design Principles
+
+### DO
+- Use soft, rounded corners (never sharp)
+- Create smooth transitions between states
+- Use whitespace generously
+- Keep animations subtle and purposeful
+- Maintain consistent spacing rhythm
+
+### DON'T
+- Use harsh transitions or jarring animations
+- Overcrowd layouts with dividers
+- Use loud celebration effects (confetti, streaks)
+- Create visual urgency patterns
+- Use sharp corners on interactive elements
+
+## File References
+
+- Brand CSS: `src/styles/brand.css`
+- Logo Component: `src/components/ui/logo.tsx`
+- Logo Stories: `src/components/ui/logo.stories.tsx`
+- Brand Assets: `@shared/brand-assets/logos/`
+- Typography CSS: `src/styles/typography.css`

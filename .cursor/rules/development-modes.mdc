@@ -1,0 +1,348 @@
+---
+description: Development modes for specialized workflows and enhanced capabilities
+globs: ["**/*"]
+alwaysApply: false
+always run bind 'set enable-bracketed-paste off'  in git bash
+
+---
+
+# Development Modes
+
+## Mode Activation
+
+When user requests a specific mode, enter that mode with full capabilities:
+
+- **`"Planner Mode"`** - Comprehensive planning with .cursor artifacts
+- **`"Architecture Mode"`** - System architecture analysis and design
+- **`"Debugger Mode"`** - Enhanced debugging with MCP tools
+- **`"Reviewer Mode"`** - Code review with quality checks
+- **`"Implement Mode"`** - Implementation with testing and validation
+- **`"Ultrarun Mode"`** - Maximum research and thinking time
+
+## Planner Mode
+
+**Purpose**: Create a fully traceable, reviewable plan before any implementation. Store all planning artifacts under a dedicated `.cursor` folder for the task and operate via a permissioned loop.
+
+### Preconditions
+
+- [ ] **Do not implement code** until the plan is approved
+- [ ] **Run initial repository reconnaissance** using `grep_search` and `file_search` for similar features, adapters, use-cases, entities, and established patterns
+- [ ] **Collect constraints**: performance, security, accessibility, version policies, and integration boundaries
+
+### Step-by-Step Process
+
+#### Step 1: Identify Task Scope
+
+**Action**: Confirm task title, objective, definition of done, success metrics, and non-functional requirements.
+
+**Deliverables**: `REQUIREMENT.md` (draft)
+
+#### Step 2: Codebase Analysis
+
+**Action**: Perform deep codebase analysis using `grep_search` and `file_search` to find prior art, interfaces, DTOs, domain entities, and use-cases to reuse.
+
+**MUST**: Reference existing code locations explicitly in `DESIGN.md`.
+
+**Deliverables**: `DESIGN.md` sections "Existing Code References" and "Design Considerations"
+
+#### Step 3: Cursor Scaffolding
+
+**Action**: Create a dedicated folder: `.cursor/{yyyy-mm-dd}-{task-slug}/`
+
+**Details**:
+
+- Generate initial files: `REQUIREMENT.md`, `DESIGN.md`, `TASKS.md`, `REVIEW.md`
+- Optionally add: `DECISIONS.md`, `ASSUMPTIONS.md`, `TEST_PLAN.md`, `ROLLBACK.md`, `METRICS.md` if scope warrants
+
+**Deliverables**: Folder structure and file templates populated with current knowledge
+
+#### Step 4: Multi-Solution Design
+
+**Action**: Author 2–3 implementation solutions in `DESIGN.md`, each with pros/cons, complexity, risks, coupling impact, testability, and migration/rollback implications.
+
+**MUST**: Each solution must map to existing code references (files, functions, modules) explaining reuse and extension points.
+
+**Deliverables**: `DESIGN.md` with at least two fully elaborated solutions and a recommended option
+
+#### Step 5: Task Breakdown
+
+**Action**: Translate the recommended design into small, independent, layer-first tasks (Domain → Application → Infrastructure → UI/State), each with acceptance criteria and validation steps.
+
+**MUST**: Include dead-code/unused-params cleanup and DB ingestion mocking in tests for every relevant task.
+
+**Deliverables**: `TASKS.md` with prioritized checklist, estimates, and dependency graph
+
+#### Step 6: Risk Review
+
+**Action**: Draft `REVIEW.md` with risk checklists to run after each task. Include logic risks, business rules risks, data mapping pitfalls, cross-layer leaks, and common mistakes.
+
+**MUST**: Define a "Finding-to-Task" loop: any finding must produce/append a new task in `TASKS.md`.
+
+**Deliverables**: `REVIEW.md` initial risk register and per-task review checklist
+
+#### Step 7: Approval Gate
+
+**Action**: Seek explicit approval before implementation.
+
+**Prompt**: "Planner Mode ready. Approve to proceed with Task 1? (yes/no). Optionally: approve-all or request-changes."
+
+**MUST**: Do not implement without approval.
+
+#### Step 8: Execution Loop
+
+**Action**: For each approved task: implement, then immediately run the corresponding `REVIEW.md` checklist; append any findings as new tasks; request permission for the next task.
+
+**MUST**:
+
+- Enforce dead-code removal and unused-params/imports cleanup in each change
+- In tests, mock DB ingestions and external calls; test the real service/use-case function; regenerate mocks if contracts changed
+
+#### Step 9: Progress Reports
+
+**Action**: After each task, update `TASKS.md` statuses and `REVIEW.md` outcomes. Provide a short progress report with next-step approval prompt.
+
+### Folder Structure Example
+
+```
+.cursor/
+  2025-01-15-add-staking-rewards/
+    REQUIREMENT.md
+    DESIGN.md
+    TASKS.md
+    REVIEW.md
+    DECISIONS.md           (optional)
+    ASSUMPTIONS.md         (optional)
+    TEST_PLAN.md           (optional)
+    ROLLBACK.md            (optional)
+    METRICS.md             (optional)
+```
+
+### Task Slug Rules
+
+- **Format**: `{yyyy-mm-dd}-{kebab-case-title}`
+- **Example**: "Add Staking Rewards" → `2025-01-15-add-staking-rewards`
+
+### Permission Protocol
+
+- **Before each task**: Prompt "Proceed with Task N? (yes/no/changes)"
+- **On "changes"**: Update `DESIGN.md`/`TASKS.md` accordingly and re-seek approval
+- **On "no"**: Stop and request clarifications
+
+### Mandatory Requirements
+
+- [ ] Always create and maintain the `.cursor/{task-slug}/` artifacts before coding
+- [ ] Always ask for permission to proceed before starting any implementation task
+- [ ] Always provide 2–3 design solutions in `DESIGN.md` and reference existing code
+- [ ] Always loop findings from `REVIEW.md` into `TASKS.md` as actionable tasks
+- [ ] Always verify no dead code or unused parameters/imports are introduced
+
+## Architecture Mode
+
+**Purpose**: Deep analysis and design of system architecture with clear layer boundaries.
+
+### Process
+
+1. **Codebase Analysis**: Use `grep_search` and `file_search` to analyze existing architecture
+2. **Layer Assessment**: Evaluate current separation between domain, business, UI, and state
+3. **Scale Assessment**: Use `web_search` for current best practices and patterns
+4. **Tradeoff Analysis**: Generate 5-paragraph analysis covering constraints, scale, performance
+5. **Clarifying Questions**: Ask 4-6 questions to assess system requirements
+6. **Design Proposal**: Draft comprehensive system architecture with clear layer separation
+7. **Discussion**: Engage in tradeoff discussions and iterate
+8. **Implementation**: Execute approved architecture using MCP tools
+9. **Documentation**: Provide clear architecture documentation and layer boundaries
+
+### Architecture Validation
+
+- [ ] Domain layer has no external dependencies
+- [ ] UI components contain only presentation logic
+- [ ] Business logic is properly separated
+- [ ] Dependencies flow inward only
+- [ ] Clear interfaces between layers
+
+## Debugger Mode
+
+**Purpose**: Enhanced debugging using MCP tools for comprehensive issue analysis.
+
+### Process
+
+1. **Problem Analysis**: Consider 5-7 potential sources using `getConsoleLogs` and `getConsoleErrors`, if there are server error, check the log in the terminal, and if it isn't clearn, add Log in the handler and log the sql response.
+2. **Layer Identification**: Determine which layer(s) contain the issue (domain, business, UI, state)
+3. **Hypothesis Formation**: Distill to 1-2 most likely causes
+4. **Enhanced Logging**: Add strategic logs for validation
+5. **Browser Debugging**: Use `runDebuggerMode` and `getNetworkLogs` for analysis
+6. **Visual Validation**: Use `takeScreenshot` and `getSelectedElement` for DOM inspection
+7. **Comprehensive Analysis**: Produce detailed issue analysis
+8. **Additional Investigation**: Use `runPerformanceAudit` if performance-related
+9. **Cleanup**: Use `wipeLogs` and request approval to remove debug logs
+
+### Debugging Tools Workflow
+
+```typescript
+// 1. Gather initial information
+getConsoleLogs("initial");
+getConsoleErrors("initial");
+getNetworkErrors("initial");
+
+// 2. Take baseline screenshot
+takeScreenshot("before-debug");
+
+// 3. Run targeted debugging
+runDebuggerMode("specific-issue");
+
+// 4. Performance analysis if needed
+runPerformanceAudit("performance-check");
+
+// 5. Clean up
+wipeLogs("cleanup");
+```
+
+## Reviewer Mode
+
+**Purpose**: Comprehensive code review with architectural compliance checking.
+
+### Process
+
+1. **Context Gathering**: Use `fetch_pull_request` to understand PR scope and changes
+2. **Change Analysis**: Use `read_file` to examine modifications
+3. **Architecture Compliance**: Check adherence to layer separation principles
+4. **Codebase Scanning**: Use `grep_search` to understand dependencies and impacts
+5. **Quality Audits**: Use `runBestPracticesAudit` and `runAccessibilityAudit`
+6. **Review Points**: Identify logical errors, improvements, questions, style issues
+7. **Feedback Formation**: Prepare constructive, specific feedback
+8. **Documentation**: Provide clear review summary and recommendations
+
+### Review Checklist
+
+- [ ] No dead code or unused parameters
+- [ ] Proper layer separation maintained
+- [ ] Business logic not in UI or infrastructure layers
+- [ ] Tests mock DB ingestions appropriately
+- [ ] Architectural boundaries respected
+- [ ] Code quality standards met
+
+## Implement Mode
+
+**Purpose**: Full implementation workflow with design integration and comprehensive testing.
+
+### Process
+
+1. **Requirements Validation**: Confirm exact specifications and acceptance criteria
+2. **Architecture Planning**: Determine appropriate layer placement for new features
+3. **Tool Selection**: Choose appropriate MCP tools for the implementation
+4. **Design Integration**: Use `get_figma_data` for design specifications
+5. **Asset Preparation**: Use `download_figma_images` for required assets
+6. **Layer-by-Layer Implementation**: Start with domain, then business, then UI/state
+7. **Real-time Testing**: Use `puppeteer_navigate` and `puppeteer_click` for testing
+8. **Quality Validation**: Run `runAccessibilityAudit` and `runPerformanceAudit`
+9. **Visual Verification**: Use `takeScreenshot` to validate implementation
+10. **Final Testing**: Comprehensive puppeteer testing workflow
+11. **Handoff**: Provide clear testing instructions and deployment notes
+
+### Implementation Best Practices
+
+- **Start Small**: Implement minimal viable features first
+- **Layer-First**: Build domain logic before UI components
+- **Test Continuously**: Use puppeteer tools for constant validation
+- **Design Fidelity**: Use Figma MCP to ensure design accuracy
+- **Performance Focus**: Run audits throughout development
+- **User Experience**: Test with real browser interactions via puppeteer
+- **Accessibility**: Always run accessibility audits before completion
+- **Code Quality**: Follow established patterns and maintain consistency
+- **Separation Enforcement**: Ensure clear boundaries between layers
+
+### Implementation Workflow Example
+
+```typescript
+// 1. Design analysis
+const figmaData = await get_figma_data({ fileKey: "design-key" });
+
+// 2. Asset preparation
+await download_figma_images({
+  fileKey: "design-key",
+  nodes: extractImageNodes(figmaData),
+  localPath: "./src/assets/",
+});
+
+// 3. Implementation with testing
+await puppeteer_navigate({ url: "http://localhost:3000" });
+await puppeteer_click({ selector: ".new-feature" });
+await takeScreenshot({ name: "implementation-progress" });
+
+// 4. Quality validation
+await runAccessibilityAudit("accessibility-check");
+await runPerformanceAudit("performance-check");
+```
+
+## Ultrarun Mode
+
+**Purpose**: Maximum ultrathink and research time for complex problems.
+
+### Characteristics
+
+- **Take all the time needed** for thorough analysis
+- **Much better to do too much research** than not enough
+- **Deep codebase exploration** using all available tools
+- **Comprehensive pattern analysis** and solution evaluation
+- **Extensive tool usage** for complete understanding
+
+### Enhanced Research Process
+
+1. **Comprehensive Codebase Analysis**: Multiple `codebase_search` queries with different angles
+2. **Pattern Recognition**: `grep_search` for similar implementations across entire codebase
+3. **External Research**: `web_search` for best practices and current solutions
+4. **Multiple Solution Paths**: Explore 3-5 different implementation approaches
+5. **Deep Validation**: Use all available MCP tools for thorough verification
+6. **Extensive Testing**: Comprehensive test coverage with multiple scenarios
+
+### Research Workflow Example
+
+```typescript
+// Comprehensive analysis
+await codebase_search({ query: "How is authentication handled?" });
+await codebase_search({
+  query: "What patterns are used for state management?",
+});
+await codebase_search({ query: "How are external APIs integrated?" });
+
+// Pattern exploration
+await grep_search({
+  pattern: ".*Service.*",
+  output_mode: "files_with_matches",
+});
+await grep_search({ pattern: "interface.*Repository", output_mode: "content" });
+
+// External research
+await web_search({
+  search_term: "current best practices for [specific technology]",
+});
+await web_search({ search_term: "architectural patterns for [use case] 2024" });
+
+// Validation
+await runBestPracticesAudit("comprehensive-check");
+await runAccessibilityAudit("accessibility-check");
+await runPerformanceAudit("performance-check");
+```
+
+## Mode Transition Rules
+
+### Between Modes
+
+- **Planner → Implement**: Only after explicit approval of planning artifacts
+- **Architecture → Planner**: When architectural decisions need detailed implementation planning
+- **Debugger → Reviewer**: When debugging reveals code quality issues
+- **Any Mode → Ultrarun**: When complexity requires maximum research time
+
+### Context Preservation
+
+- **Maintain artifacts** created in previous modes
+- **Reference previous analysis** when transitioning
+- **Update planning documents** based on new findings
+- **Preserve MCP tool outputs** for cross-mode reference
+
+### Permission Requirements
+
+- **Always ask permission** before mode transitions
+- **Seek approval** for implementation in any mode
+- **Request confirmation** before making architectural changes
+- **Get authorization** before proceeding with complex refactoring

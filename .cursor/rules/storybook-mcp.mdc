@@ -1,0 +1,141 @@
+# Storybook MCP Integration
+
+## Overview
+
+This project uses Storybook with the MCP (Model Context Protocol) addon for component development and AI-assisted workflows.
+
+## Storybook Setup
+
+**Location**: `apps/web/.storybook/`
+
+**Start Storybook**:
+```bash
+cd apps/web
+pnpm run storybook
+```
+
+**MCP Endpoint**: `http://localhost:6006/mcp` (when Storybook is running)
+
+## Available MCP Tools
+
+When Storybook is running, the following MCP tools are available:
+
+- `list-all-components` - Get all available components and their stories
+- `get-component-info` - Get detailed info about a specific component
+- `get-story-url` - Generate URL to view a specific story
+- `get-ui-guidelines` - Get UI/UX guidelines from the design system
+
+## Usage Guidelines
+
+### Before UI Development
+
+When working on UI, frontend, or React development tasks:
+
+1. **Start Storybook first** if not already running
+2. **List components** to see available primitives
+3. **Check existing patterns** before creating new components
+4. **View component docs** in Storybook for usage examples
+
+### Component Organization
+
+```
+apps/web/src/components/ui/
+├── button.tsx              # Primitive component
+├── button.stories.tsx      # Component stories
+├── card.tsx
+├── card.stories.tsx
+├── badge.tsx
+├── badge.stories.tsx
+├── navigation/
+│   ├── navbar.tsx
+│   ├── navbar.stories.tsx
+│   ├── sidebar.tsx
+│   ├── sidebar.stories.tsx
+│   ├── tabs.tsx
+│   └── tabs.stories.tsx
+└── layout/
+    ├── container.tsx
+    ├── page-header.tsx
+    ├── section.tsx
+    └── layout.stories.tsx
+```
+
+### Story Format
+
+Follow this pattern for stories:
+
+```tsx
+import type { Meta, StoryObj } from '@storybook/react-vite'
+import { ComponentName } from './component-name'
+
+const meta = {
+  title: 'UI/Category/ComponentName',
+  component: ComponentName,
+  parameters: {
+    layout: 'centered', // or 'fullscreen' for layout components
+    docs: {
+      description: {
+        component: 'Description of the component',
+      },
+    },
+  },
+  tags: ['autodocs'],
+  argTypes: {
+    // Define controls for props
+  },
+} satisfies Meta<typeof ComponentName>
+
+export default meta
+type Story = StoryObj<typeof meta>
+
+export const Default: Story = {
+  args: {
+    // Default props
+  },
+}
+```
+
+### Testing with MCP
+
+Example MCP calls (using curl when Storybook is running):
+
+```bash
+# List all components
+curl -X POST http://localhost:6006/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list-all-components","arguments":{}}}'
+
+# Get component info
+curl -X POST http://localhost:6006/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get-component-info","arguments":{"component":"Button"}}}'
+```
+
+## Lozi Design System
+
+### UI Philosophy (Three Layers)
+
+1. **Layer 1 (80%)**: Structural calm - neutral backgrounds, predictable layouts
+2. **Layer 2 (15%)**: Gentle interactivity - subtle hover states (+2px translateY)
+3. **Layer 3 (5%)**: Emotional moments - brand colors for progress/tutor actions
+
+### Key Design Constraints
+
+- **Spacing**: 8px base grid (8, 16, 24, 32, 40, 48)
+- **Radii**: 12px (cards), 10px (inputs), 8px (buttons), 6px (badges)
+- **Shadows**: Subtle only, one layer
+- **Motion**: Acknowledge presence, not encourage exploration
+
+### Color Usage
+
+- **Primary (teal)**: Trust, guidance - main actions
+- **Accent (rose)**: Care, celebration - emotional moments only
+- **Neutral**: Most of the UI - structural calm
+
+## Best Practices
+
+1. **Always check Storybook** before creating new components
+2. **Reuse existing primitives** from the UI library
+3. **Follow the three-layer philosophy** when adding interactivity
+4. **Add stories** for any new component
+5. **Test in both light and dark mode** using Storybook's theme switcher

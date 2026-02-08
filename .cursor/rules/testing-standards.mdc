@@ -1,0 +1,1648 @@
+---
+description: Comprehensive testing standards and best practices for all layers
+globs: ["**/*_test.ts", "**/*_test.tsx", "**/*.test.ts", "**/*.test.tsx", "**/*_spec.ts", "**/*_spec.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+alwaysApply: true
+---
+
+# Testing Standards and Best Practices
+
+## Testing Philosophy
+
+### Core Testing Principles
+- **Test Real Business Logic** - Never mock the system under test
+- **Mock External Dependencies** - Always mock databases, APIs, and external services
+- **Maintain Test Independence** - Tests should not depend on each other
+- **Ensure Test Reliability** - Tests should be deterministic and repeatable
+- **Layer-Appropriate Testing** - Test at the right level of abstraction
+
+### Mandatory Testing Requirements
+- [ ] **All DB ingestions mocked** in unit and application tests
+- [ ] **Real service functions tested** - business logic must be executed, not mocked
+- [ ] **Mocks regenerated** when contracts change
+- [ ] **No dead code** or unused parameters in tests
+- [ ] **Integration tests** use real infrastructure adapters only
+
+## Layer-Specific Testing Standards
+
+### Domain Layer Testing
+
+#### Requirements
+- **Pure functions only** - No external dependencies
+- **Deterministic results** - Same input always produces same output
+- **Fast execution** - Tests should complete in < 100ms each
+- **Comprehensive coverage** - Test all business rules and edge cases
+
+#### Example: Domain Entity Testing
+```go
+// ✅ GOOD - Pure domain testing
+func TestOrder_CalculateTotal_WithValidItems(t *testing.T) {
+    // Arrange - Pure domain objects
+    items := []OrderItem{
+        {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        {ProductID: ProductID("prod2"), Quantity: 1, Price: Money{Amount: 30.00}},
+    }
+    
+    order := Order{
+        ID:       OrderID("order123"),
+        Items:    items,
+        Status:   StatusPending,
+    }
+    
+    // Act - Test real domain logic
+    total := order.CalculateTotal()
+    
+    // Assert - Verify business rule
+    expected := Money{Amount: 130.00} // (2 * 50.00) + (1 * 30.00)
+    assert.Equal(t, expected, total)
+}
+
+func TestOrder_CalculateTotal_WithEmptyItems(t *testing.T) {
+    // Test edge case - empty items
+    order := Order{
+        ID:    OrderID("order123"),
+        Items: []OrderItem{}, // Empty items
+    }
+    
+    total := order.CalculateTotal()
+    
+    assert.Equal(t, Money{Amount: 0.00}, total)
+}
+
+func TestOrder_CanBeCancelled_WhenPending(t *testing.T) {
+    // Test business rule - cancellation logic
+    order := Order{
+        ID:     OrderID("order123"),
+        Status: StatusPending, // Cancellable status
+    }
+    
+    canCancel := order.CanBeCancelled()
+    
+    assert.True(t, canCancel)
+}
+
+func TestOrder_CanBeCancelled_WhenShipped(t *testing.T) {
+    // Test business rule - cannot cancel shipped orders
+    order := Order{
+        ID:     OrderID("order123"),
+        Status: StatusShipped, // Non-cancellable status
+    }
+    
+    canCancel := order.CanBeCancelled()
+    
+    assert.False(t, canCancel)
+}
+```
+
+#### Anti-Patterns to Avoid
+```go
+// ❌ BAD - External dependencies in domain test
+func TestOrder_CalculateTotal_BadExample(t *testing.T) {
+    db := setupTestDatabase() // ❌ Domain shouldn't need database
+    order := loadOrderFromDB(db, "order123") // ❌ Database dependency
+    
+    total := order.CalculateTotal()
+    
+    // This is not a pure domain test
+}
+
+// ❌ BAD - Mocking domain logic being tested
+func TestOrder_CalculateTotal_MockingWrongThing(t *testing.T) {
+    mockCalculator := &MockTotalCalculator{} // ❌ Mocking the logic we want to test
+    mockCalculator.On("Calculate").Return(Money{Amount: 100.00})
+    
+    order := Order{calculator: mockCalculator}
+    total := order.CalculateTotal() // ❌ Not testing real calculation logic
+    
+    assert.Equal(t, Money{Amount: 100.00}, total) // ❌ Just testing the mock
+}
+```
+
+### Application Layer Testing
+
+#### Requirements
+- **Mock all external dependencies** (repositories, external services)
+- **Test real use case coordination** - business workflow logic must execute
+- **Test transaction boundaries** and error handling
+- **Verify proper domain object orchestration**
+
+#### Example: Application Service Testing
+```go
+// ✅ GOOD - Application layer testing with mocked dependencies
+func TestCreateOrderUseCase_Execute_Success(t *testing.T) {
+    // Arrange - Mock external dependencies
+    mockOrderRepo := &MockOrderRepository{}
+    mockInventoryService := &MockInventoryService{}
+    mockPaymentService := &MockPaymentService{}
+    mockEventBus := &MockEventBus{}
+    
+    // Configure mock behaviors
+    mockInventoryService.On("ReserveItems", mock.Anything).Return(nil)
+    mockPaymentService.On("AuthorizePayment", mock.Anything).Return(&PaymentAuth{ID: "auth123"}, nil)
+    mockOrderRepo.On("SaveOrder", mock.Anything).Return(nil)
+    mockEventBus.On("PublishEvent", mock.Anything).Return(nil)
+    
+    // Real use case under test - NOT mocked
+    useCase := &CreateOrderUseCase{
+        orderRepository:   mockOrderRepo,
+        inventoryService:  mockInventoryService,
+        paymentService:   mockPaymentService,
+        eventBus:         mockEventBus,
+        idGenerator:      &TestIDGenerator{nextID: "order123"},
+        clock:           &TestClock{now: time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)},
+    }
+    
+    // Act - Execute real business logic
+    command := CreateOrderCommand{
+        CustomerID: CustomerID("cust456"),
+        Items: []OrderItemCommand{
+            {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        },
+        PaymentMethod: PaymentMethodCreditCard,
+    }
+    
+    result, err := useCase.Execute(command) // ✅ Testing real use case logic
+    
+    // Assert - Verify real business logic executed correctly
+    assert.NoError(t, err)
+    assert.NotNil(t, result)
+    assert.Equal(t, OrderID("order123"), result.OrderID)
+    assert.Equal(t, CustomerID("cust456"), result.CustomerID)
+    assert.Equal(t, Money{Amount: 100.00}, result.Total) // 2 * 50.00
+    assert.Equal(t, StatusPending, result.Status)
+    
+    // Verify dependencies were called correctly
+    mockInventoryService.AssertCalled(t, "ReserveItems", mock.MatchedBy(func(items []OrderItem) bool {
+        return len(items) == 1 && items[0].ProductID == ProductID("prod1")
+    }))
+    mockPaymentService.AssertCalled(t, "AuthorizePayment", mock.Anything)
+    mockOrderRepo.AssertCalled(t, "SaveOrder", mock.MatchedBy(func(order *Order) bool {
+        return order.GetID() == OrderID("order123") && order.GetTotal().Amount == 100.00
+    }))
+    mockEventBus.AssertCalled(t, "PublishEvent", mock.MatchedBy(func(event Event) bool {
+        return event.Type == "OrderCreated"
+    }))
+}
+
+func TestCreateOrderUseCase_Execute_InventoryFailure(t *testing.T) {
+    // Test error handling - inventory reservation fails
+    mockOrderRepo := &MockOrderRepository{}
+    mockInventoryService := &MockInventoryService{}
+    mockPaymentService := &MockPaymentService{}
+    
+    // Configure failure scenario
+    mockInventoryService.On("ReserveItems", mock.Anything).Return(
+        &InventoryError{Code: "INSUFFICIENT_STOCK", Message: "Not enough stock"})
+    
+    useCase := &CreateOrderUseCase{
+        orderRepository:  mockOrderRepo,
+        inventoryService: mockInventoryService,
+        paymentService:  mockPaymentService,
+    }
+    
+    command := CreateOrderCommand{
+        CustomerID: CustomerID("cust456"),
+        Items: []OrderItemCommand{
+            {ProductID: ProductID("prod1"), Quantity: 100}, // Too many
+        },
+    }
+    
+    // Act - Execute real error handling logic
+    result, err := useCase.Execute(command)
+    
+    // Assert - Verify proper error handling
+    assert.Error(t, err)
+    assert.Nil(t, result)
+    assert.Contains(t, err.Error(), "INSUFFICIENT_STOCK")
+    
+    // Verify no order was saved when inventory failed
+    mockOrderRepo.AssertNotCalled(t, "SaveOrder")
+    mockPaymentService.AssertNotCalled(t, "AuthorizePayment")
+}
+```
+
+#### Mock Management Best Practices
+```go
+// ✅ GOOD - Proper mock interface definition
+type OrderRepository interface {
+    SaveOrder(order *Order) error
+    FindByID(id OrderID) (*Order, error)
+    UpdateOrder(order *Order) error
+}
+
+// Mock implementation
+type MockOrderRepository struct {
+    mock.Mock
+}
+
+func (m *MockOrderRepository) SaveOrder(order *Order) error {
+    args := m.Called(order)
+    return args.Error(0)
+}
+
+func (m *MockOrderRepository) FindByID(id OrderID) (*Order, error) {
+    args := m.Called(id)
+    if args.Get(0) == nil {
+        return nil, args.Error(1)
+    }
+    return args.Get(0).(*Order), args.Error(1)
+}
+
+// ✅ GOOD - Mock regeneration when interface changes
+//go:generate mockery --name=OrderRepository --output=mocks --outpkg=mocks
+```
+
+### Infrastructure Layer Testing
+
+#### Requirements
+- **Real infrastructure components** - test actual adapters and integrations
+- **Isolated test environments** - dedicated test databases/services
+- **Integration focus** - test technical integration, not business logic
+- **Mechanical mapping validation** - ensure data transforms correctly
+
+#### Example: Repository Integration Testing
+```go
+// ✅ GOOD - Infrastructure integration test
+func TestPostgresOrderRepository_SaveOrder_Integration(t *testing.T) {
+    // Arrange - Real test database
+    testDB := setupTestDatabase() // Real PostgreSQL test instance
+    defer cleanupTestDatabase(testDB)
+    
+    repo := &PostgresOrderRepository{db: testDB}
+    
+    order := &Order{
+        ID:         OrderID("order123"),
+        CustomerID: CustomerID("cust456"), 
+        Items: []OrderItem{
+            {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        },
+        Total:     Money{Amount: 100.00},
+        Status:    StatusPending,
+        CreatedAt: time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC),
+    }
+    
+    // Act - Test real database interaction
+    err := repo.SaveOrder(order)
+    
+    // Assert - Verify data was actually persisted
+    assert.NoError(t, err)
+    
+    // Verify data in database
+    var savedOrder OrderEntity
+    err = testDB.QueryRow(`
+        SELECT id, customer_id, total, status, created_at 
+        FROM orders 
+        WHERE id = $1`, "order123").Scan(
+        &savedOrder.ID, 
+        &savedOrder.CustomerID,
+        &savedOrder.Total,
+        &savedOrder.Status,
+        &savedOrder.CreatedAt,
+    )
+    
+    assert.NoError(t, err)
+    assert.Equal(t, "order123", savedOrder.ID)
+    assert.Equal(t, "cust456", savedOrder.CustomerID)
+    assert.Equal(t, 100.00, savedOrder.Total)
+    assert.Equal(t, "pending", savedOrder.Status)
+    
+    // Test order items were saved
+    var itemCount int
+    err = testDB.QueryRow(`
+        SELECT COUNT(*) 
+        FROM order_items 
+        WHERE order_id = $1`, "order123").Scan(&itemCount)
+    
+    assert.NoError(t, err)
+    assert.Equal(t, 1, itemCount)
+}
+
+func TestPostgresOrderRepository_FindByID_NotFound(t *testing.T) {
+    // Test not found scenario
+    testDB := setupTestDatabase()
+    defer cleanupTestDatabase(testDB)
+    
+    repo := &PostgresOrderRepository{db: testDB}
+    
+    // Act - Try to find non-existent order
+    order, err := repo.FindByID(OrderID("nonexistent"))
+    
+    // Assert - Proper not found handling
+    assert.Error(t, err)
+    assert.Nil(t, order)
+    assert.True(t, errors.Is(err, ErrOrderNotFound))
+}
+
+// ✅ GOOD - Test database setup and cleanup
+func setupTestDatabase() *sql.DB {
+    db, err := sql.Open("postgres", "postgres://user:pass@localhost/test_db?sslmode=disable")
+    if err != nil {
+        panic(fmt.Sprintf("Failed to connect to test database: %v", err))
+    }
+    
+    // Run migrations
+    runTestMigrations(db)
+    
+    return db
+}
+
+func cleanupTestDatabase(db *sql.DB) {
+    // Clean up test data
+    db.Exec("TRUNCATE TABLE order_items, orders CASCADE")
+    db.Close()
+}
+```
+
+#### External Service Integration Testing
+```go
+// ✅ GOOD - External service adapter testing
+func TestPaymentServiceAdapter_AuthorizePayment_Integration(t *testing.T) {
+    // Skip if external service not available in test environment
+    if testing.Short() {
+        t.Skip("Skipping integration test in short mode")
+    }
+    
+    // Use test/sandbox endpoints
+    config := PaymentServiceConfig{
+        BaseURL: "https://api-sandbox.paymentprovider.com",
+        APIKey:  getTestAPIKey(),
+        Timeout: 30 * time.Second,
+    }
+    
+    adapter := &PaymentServiceAdapter{
+        config: config,
+        client: &http.Client{Timeout: config.Timeout},
+    }
+    
+    paymentRequest := PaymentAuthRequest{
+        Amount:        Money{Amount: 100.00},
+        Currency:      "USD",
+        PaymentMethod: CreditCard{Number: "4111111111111111"}, // Test card
+        CustomerID:    CustomerID("test-customer-123"),
+    }
+    
+    // Act - Test real external service call
+    result, err := adapter.AuthorizePayment(paymentRequest)
+    
+    // Assert - Verify integration works
+    assert.NoError(t, err)
+    assert.NotNil(t, result)
+    assert.NotEmpty(t, result.AuthorizationID)
+    assert.Equal(t, paymentRequest.Amount, result.AuthorizedAmount)
+    assert.Equal(t, AuthStatusApproved, result.Status)
+}
+```
+
+### Interface Layer Testing
+
+#### Requirements
+- **HTTP/API endpoint testing** with real request/response cycles
+- **Request validation** and error handling
+- **Authentication and authorization** testing
+- **No business logic** - only protocol concerns
+
+#### Example: HTTP Handler Testing
+```go
+// ✅ GOOD - Interface layer testing
+func TestOrderHandler_CreateOrder_ValidRequest(t *testing.T) {
+    // Arrange - Mock application service (business logic)
+    mockCreateOrderUseCase := &MockCreateOrderUseCase{}
+    mockCreateOrderUseCase.On("Execute", mock.Anything).Return(&OrderResult{
+        OrderID:    OrderID("order123"),
+        CustomerID: CustomerID("cust456"),
+        Total:      Money{Amount: 100.00},
+        Status:     StatusPending,
+    }, nil)
+    
+    handler := &OrderHandler{
+        createOrderUseCase: mockCreateOrderUseCase,
+        logger:            &TestLogger{},
+    }
+    
+    // Create HTTP request
+    requestBody := `{
+        "customerId": "cust456",
+        "items": [
+            {"productId": "prod1", "quantity": 2, "price": 50.00}
+        ],
+        "paymentMethod": "credit_card"
+    }`
+    
+    req := httptest.NewRequest("POST", "/api/orders", strings.NewReader(requestBody))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer valid-jwt-token")
+    
+    recorder := httptest.NewRecorder()
+    
+    // Act - Test real HTTP handler
+    handler.CreateOrder(recorder, req)
+    
+    // Assert - Verify HTTP response
+    assert.Equal(t, http.StatusCreated, recorder.Code)
+    
+    var response OrderResponse
+    err := json.Unmarshal(recorder.Body.Bytes(), &response)
+    assert.NoError(t, err)
+    assert.Equal(t, "order123", response.OrderID)
+    assert.Equal(t, "cust456", response.CustomerID)
+    assert.Equal(t, 100.00, response.Total)
+    assert.Equal(t, "pending", response.Status)
+    
+    // Verify application service was called with correct command
+    mockCreateOrderUseCase.AssertCalled(t, "Execute", mock.MatchedBy(func(cmd CreateOrderCommand) bool {
+        return cmd.CustomerID == CustomerID("cust456") && len(cmd.Items) == 1
+    }))
+}
+
+func TestOrderHandler_CreateOrder_ValidationError(t *testing.T) {
+    // Test request validation (interface layer concern)
+    handler := &OrderHandler{
+        createOrderUseCase: &MockCreateOrderUseCase{}, // Not used in validation error
+    }
+    
+    // Invalid request - missing required fields
+    requestBody := `{"invalid": "request"}`
+    req := httptest.NewRequest("POST", "/api/orders", strings.NewReader(requestBody))
+    req.Header.Set("Content-Type", "application/json")
+    
+    recorder := httptest.NewRecorder()
+    
+    // Act
+    handler.CreateOrder(recorder, req)
+    
+    // Assert - Proper validation error response
+    assert.Equal(t, http.StatusBadRequest, recorder.Code)
+    
+    var errorResponse ErrorResponse
+    err := json.Unmarshal(recorder.Body.Bytes(), &errorResponse)
+    assert.NoError(t, err)
+    assert.Equal(t, "validation_error", errorResponse.Code)
+    assert.Contains(t, errorResponse.Message, "customerId is required")
+}
+
+func TestOrderHandler_CreateOrder_Unauthorized(t *testing.T) {
+    // Test authentication (interface layer concern)
+    handler := &OrderHandler{}
+    
+    req := httptest.NewRequest("POST", "/api/orders", strings.NewReader(`{}`))
+    // No Authorization header
+    
+    recorder := httptest.NewRecorder()
+    
+    // Act
+    handler.CreateOrder(recorder, req)
+    
+    // Assert - Proper auth error
+    assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+}
+```
+
+### UI Layer Testing (if applicable)
+
+#### Requirements
+- **Component behavior testing** without business logic
+- **User interaction testing** with events and state changes
+- **Accessibility testing** for WCAG compliance
+- **Visual regression testing** with screenshot comparisons
+
+#### Example: React Component Testing
+```typescript
+// ✅ GOOD - UI component testing
+import { render, screen, fireEvent } from '@testing-library/react';
+import { OrderSummary } from './OrderSummary';
+
+describe('OrderSummary Component', () => {
+  test('displays order information correctly', () => {
+    // Arrange - Mock props (presentation data)
+    const mockOrder = {
+      id: 'order123',
+      customerName: 'John Doe',
+      items: [
+        { id: 'item1', name: 'Product 1', quantity: 2, price: 50.00 },
+        { id: 'item2', name: 'Product 2', quantity: 1, price: 30.00 }
+      ],
+      total: 130.00,
+      status: 'pending'
+    };
+    
+    const mockOnCancel = jest.fn();
+    
+    // Act - Render component
+    render(<OrderSummary order={mockOrder} onCancel={mockOnCancel} />);
+    
+    // Assert - Verify display (no business logic, just presentation)
+    expect(screen.getByText('Order #order123')).toBeInTheDocument();
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('Product 1')).toBeInTheDocument();
+    expect(screen.getByText('Quantity: 2')).toBeInTheDocument();
+    expect(screen.getByText('$130.00')).toBeInTheDocument();
+    expect(screen.getByText('Status: Pending')).toBeInTheDocument();
+  });
+  
+  test('calls onCancel when cancel button clicked', () => {
+    // Test user interaction (UI concern only)
+    const mockOrder = { id: 'order123', status: 'pending', /* ... */ };
+    const mockOnCancel = jest.fn();
+    
+    render(<OrderSummary order={mockOrder} onCancel={mockOnCancel} />);
+    
+    // Act - User interaction
+    fireEvent.click(screen.getByText('Cancel Order'));
+    
+    // Assert - Event handler called
+    expect(mockOnCancel).toHaveBeenCalledWith('order123');
+  });
+  
+  test('is accessible via keyboard navigation', () => {
+    // Accessibility testing
+    const mockOrder = { /* ... */ };
+    render(<OrderSummary order={mockOrder} onCancel={() => {}} />);
+    
+    const cancelButton = screen.getByText('Cancel Order');
+    
+    // Test keyboard navigation
+    cancelButton.focus();
+    expect(document.activeElement).toBe(cancelButton);
+    
+    // Test keyboard activation
+    fireEvent.keyDown(cancelButton, { key: 'Enter', code: 'Enter' });
+    // Verify appropriate action taken
+  });
+  
+  test('meets color contrast requirements', () => {
+    // Visual accessibility testing
+    render(<OrderSummary order={{/* ... */}} onCancel={() => {}} />);
+    
+    // Use automated accessibility testing tools
+    // This would integrate with axe-core or similar
+  });
+});
+```
+
+## Test Data Management
+
+### Test Data Builders
+```go
+// ✅ GOOD - Consistent test data creation
+type OrderTestBuilder struct {
+    order *Order
+}
+
+func NewOrderBuilder() *OrderTestBuilder {
+    return &OrderTestBuilder{
+        order: &Order{
+            ID:         OrderID("default-order-id"),
+            CustomerID: CustomerID("default-customer"),
+            Status:     StatusPending,
+            CreatedAt:  time.Now(),
+        },
+    }
+}
+
+func (b *OrderTestBuilder) WithID(id string) *OrderTestBuilder {
+    b.order.ID = OrderID(id)
+    return b
+}
+
+func (b *OrderTestBuilder) WithCustomerID(customerID string) *OrderTestBuilder {
+    b.order.CustomerID = CustomerID(customerID)
+    return b
+}
+
+func (b *OrderTestBuilder) WithItems(items []OrderItem) *OrderTestBuilder {
+    b.order.Items = items
+    return b
+}
+
+func (b *OrderTestBuilder) WithStatus(status OrderStatus) *OrderTestBuilder {
+    b.order.Status = status
+    return b
+}
+
+func (b *OrderTestBuilder) Build() *Order {
+    // Recalculate total based on items
+    total := Money{Amount: 0}
+    for _, item := range b.order.Items {
+        total.Amount += item.Price.Amount * float64(item.Quantity)
+    }
+    b.order.Total = total
+    
+    return b.order
+}
+
+// Usage in tests
+func TestOrderService_ProcessOrder(t *testing.T) {
+    // Create test data with builder
+    order := NewOrderBuilder().
+        WithID("test-order-123").
+        WithCustomerID("customer-456").
+        WithItems([]OrderItem{
+            {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        }).
+        WithStatus(StatusPending).
+        Build()
+    
+    // Use in test
+    result := orderService.ProcessOrder(order)
+    // ...
+}
+```
+
+### Test Fixtures and Cleanup
+```go
+// ✅ GOOD - Proper test cleanup
+func TestOrderRepository_Integration(t *testing.T) {
+    // Setup
+    db := setupTestDB(t)
+    defer cleanupTestDB(t, db)
+    
+    repo := &PostgresOrderRepository{db: db}
+    
+    // Test with automatic cleanup
+    testOrder := createTestOrderInDB(t, db, "test-order-123")
+    defer deleteTestOrderFromDB(t, db, "test-order-123")
+    
+    // Run test
+    result, err := repo.FindByID(OrderID("test-order-123"))
+    
+    assert.NoError(t, err)
+    assert.Equal(t, testOrder.ID, result.ID)
+}
+
+func setupTestDB(t *testing.T) *sql.DB {
+    db, err := sql.Open("postgres", getTestDBConnectionString())
+    require.NoError(t, err)
+    
+    // Ensure clean state
+    _, err = db.Exec("TRUNCATE TABLE orders, order_items CASCADE")
+    require.NoError(t, err)
+    
+    return db
+}
+
+func cleanupTestDB(t *testing.T, db *sql.DB) {
+    _, err := db.Exec("TRUNCATE TABLE orders, order_items CASCADE")
+    assert.NoError(t, err)
+    db.Close()
+}
+```
+
+## Performance and Quality Standards
+
+### Test Performance Requirements
+- **Unit tests**: < 100ms each
+- **Integration tests**: < 5 seconds each
+- **End-to-end tests**: < 30 seconds each
+- **Full test suite**: < 10 minutes
+
+### Test Coverage Requirements
+- **Domain layer**: 95% code coverage
+- **Application layer**: 90% code coverage
+- **Infrastructure layer**: 80% code coverage
+- **Interface layer**: 85% code coverage
+
+### Test Quality Checklist
+- [ ] **No mocking of system under test** - only external dependencies mocked
+- [ ] **All database interactions mocked** in unit/application tests
+- [ ] **Real business logic tested** - not just mock verification
+- [ ] **Tests are independent** - can run in any order
+- [ ] **Tests are deterministic** - consistent results every time
+- [ ] **No dead code in tests** - all test code is used and necessary
+- [ ] **Clear test names** - describe what is being tested
+- [ ] **Arrange/Act/Assert structure** - clear test organization
+
+## Continuous Integration Standards
+
+### Automated Test Execution
+```yaml
+# CI Pipeline Configuration
+name: Test Suite
+on: [push, pull_request]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+          
+      - name: Run Unit Tests
+        run: |
+          go test -v -race -coverprofile=coverage.out ./...
+          go tool cover -html=coverage.out -o coverage.html
+          
+      - name: Check Coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Coverage: $COVERAGE%"
+          if (( $(echo "$COVERAGE < 90" | bc -l) )); then
+            echo "Coverage below 90%"
+            exit 1
+          fi
+          
+  integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+          
+      - name: Run Integration Tests
+        run: |
+          go test -v -tags=integration ./...
+        env:
+          TEST_DB_URL: postgres://postgres:password@localhost:5432/postgres
+```
+
+### Quality Gates
+```bash
+#!/bin/bash
+# quality-gate.sh
+
+echo "Running quality gate checks..."
+
+# 1. Test coverage check
+COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+echo "Test coverage: $COVERAGE%"
+
+if (( $(echo "$COVERAGE < 90" | bc -l) )); then
+    echo "❌ Coverage below 90%"
+    exit 1
+fi
+
+# 2. Check for dead code
+echo "Checking for dead code..."
+deadcode ./... | grep -v "_test.go" > deadcode.txt
+if [ -s deadcode.txt ]; then
+    echo "❌ Dead code found:"
+    cat deadcode.txt
+    exit 1
+fi
+
+# 3. Check for unused parameters
+echo "Checking for unused parameters..."
+unparam ./... > unused.txt
+if [ -s unused.txt ]; then
+    echo "❌ Unused parameters found:"
+    cat unused.txt
+    exit 1
+fi
+
+# 4. Verify no DB connections in unit tests
+echo "Checking for DB connections in unit tests..."
+grep -r "sql.Open\|database/sql" *_test.go | grep -v integration_test.go > db_in_tests.txt
+if [ -s db_in_tests.txt ]; then
+    echo "❌ Database connections found in unit tests:"
+    cat db_in_tests.txt
+    exit 1
+fi
+
+# 5. Verify mocks are up to date
+echo "Checking mock freshness..."
+go generate ./...
+if ! git diff --exit-code --quiet; then
+    echo "❌ Mocks are out of date"
+    git diff
+    exit 1
+fi
+
+echo "✅ All quality gates passed"
+```
+
+This comprehensive testing standards document ensures consistent, reliable, and maintainable tests across all layers of the application while enforcing the critical requirements of mocking external dependencies and testing real business logic.
+# Testing Standards and Best Practices
+
+## Testing Philosophy
+
+### Core Testing Principles
+- **Test Real Business Logic** - Never mock the system under test
+- **Mock External Dependencies** - Always mock databases, APIs, and external services
+- **Maintain Test Independence** - Tests should not depend on each other
+- **Ensure Test Reliability** - Tests should be deterministic and repeatable
+- **Layer-Appropriate Testing** - Test at the right level of abstraction
+
+### Mandatory Testing Requirements
+- [ ] **All DB ingestions mocked** in unit and application tests
+- [ ] **Real service functions tested** - business logic must be executed, not mocked
+- [ ] **Mocks regenerated** when contracts change
+- [ ] **No dead code** or unused parameters in tests
+- [ ] **Integration tests** use real infrastructure adapters only
+
+## Layer-Specific Testing Standards
+
+### Domain Layer Testing
+
+#### Requirements
+- **Pure functions only** - No external dependencies
+- **Deterministic results** - Same input always produces same output
+- **Fast execution** - Tests should complete in < 100ms each
+- **Comprehensive coverage** - Test all business rules and edge cases
+
+#### Example: Domain Entity Testing
+```go
+// ✅ GOOD - Pure domain testing
+func TestOrder_CalculateTotal_WithValidItems(t *testing.T) {
+    // Arrange - Pure domain objects
+    items := []OrderItem{
+        {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        {ProductID: ProductID("prod2"), Quantity: 1, Price: Money{Amount: 30.00}},
+    }
+    
+    order := Order{
+        ID:       OrderID("order123"),
+        Items:    items,
+        Status:   StatusPending,
+    }
+    
+    // Act - Test real domain logic
+    total := order.CalculateTotal()
+    
+    // Assert - Verify business rule
+    expected := Money{Amount: 130.00} // (2 * 50.00) + (1 * 30.00)
+    assert.Equal(t, expected, total)
+}
+
+func TestOrder_CalculateTotal_WithEmptyItems(t *testing.T) {
+    // Test edge case - empty items
+    order := Order{
+        ID:    OrderID("order123"),
+        Items: []OrderItem{}, // Empty items
+    }
+    
+    total := order.CalculateTotal()
+    
+    assert.Equal(t, Money{Amount: 0.00}, total)
+}
+
+func TestOrder_CanBeCancelled_WhenPending(t *testing.T) {
+    // Test business rule - cancellation logic
+    order := Order{
+        ID:     OrderID("order123"),
+        Status: StatusPending, // Cancellable status
+    }
+    
+    canCancel := order.CanBeCancelled()
+    
+    assert.True(t, canCancel)
+}
+
+func TestOrder_CanBeCancelled_WhenShipped(t *testing.T) {
+    // Test business rule - cannot cancel shipped orders
+    order := Order{
+        ID:     OrderID("order123"),
+        Status: StatusShipped, // Non-cancellable status
+    }
+    
+    canCancel := order.CanBeCancelled()
+    
+    assert.False(t, canCancel)
+}
+```
+
+#### Anti-Patterns to Avoid
+```go
+// ❌ BAD - External dependencies in domain test
+func TestOrder_CalculateTotal_BadExample(t *testing.T) {
+    db := setupTestDatabase() // ❌ Domain shouldn't need database
+    order := loadOrderFromDB(db, "order123") // ❌ Database dependency
+    
+    total := order.CalculateTotal()
+    
+    // This is not a pure domain test
+}
+
+// ❌ BAD - Mocking domain logic being tested
+func TestOrder_CalculateTotal_MockingWrongThing(t *testing.T) {
+    mockCalculator := &MockTotalCalculator{} // ❌ Mocking the logic we want to test
+    mockCalculator.On("Calculate").Return(Money{Amount: 100.00})
+    
+    order := Order{calculator: mockCalculator}
+    total := order.CalculateTotal() // ❌ Not testing real calculation logic
+    
+    assert.Equal(t, Money{Amount: 100.00}, total) // ❌ Just testing the mock
+}
+```
+
+### Application Layer Testing
+
+#### Requirements
+- **Mock all external dependencies** (repositories, external services)
+- **Test real use case coordination** - business workflow logic must execute
+- **Test transaction boundaries** and error handling
+- **Verify proper domain object orchestration**
+
+#### Example: Application Service Testing
+```go
+// ✅ GOOD - Application layer testing with mocked dependencies
+func TestCreateOrderUseCase_Execute_Success(t *testing.T) {
+    // Arrange - Mock external dependencies
+    mockOrderRepo := &MockOrderRepository{}
+    mockInventoryService := &MockInventoryService{}
+    mockPaymentService := &MockPaymentService{}
+    mockEventBus := &MockEventBus{}
+    
+    // Configure mock behaviors
+    mockInventoryService.On("ReserveItems", mock.Anything).Return(nil)
+    mockPaymentService.On("AuthorizePayment", mock.Anything).Return(&PaymentAuth{ID: "auth123"}, nil)
+    mockOrderRepo.On("SaveOrder", mock.Anything).Return(nil)
+    mockEventBus.On("PublishEvent", mock.Anything).Return(nil)
+    
+    // Real use case under test - NOT mocked
+    useCase := &CreateOrderUseCase{
+        orderRepository:   mockOrderRepo,
+        inventoryService:  mockInventoryService,
+        paymentService:   mockPaymentService,
+        eventBus:         mockEventBus,
+        idGenerator:      &TestIDGenerator{nextID: "order123"},
+        clock:           &TestClock{now: time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)},
+    }
+    
+    // Act - Execute real business logic
+    command := CreateOrderCommand{
+        CustomerID: CustomerID("cust456"),
+        Items: []OrderItemCommand{
+            {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        },
+        PaymentMethod: PaymentMethodCreditCard,
+    }
+    
+    result, err := useCase.Execute(command) // ✅ Testing real use case logic
+    
+    // Assert - Verify real business logic executed correctly
+    assert.NoError(t, err)
+    assert.NotNil(t, result)
+    assert.Equal(t, OrderID("order123"), result.OrderID)
+    assert.Equal(t, CustomerID("cust456"), result.CustomerID)
+    assert.Equal(t, Money{Amount: 100.00}, result.Total) // 2 * 50.00
+    assert.Equal(t, StatusPending, result.Status)
+    
+    // Verify dependencies were called correctly
+    mockInventoryService.AssertCalled(t, "ReserveItems", mock.MatchedBy(func(items []OrderItem) bool {
+        return len(items) == 1 && items[0].ProductID == ProductID("prod1")
+    }))
+    mockPaymentService.AssertCalled(t, "AuthorizePayment", mock.Anything)
+    mockOrderRepo.AssertCalled(t, "SaveOrder", mock.MatchedBy(func(order *Order) bool {
+        return order.GetID() == OrderID("order123") && order.GetTotal().Amount == 100.00
+    }))
+    mockEventBus.AssertCalled(t, "PublishEvent", mock.MatchedBy(func(event Event) bool {
+        return event.Type == "OrderCreated"
+    }))
+}
+
+func TestCreateOrderUseCase_Execute_InventoryFailure(t *testing.T) {
+    // Test error handling - inventory reservation fails
+    mockOrderRepo := &MockOrderRepository{}
+    mockInventoryService := &MockInventoryService{}
+    mockPaymentService := &MockPaymentService{}
+    
+    // Configure failure scenario
+    mockInventoryService.On("ReserveItems", mock.Anything).Return(
+        &InventoryError{Code: "INSUFFICIENT_STOCK", Message: "Not enough stock"})
+    
+    useCase := &CreateOrderUseCase{
+        orderRepository:  mockOrderRepo,
+        inventoryService: mockInventoryService,
+        paymentService:  mockPaymentService,
+    }
+    
+    command := CreateOrderCommand{
+        CustomerID: CustomerID("cust456"),
+        Items: []OrderItemCommand{
+            {ProductID: ProductID("prod1"), Quantity: 100}, // Too many
+        },
+    }
+    
+    // Act - Execute real error handling logic
+    result, err := useCase.Execute(command)
+    
+    // Assert - Verify proper error handling
+    assert.Error(t, err)
+    assert.Nil(t, result)
+    assert.Contains(t, err.Error(), "INSUFFICIENT_STOCK")
+    
+    // Verify no order was saved when inventory failed
+    mockOrderRepo.AssertNotCalled(t, "SaveOrder")
+    mockPaymentService.AssertNotCalled(t, "AuthorizePayment")
+}
+```
+
+#### Mock Management Best Practices
+```go
+// ✅ GOOD - Proper mock interface definition
+type OrderRepository interface {
+    SaveOrder(order *Order) error
+    FindByID(id OrderID) (*Order, error)
+    UpdateOrder(order *Order) error
+}
+
+// Mock implementation
+type MockOrderRepository struct {
+    mock.Mock
+}
+
+func (m *MockOrderRepository) SaveOrder(order *Order) error {
+    args := m.Called(order)
+    return args.Error(0)
+}
+
+func (m *MockOrderRepository) FindByID(id OrderID) (*Order, error) {
+    args := m.Called(id)
+    if args.Get(0) == nil {
+        return nil, args.Error(1)
+    }
+    return args.Get(0).(*Order), args.Error(1)
+}
+
+// ✅ GOOD - Mock regeneration when interface changes
+//go:generate mockery --name=OrderRepository --output=mocks --outpkg=mocks
+```
+
+### Infrastructure Layer Testing
+
+#### Requirements
+- **Real infrastructure components** - test actual adapters and integrations
+- **Isolated test environments** - dedicated test databases/services
+- **Integration focus** - test technical integration, not business logic
+- **Mechanical mapping validation** - ensure data transforms correctly
+
+#### Example: Repository Integration Testing
+```go
+// ✅ GOOD - Infrastructure integration test
+func TestPostgresOrderRepository_SaveOrder_Integration(t *testing.T) {
+    // Arrange - Real test database
+    testDB := setupTestDatabase() // Real PostgreSQL test instance
+    defer cleanupTestDatabase(testDB)
+    
+    repo := &PostgresOrderRepository{db: testDB}
+    
+    order := &Order{
+        ID:         OrderID("order123"),
+        CustomerID: CustomerID("cust456"), 
+        Items: []OrderItem{
+            {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        },
+        Total:     Money{Amount: 100.00},
+        Status:    StatusPending,
+        CreatedAt: time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC),
+    }
+    
+    // Act - Test real database interaction
+    err := repo.SaveOrder(order)
+    
+    // Assert - Verify data was actually persisted
+    assert.NoError(t, err)
+    
+    // Verify data in database
+    var savedOrder OrderEntity
+    err = testDB.QueryRow(`
+        SELECT id, customer_id, total, status, created_at 
+        FROM orders 
+        WHERE id = $1`, "order123").Scan(
+        &savedOrder.ID, 
+        &savedOrder.CustomerID,
+        &savedOrder.Total,
+        &savedOrder.Status,
+        &savedOrder.CreatedAt,
+    )
+    
+    assert.NoError(t, err)
+    assert.Equal(t, "order123", savedOrder.ID)
+    assert.Equal(t, "cust456", savedOrder.CustomerID)
+    assert.Equal(t, 100.00, savedOrder.Total)
+    assert.Equal(t, "pending", savedOrder.Status)
+    
+    // Test order items were saved
+    var itemCount int
+    err = testDB.QueryRow(`
+        SELECT COUNT(*) 
+        FROM order_items 
+        WHERE order_id = $1`, "order123").Scan(&itemCount)
+    
+    assert.NoError(t, err)
+    assert.Equal(t, 1, itemCount)
+}
+
+func TestPostgresOrderRepository_FindByID_NotFound(t *testing.T) {
+    // Test not found scenario
+    testDB := setupTestDatabase()
+    defer cleanupTestDatabase(testDB)
+    
+    repo := &PostgresOrderRepository{db: testDB}
+    
+    // Act - Try to find non-existent order
+    order, err := repo.FindByID(OrderID("nonexistent"))
+    
+    // Assert - Proper not found handling
+    assert.Error(t, err)
+    assert.Nil(t, order)
+    assert.True(t, errors.Is(err, ErrOrderNotFound))
+}
+
+// ✅ GOOD - Test database setup and cleanup
+func setupTestDatabase() *sql.DB {
+    db, err := sql.Open("postgres", "postgres://user:pass@localhost/test_db?sslmode=disable")
+    if err != nil {
+        panic(fmt.Sprintf("Failed to connect to test database: %v", err))
+    }
+    
+    // Run migrations
+    runTestMigrations(db)
+    
+    return db
+}
+
+func cleanupTestDatabase(db *sql.DB) {
+    // Clean up test data
+    db.Exec("TRUNCATE TABLE order_items, orders CASCADE")
+    db.Close()
+}
+```
+
+#### External Service Integration Testing
+```go
+// ✅ GOOD - External service adapter testing
+func TestPaymentServiceAdapter_AuthorizePayment_Integration(t *testing.T) {
+    // Skip if external service not available in test environment
+    if testing.Short() {
+        t.Skip("Skipping integration test in short mode")
+    }
+    
+    // Use test/sandbox endpoints
+    config := PaymentServiceConfig{
+        BaseURL: "https://api-sandbox.paymentprovider.com",
+        APIKey:  getTestAPIKey(),
+        Timeout: 30 * time.Second,
+    }
+    
+    adapter := &PaymentServiceAdapter{
+        config: config,
+        client: &http.Client{Timeout: config.Timeout},
+    }
+    
+    paymentRequest := PaymentAuthRequest{
+        Amount:        Money{Amount: 100.00},
+        Currency:      "USD",
+        PaymentMethod: CreditCard{Number: "4111111111111111"}, // Test card
+        CustomerID:    CustomerID("test-customer-123"),
+    }
+    
+    // Act - Test real external service call
+    result, err := adapter.AuthorizePayment(paymentRequest)
+    
+    // Assert - Verify integration works
+    assert.NoError(t, err)
+    assert.NotNil(t, result)
+    assert.NotEmpty(t, result.AuthorizationID)
+    assert.Equal(t, paymentRequest.Amount, result.AuthorizedAmount)
+    assert.Equal(t, AuthStatusApproved, result.Status)
+}
+```
+
+### Interface Layer Testing
+
+#### Requirements
+- **HTTP/API endpoint testing** with real request/response cycles
+- **Request validation** and error handling
+- **Authentication and authorization** testing
+- **No business logic** - only protocol concerns
+
+#### Example: HTTP Handler Testing
+```go
+// ✅ GOOD - Interface layer testing
+func TestOrderHandler_CreateOrder_ValidRequest(t *testing.T) {
+    // Arrange - Mock application service (business logic)
+    mockCreateOrderUseCase := &MockCreateOrderUseCase{}
+    mockCreateOrderUseCase.On("Execute", mock.Anything).Return(&OrderResult{
+        OrderID:    OrderID("order123"),
+        CustomerID: CustomerID("cust456"),
+        Total:      Money{Amount: 100.00},
+        Status:     StatusPending,
+    }, nil)
+    
+    handler := &OrderHandler{
+        createOrderUseCase: mockCreateOrderUseCase,
+        logger:            &TestLogger{},
+    }
+    
+    // Create HTTP request
+    requestBody := `{
+        "customerId": "cust456",
+        "items": [
+            {"productId": "prod1", "quantity": 2, "price": 50.00}
+        ],
+        "paymentMethod": "credit_card"
+    }`
+    
+    req := httptest.NewRequest("POST", "/api/orders", strings.NewReader(requestBody))
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer valid-jwt-token")
+    
+    recorder := httptest.NewRecorder()
+    
+    // Act - Test real HTTP handler
+    handler.CreateOrder(recorder, req)
+    
+    // Assert - Verify HTTP response
+    assert.Equal(t, http.StatusCreated, recorder.Code)
+    
+    var response OrderResponse
+    err := json.Unmarshal(recorder.Body.Bytes(), &response)
+    assert.NoError(t, err)
+    assert.Equal(t, "order123", response.OrderID)
+    assert.Equal(t, "cust456", response.CustomerID)
+    assert.Equal(t, 100.00, response.Total)
+    assert.Equal(t, "pending", response.Status)
+    
+    // Verify application service was called with correct command
+    mockCreateOrderUseCase.AssertCalled(t, "Execute", mock.MatchedBy(func(cmd CreateOrderCommand) bool {
+        return cmd.CustomerID == CustomerID("cust456") && len(cmd.Items) == 1
+    }))
+}
+
+func TestOrderHandler_CreateOrder_ValidationError(t *testing.T) {
+    // Test request validation (interface layer concern)
+    handler := &OrderHandler{
+        createOrderUseCase: &MockCreateOrderUseCase{}, // Not used in validation error
+    }
+    
+    // Invalid request - missing required fields
+    requestBody := `{"invalid": "request"}`
+    req := httptest.NewRequest("POST", "/api/orders", strings.NewReader(requestBody))
+    req.Header.Set("Content-Type", "application/json")
+    
+    recorder := httptest.NewRecorder()
+    
+    // Act
+    handler.CreateOrder(recorder, req)
+    
+    // Assert - Proper validation error response
+    assert.Equal(t, http.StatusBadRequest, recorder.Code)
+    
+    var errorResponse ErrorResponse
+    err := json.Unmarshal(recorder.Body.Bytes(), &errorResponse)
+    assert.NoError(t, err)
+    assert.Equal(t, "validation_error", errorResponse.Code)
+    assert.Contains(t, errorResponse.Message, "customerId is required")
+}
+
+func TestOrderHandler_CreateOrder_Unauthorized(t *testing.T) {
+    // Test authentication (interface layer concern)
+    handler := &OrderHandler{}
+    
+    req := httptest.NewRequest("POST", "/api/orders", strings.NewReader(`{}`))
+    // No Authorization header
+    
+    recorder := httptest.NewRecorder()
+    
+    // Act
+    handler.CreateOrder(recorder, req)
+    
+    // Assert - Proper auth error
+    assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+}
+```
+
+### UI Layer Testing (if applicable)
+
+#### Requirements
+- **Component behavior testing** without business logic
+- **User interaction testing** with events and state changes
+- **Accessibility testing** for WCAG compliance
+- **Visual regression testing** with screenshot comparisons
+
+#### Example: React Component Testing
+```typescript
+// ✅ GOOD - UI component testing
+import { render, screen, fireEvent } from '@testing-library/react';
+import { OrderSummary } from './OrderSummary';
+
+describe('OrderSummary Component', () => {
+  test('displays order information correctly', () => {
+    // Arrange - Mock props (presentation data)
+    const mockOrder = {
+      id: 'order123',
+      customerName: 'John Doe',
+      items: [
+        { id: 'item1', name: 'Product 1', quantity: 2, price: 50.00 },
+        { id: 'item2', name: 'Product 2', quantity: 1, price: 30.00 }
+      ],
+      total: 130.00,
+      status: 'pending'
+    };
+    
+    const mockOnCancel = jest.fn();
+    
+    // Act - Render component
+    render(<OrderSummary order={mockOrder} onCancel={mockOnCancel} />);
+    
+    // Assert - Verify display (no business logic, just presentation)
+    expect(screen.getByText('Order #order123')).toBeInTheDocument();
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('Product 1')).toBeInTheDocument();
+    expect(screen.getByText('Quantity: 2')).toBeInTheDocument();
+    expect(screen.getByText('$130.00')).toBeInTheDocument();
+    expect(screen.getByText('Status: Pending')).toBeInTheDocument();
+  });
+  
+  test('calls onCancel when cancel button clicked', () => {
+    // Test user interaction (UI concern only)
+    const mockOrder = { id: 'order123', status: 'pending', /* ... */ };
+    const mockOnCancel = jest.fn();
+    
+    render(<OrderSummary order={mockOrder} onCancel={mockOnCancel} />);
+    
+    // Act - User interaction
+    fireEvent.click(screen.getByText('Cancel Order'));
+    
+    // Assert - Event handler called
+    expect(mockOnCancel).toHaveBeenCalledWith('order123');
+  });
+  
+  test('is accessible via keyboard navigation', () => {
+    // Accessibility testing
+    const mockOrder = { /* ... */ };
+    render(<OrderSummary order={mockOrder} onCancel={() => {}} />);
+    
+    const cancelButton = screen.getByText('Cancel Order');
+    
+    // Test keyboard navigation
+    cancelButton.focus();
+    expect(document.activeElement).toBe(cancelButton);
+    
+    // Test keyboard activation
+    fireEvent.keyDown(cancelButton, { key: 'Enter', code: 'Enter' });
+    // Verify appropriate action taken
+  });
+  
+  test('meets color contrast requirements', () => {
+    // Visual accessibility testing
+    render(<OrderSummary order={{/* ... */}} onCancel={() => {}} />);
+    
+    // Use automated accessibility testing tools
+    // This would integrate with axe-core or similar
+  });
+});
+```
+
+## Test Data Management
+
+### Test Data Builders
+```go
+// ✅ GOOD - Consistent test data creation
+type OrderTestBuilder struct {
+    order *Order
+}
+
+func NewOrderBuilder() *OrderTestBuilder {
+    return &OrderTestBuilder{
+        order: &Order{
+            ID:         OrderID("default-order-id"),
+            CustomerID: CustomerID("default-customer"),
+            Status:     StatusPending,
+            CreatedAt:  time.Now(),
+        },
+    }
+}
+
+func (b *OrderTestBuilder) WithID(id string) *OrderTestBuilder {
+    b.order.ID = OrderID(id)
+    return b
+}
+
+func (b *OrderTestBuilder) WithCustomerID(customerID string) *OrderTestBuilder {
+    b.order.CustomerID = CustomerID(customerID)
+    return b
+}
+
+func (b *OrderTestBuilder) WithItems(items []OrderItem) *OrderTestBuilder {
+    b.order.Items = items
+    return b
+}
+
+func (b *OrderTestBuilder) WithStatus(status OrderStatus) *OrderTestBuilder {
+    b.order.Status = status
+    return b
+}
+
+func (b *OrderTestBuilder) Build() *Order {
+    // Recalculate total based on items
+    total := Money{Amount: 0}
+    for _, item := range b.order.Items {
+        total.Amount += item.Price.Amount * float64(item.Quantity)
+    }
+    b.order.Total = total
+    
+    return b.order
+}
+
+// Usage in tests
+func TestOrderService_ProcessOrder(t *testing.T) {
+    // Create test data with builder
+    order := NewOrderBuilder().
+        WithID("test-order-123").
+        WithCustomerID("customer-456").
+        WithItems([]OrderItem{
+            {ProductID: ProductID("prod1"), Quantity: 2, Price: Money{Amount: 50.00}},
+        }).
+        WithStatus(StatusPending).
+        Build()
+    
+    // Use in test
+    result := orderService.ProcessOrder(order)
+    // ...
+}
+```
+
+### Test Fixtures and Cleanup
+```go
+// ✅ GOOD - Proper test cleanup
+func TestOrderRepository_Integration(t *testing.T) {
+    // Setup
+    db := setupTestDB(t)
+    defer cleanupTestDB(t, db)
+    
+    repo := &PostgresOrderRepository{db: db}
+    
+    // Test with automatic cleanup
+    testOrder := createTestOrderInDB(t, db, "test-order-123")
+    defer deleteTestOrderFromDB(t, db, "test-order-123")
+    
+    // Run test
+    result, err := repo.FindByID(OrderID("test-order-123"))
+    
+    assert.NoError(t, err)
+    assert.Equal(t, testOrder.ID, result.ID)
+}
+
+func setupTestDB(t *testing.T) *sql.DB {
+    db, err := sql.Open("postgres", getTestDBConnectionString())
+    require.NoError(t, err)
+    
+    // Ensure clean state
+    _, err = db.Exec("TRUNCATE TABLE orders, order_items CASCADE")
+    require.NoError(t, err)
+    
+    return db
+}
+
+func cleanupTestDB(t *testing.T, db *sql.DB) {
+    _, err := db.Exec("TRUNCATE TABLE orders, order_items CASCADE")
+    assert.NoError(t, err)
+    db.Close()
+}
+```
+
+## Performance and Quality Standards
+
+### Test Performance Requirements
+- **Unit tests**: < 100ms each
+- **Integration tests**: < 5 seconds each
+- **End-to-end tests**: < 30 seconds each
+- **Full test suite**: < 10 minutes
+
+### Test Coverage Requirements
+- **Domain layer**: 95% code coverage
+- **Application layer**: 90% code coverage
+- **Infrastructure layer**: 80% code coverage
+- **Interface layer**: 85% code coverage
+
+### Test Quality Checklist
+- [ ] **No mocking of system under test** - only external dependencies mocked
+- [ ] **All database interactions mocked** in unit/application tests
+- [ ] **Real business logic tested** - not just mock verification
+- [ ] **Tests are independent** - can run in any order
+- [ ] **Tests are deterministic** - consistent results every time
+- [ ] **No dead code in tests** - all test code is used and necessary
+- [ ] **Clear test names** - describe what is being tested
+- [ ] **Arrange/Act/Assert structure** - clear test organization
+
+## Continuous Integration Standards
+
+### Automated Test Execution
+```yaml
+# CI Pipeline Configuration
+name: Test Suite
+on: [push, pull_request]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+          
+      - name: Run Unit Tests
+        run: |
+          go test -v -race -coverprofile=coverage.out ./...
+          go tool cover -html=coverage.out -o coverage.html
+          
+      - name: Check Coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Coverage: $COVERAGE%"
+          if (( $(echo "$COVERAGE < 90" | bc -l) )); then
+            echo "Coverage below 90%"
+            exit 1
+          fi
+          
+  integration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.19
+          
+      - name: Run Integration Tests
+        run: |
+          go test -v -tags=integration ./...
+        env:
+          TEST_DB_URL: postgres://postgres:password@localhost:5432/postgres
+```
+
+### Quality Gates
+```bash
+#!/bin/bash
+# quality-gate.sh
+
+echo "Running quality gate checks..."
+
+# 1. Test coverage check
+COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+echo "Test coverage: $COVERAGE%"
+
+if (( $(echo "$COVERAGE < 90" | bc -l) )); then
+    echo "❌ Coverage below 90%"
+    exit 1
+fi
+
+# 2. Check for dead code
+echo "Checking for dead code..."
+deadcode ./... | grep -v "_test.go" > deadcode.txt
+if [ -s deadcode.txt ]; then
+    echo "❌ Dead code found:"
+    cat deadcode.txt
+    exit 1
+fi
+
+# 3. Check for unused parameters
+echo "Checking for unused parameters..."
+unparam ./... > unused.txt
+if [ -s unused.txt ]; then
+    echo "❌ Unused parameters found:"
+    cat unused.txt
+    exit 1
+fi
+
+# 4. Verify no DB connections in unit tests
+echo "Checking for DB connections in unit tests..."
+grep -r "sql.Open\|database/sql" *_test.go | grep -v integration_test.go > db_in_tests.txt
+if [ -s db_in_tests.txt ]; then
+    echo "❌ Database connections found in unit tests:"
+    cat db_in_tests.txt
+    exit 1
+fi
+
+# 5. Verify mocks are up to date
+echo "Checking mock freshness..."
+go generate ./...
+if ! git diff --exit-code --quiet; then
+    echo "❌ Mocks are out of date"
+    git diff
+    exit 1
+fi
+
+echo "✅ All quality gates passed"
+```
+
+This comprehensive testing standards document ensures consistent, reliable, and maintainable tests across all layers of the application while enforcing the critical requirements of mocking external dependencies and testing real business logic.

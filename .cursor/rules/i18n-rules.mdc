@@ -1,0 +1,152 @@
+---
+description: Internationalization (i18n) rules for multi-language support
+globs: ["**/*.tsx", "**/*.ts", "**/*.jsx", "**/*.js"]
+---
+
+# Internationalization (i18n) Rules
+
+## Overview
+
+This project uses `react-i18next` for internationalization. All user-facing text must be internationalized to support multiple languages.
+
+## Locale Structure
+
+Locale files are located at:
+- `apps/web/public/locales/en/common.json` - English (default)
+- `apps/web/public/locales/vi/common.json` - Vietnamese
+
+## Mandatory Requirements
+
+### 1. Always Check for i18n Configuration
+Before adding any user-facing text, check if the project has i18n configured:
+```bash
+grep -r "i18next\|useTranslation" . --include="*.tsx" --include="*.ts"
+```
+
+If i18n is configured, ALL user-facing text must be translated.
+
+### 2. Use Translation Hook in Components
+```typescript
+// ✅ GOOD - Using translation hook
+import { useTranslation } from "react-i18next";
+
+function MyComponent() {
+  const { t } = useTranslation();
+  
+  return (
+    <div>
+      <h1>{t("myComponent.title")}</h1>
+      <p>{t("myComponent.description")}</p>
+    </div>
+  );
+}
+
+// ❌ BAD - Hardcoded strings
+function MyComponent() {
+  return (
+    <div>
+      <h1>My Title</h1>
+      <p>My description here</p>
+    </div>
+  );
+}
+```
+
+### 3. Translation Key Naming Convention
+Use dot notation with hierarchical structure:
+```json
+{
+  "featureName": {
+    "componentName": {
+      "elementName": "Translation text"
+    }
+  }
+}
+```
+
+Example:
+```json
+{
+  "lessonFlow": {
+    "summary": {
+      "title": "Lesson Summary",
+      "student": "Student",
+      "duration": "Duration"
+    },
+    "preferences": {
+      "title": "Lesson Preferences",
+      "difficulty": "Target Difficulty"
+    }
+  }
+}
+```
+
+### 4. Update ALL Locale Files
+When adding new translations, ALWAYS update all locale files:
+- `en/common.json` - English (required)
+- `vi/common.json` - Vietnamese (required)
+
+### 5. Interpolation for Dynamic Values
+Use interpolation for dynamic content:
+```typescript
+// In component
+t("dashboard.welcome", { name: user.name })
+
+// In locale file
+{
+  "dashboard": {
+    "welcome": "Welcome back, {{name}}!"
+  }
+}
+```
+
+### 6. Pluralization
+Handle singular/plural forms:
+```typescript
+// In component
+t("items.count", { count: itemCount })
+
+// In locale file
+{
+  "items": {
+    "count_one": "{{count}} item",
+    "count_other": "{{count}} items"
+  }
+}
+```
+
+## What NOT to Translate
+
+- Technical identifiers (CSS classes, IDs)
+- Code-level constants
+- API responses that come pre-localized
+- Date/number formatting (use proper formatters instead)
+- URLs and paths
+
+## Checklist for New Components
+
+- [ ] Import `useTranslation` hook
+- [ ] Replace all hardcoded user-facing strings with `t()` calls
+- [ ] Add translation keys to `en/common.json`
+- [ ] Add translations to `vi/common.json`
+- [ ] Test with language switcher
+- [ ] Verify placeholder/aria-label attributes are translated
+
+## Date and Number Formatting
+
+For dates and numbers, use `Intl` or dedicated libraries:
+```typescript
+// For dates
+const formattedDate = new Intl.DateTimeFormat(i18n.language).format(date);
+
+// For numbers
+const formattedNumber = new Intl.NumberFormat(i18n.language).format(number);
+```
+
+## Quality Checklist
+
+- [ ] No hardcoded user-facing strings in components
+- [ ] All locale files have matching keys
+- [ ] Keys follow naming convention
+- [ ] Dynamic values use interpolation
+- [ ] Pluralization is handled where needed

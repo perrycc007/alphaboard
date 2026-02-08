@@ -1,0 +1,275 @@
+---
+description: Architecture and separation of concerns rules for scalable systems
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: false
+---
+
+# Architecture & Separation of Concerns Rules
+
+## Layer Separation Requirements
+
+### Core Architectural Layers
+- **Domain Logic**: Core business rules and entities that are framework-agnostic
+- **Business Logic**: Application-specific use cases and workflows
+- **UI Layer**: Presentation components and user interface concerns
+- **State Management**: Data flow, state updates, and persistence concerns
+
+### Implementation Guidelines
+
+#### Domain Layer
+**Pure functions, business entities, domain models**
+- **No dependencies** on UI frameworks or external libraries
+- **Contains core business rules** and validation logic
+- **Framework-agnostic** and easily testable
+- **Example locations**: `src/domain/`, `src/entities/`, `src/models/`
+
+```typescript
+// ✅ GOOD - Pure domain logic
+export class Order {
+  constructor(
+    private readonly id: OrderId,
+    private readonly items: OrderItem[],
+    private readonly customer: Customer
+  ) {
+    this.validateInvariants();
+  }
+
+  calculateTotal(): Money {
+    return this.items.reduce(
+      (total, item) => total.add(item.getSubtotal()),
+      Money.zero()
+    );
+  }
+
+  private validateInvariants(): void {
+    if (this.items.length === 0) {
+      throw new Error("Order must have at least one item");
+    }
+  }
+}
+```
+
+#### Business Logic Layer
+**Application services, use cases, workflows**
+- **Orchestrates domain logic** for specific application needs
+- **Handles business workflows** and application-specific rules
+- **Transaction boundaries** and cross-cutting concerns
+- **Example locations**: `src/application/`, `src/services/`, `src/use-cases/`
+
+```typescript
+// ✅ GOOD - Business logic orchestration
+export class CreateOrderUseCase {
+  constructor(
+    private readonly orderRepo: OrderRepository,
+    private readonly inventoryService: InventoryService,
+    private readonly paymentService: PaymentService
+  ) {}
+
+  async execute(command: CreateOrderCommand): Promise<Order> {
+    // 1. Domain validation
+    const order = Order.create(command.items, command.customer);
+    
+    // 2. Business rules
+    await this.inventoryService.reserveItems(command.items);
+    
+    // 3. Persistence
+    await this.orderRepo.save(order);
+    
+    return order;
+  }
+}
+```
+
+#### Infrastructure Layer  
+**External dependencies, APIs, data access**
+- **Database repositories**, external API clients, third-party integrations
+- **Framework-specific implementations** of domain interfaces
+- **Example locations**: `src/infrastructure/`, `src/repositories/`, `src/api/`
+
+```typescript
+// ✅ GOOD - Infrastructure adapter
+export class PostgresOrderRepository implements OrderRepository {
+  constructor(private readonly db: Database) {}
+
+  async save(order: Order): Promise<void> {
+    // Mechanical mapping - no business logic
+    const orderData = {
+      id: order.getId().value,
+      total: order.calculateTotal().amount,
+      items: order.getItems().map(item => ({
+        productId: item.getProductId().value,
+        quantity: item.getQuantity()
+      }))
+    };
+    
+    await this.db.orders.insert(orderData);
+  }
+}
+```
+
+#### UI Layer
+**Components, views, presentation logic**
+- **Framework-specific UI components** and presentation concerns
+- **Should only contain display logic** and user interaction handling
+- **No business rules** or domain logic
+- **Example locations**: `src/ui/`, `src/components/`, `src/pages/`
+
+```typescript
+// ✅ GOOD - Pure presentation logic
+export const OrderSummary: React.FC<{ order: Order }> = ({ order }) => {
+  return (
+    <div className="order-summary">
+      <h2>Order #{order.id}</h2>
+      <div className="total">Total: ${order.total}</div>
+      <ul>
+        {order.items.map(item => (
+          <li key={item.id}>{item.name} x {item.quantity}</li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+```
+
+#### State Management
+**Application state, data flow, persistence**
+- **Global state management**, local component state, data caching  
+- **Separate from UI components** and business logic
+- **Example locations**: `src/state/`, `src/store/`, `src/context/`
+
+```typescript
+// ✅ GOOD - Pure state management
+export const useOrderState = () => {
+  const [orders, setOrders] = useState<Order[]>([]);
+  
+  const addOrder = useCallback((order: Order) => {
+    setOrders(prev => [...prev, order]);
+  }, []);
+  
+  return { orders, addOrder };
+};
+```
+
+## Dependency Flow Rules
+
+### Inward Dependencies Only
+**Outer layers depend on inner layers, never the reverse**
+
+```
+UI Layer → Business Logic → Domain Logic
+State ↗     ↓                    ↑
+Infrastructure → Interfaces -----┘
+```
+
+### Domain Independence
+**Domain layer has zero external dependencies**
+
+```typescript
+// ❌ BAD - Domain depending on infrastructure
+import { HttpClient } from './infrastructure/HttpClient';
+
+export class Order {
+  async validate() {
+    const result = await HttpClient.get('/validate'); // ❌ External dependency
+  }
+}
+
+// ✅ GOOD - Domain with injected interface
+export interface ValidationService {
+  validate(order: Order): Promise<ValidationResult>;
+}
+
+export class Order {
+  constructor(private validator: ValidationService) {} // ✅ Injected dependency
+}
+```
+
+### UI Isolation
+**UI components should not contain business logic**
+
+```typescript
+// ❌ BAD - Business logic in UI
+const OrderComponent = ({ items }) => {
+  const total = items.reduce((sum, item) => {
+    // ❌ Business calculation in UI
+    const discount = item.category === 'premium' ? 0.1 : 0;
+    return sum + (item.price * (1 - discount));
+  }, 0);
+  
+  return <div>Total: {total}</div>;
+};
+
+// ✅ GOOD - UI delegates to business layer
+const OrderComponent = ({ order }) => {
+  const total = order.calculateTotal(); // ✅ Business logic in domain
+  return <div>Total: {total.format()}</div>;
+};
+```
+
+### State Separation
+**State management separate from UI components**
+
+```typescript
+// ❌ BAD - State logic mixed with UI
+const OrderList = () => {
+  const [orders, setOrders] = useState([]);
+  
+  const addOrder = (orderData) => {
+    // ❌ Business logic in UI component
+    const order = {
+      ...orderData,
+      id: generateId(),
+      total: calculateTotal(orderData.items),
+      status: 'pending'
+    };
+    setOrders(prev => [...prev, order]);
+  };
+  
+  return <div>...</div>;
+};
+
+// ✅ GOOD - Separated state management
+const useOrderManagement = () => {
+  const [orders, setOrders] = useState([]);
+  
+  const addOrder = (command: CreateOrderCommand) => {
+    const order = OrderFactory.create(command); // ✅ Use domain factory
+    setOrders(prev => [...prev, order]);
+  };
+  
+  return { orders, addOrder };
+};
+```
+
+### Clear Interfaces
+**Use dependency injection and interfaces for loose coupling**
+
+```typescript
+// ✅ GOOD - Interface-based design
+export interface PaymentGateway {
+  processPayment(amount: Money, paymentMethod: PaymentMethod): Promise<PaymentResult>;
+}
+
+export class StripePaymentGateway implements PaymentGateway {
+  async processPayment(amount: Money, paymentMethod: PaymentMethod): Promise<PaymentResult> {
+    // Stripe-specific implementation
+  }
+}
+
+export class OrderService {
+  constructor(private paymentGateway: PaymentGateway) {} // ✅ Depends on interface
+}
+```
+
+## Architecture Validation Checklist
+
+After any implementation, verify:
+
+- [ ] **Domain layer** has no external dependencies
+- [ ] **UI components** contain only presentation logic  
+- [ ] **Business logic** is in application/service layer
+- [ ] **State management** is separated from UI
+- [ ] **Dependencies flow inward** only
+- [ ] **Interfaces** are used for loose coupling
+- [ ] **Infrastructure** implements domain interfaces
+- [ ] **No business branching** in infrastructure layer

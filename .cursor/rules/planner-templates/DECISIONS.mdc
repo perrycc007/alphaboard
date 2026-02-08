@@ -1,0 +1,292 @@
+---
+description: Decision tracking template for architecture choices
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Decisions Template
+
+**Purpose**: Track important technical and architectural decisions made during implementation.
+
+**Format**: Each decision should be documented with context, alternatives considered, and rationale.
+
+## Decision Log
+
+| Date | Decision | Context | Alternatives | Consequences | Owner | Status |
+|------|----------|---------|--------------|--------------|-------|---------|
+| 2025-01-15 | Adopt Option A (Strategy Pattern) | Need extensible pricing system | Option B (Value Object), Option C (Config Rules) | More interfaces, clearer tests | @tech-lead | Active |
+| 2025-01-15 | Use PostgreSQL for new feature | Existing infrastructure, ACID compliance | MongoDB (document), Redis (cache-only) | Schema management, migration complexity | @backend-team | Active |
+| 2025-01-15 | Implement feature flag for rollback | Safe deployment strategy | Blue-green deployment, canary release | Runtime configuration dependency | @devops | Active |
+
+## Decision Details
+
+### Decision 1: Adopt Strategy Pattern for Business Logic Variability
+
+**Date**: 2025-01-15  
+**Status**: Active  
+**Owner**: @tech-lead
+
+**Context**:
+- Multiple business rules need to be applied based on different contexts
+- Future requirements may introduce additional rule variations
+- Current codebase uses switch/case patterns which violate clean architecture principles
+
+**Problem Statement**:
+How should we handle business logic variations while maintaining clean architecture and testability?
+
+**Alternatives Considered**:
+
+#### Option A: Strategy Pattern (SELECTED)
+- **Approach**: Define business strategy interfaces with concrete implementations
+- **Pros**: 
+  - Extensible for future requirements
+  - Testable in isolation
+  - Follows SOLID principles
+  - No business branching in infrastructure
+- **Cons**: 
+  - More interfaces and wiring required
+  - Slightly more complex initial setup
+- **Implementation**: Domain layer interfaces, application layer injection
+
+#### Option B: Value Object with Business Rules  
+- **Approach**: Encapsulate rules within domain value objects
+- **Pros**: 
+  - Simple and localized
+  - Pure domain approach
+  - Minimal interface changes
+- **Cons**: 
+  - Less flexible for complex rule combinations
+  - May not scale for future requirements
+- **Implementation**: Domain value objects with internal rule logic
+
+#### Option C: Configuration-Based Rules
+- **Approach**: External configuration drives business rule selection
+- **Pros**: 
+  - Runtime configuration changes
+  - No code changes for new rules
+  - Business users can modify rules
+- **Cons**: 
+  - Complex rule engine required
+  - Testing becomes more difficult
+  - Business logic scattered across config and code
+- **Implementation**: Rule engine with external configuration
+
+**Decision Rationale**:
+Selected Option A (Strategy Pattern) because:
+1. **Extensibility**: Provides clear foundation for future requirements
+2. **Testability**: Each strategy can be tested in isolation
+3. **Maintainability**: Clear separation of concerns
+4. **Team Alignment**: Consistent with existing codebase architecture patterns
+5. **Clean Architecture**: Avoids business branching in infrastructure layers
+
+**Implementation Plan**:
+- Define strategy interfaces in domain layer
+- Implement concrete strategies for each business rule variant
+- Inject strategies through application layer dependency injection
+- Use factory pattern for strategy selection
+
+**Success Metrics**:
+- Zero switch/case statements for business branching
+- Each strategy independently testable
+- Easy addition of new strategies without changing existing code
+
+### Decision 2: Database Technology Choice  
+
+**Date**: 2025-01-15  
+**Status**: Active  
+**Owner**: @backend-team
+
+**Context**:
+- New feature requires persistent data storage
+- Existing system uses PostgreSQL for main data
+- Feature involves complex relational data with transactions
+
+**Problem Statement**:
+What database technology should be used for the new feature data storage?
+
+**Alternatives Considered**:
+
+#### Option A: PostgreSQL (SELECTED)
+- **Approach**: Extend existing PostgreSQL schema with new tables
+- **Pros**:
+  - Consistent with existing infrastructure
+  - ACID compliance for transaction safety
+  - Strong consistency guarantees
+  - Team expertise already exists
+  - Existing backup and monitoring systems
+- **Cons**:
+  - Schema migrations required
+  - Potential performance impact on existing system
+  - Relational constraints may limit flexibility
+
+#### Option B: MongoDB
+- **Approach**: New document database for flexible schema
+- **Pros**:
+  - Schema flexibility for evolving requirements
+  - Natural JSON document storage
+  - Horizontal scaling capabilities
+- **Cons**:
+  - New infrastructure to manage
+  - Learning curve for team
+  - Eventual consistency model
+  - Additional operational complexity
+
+#### Option C: Redis (Cache-Only)
+- **Approach**: Use Redis for caching with PostgreSQL persistence
+- **Pros**:
+  - Fast read performance
+  - Existing Redis infrastructure
+  - Good for session/temporary data
+- **Cons**:
+  - Not suitable for persistent business data
+  - Limited query capabilities
+  - Data durability concerns
+
+**Decision Rationale**:
+Selected PostgreSQL because:
+1. **Consistency**: Maintains infrastructure consistency
+2. **Reliability**: ACID guarantees for business-critical data
+3. **Expertise**: Team already familiar with PostgreSQL
+4. **Operations**: Leverages existing monitoring, backup, and maintenance processes
+5. **Integration**: Seamless integration with existing data and reporting systems
+
+**Implementation Plan**:
+- Design database schema with proper normalization
+- Implement migration scripts with rollback procedures
+- Create database indexes for performance optimization
+- Update existing backup and monitoring to include new tables
+
+**Risks and Mitigation**:
+- **Risk**: Schema migration complexity
+  - **Mitigation**: Comprehensive testing in staging environment
+- **Risk**: Performance impact on existing system
+  - **Mitigation**: Load testing and query optimization
+
+### Decision 3: Deployment and Rollback Strategy
+
+**Date**: 2025-01-15  
+**Status**: Active  
+**Owner**: @devops
+
+**Context**:
+- New feature represents significant functionality change
+- Need safe deployment with ability to quickly rollback
+- Production system has high availability requirements
+
+**Problem Statement**:
+How should we deploy the new feature while minimizing risk and ensuring quick rollback capability?
+
+**Alternatives Considered**:
+
+#### Option A: Feature Flag Approach (SELECTED)
+- **Approach**: Deploy code with feature disabled, enable via feature flag
+- **Pros**:
+  - Instant rollback without deployment
+  - Gradual rollout to subset of users
+  - A/B testing capabilities
+  - Code deployed and tested in production environment
+- **Cons**:
+  - Runtime configuration dependency
+  - Code complexity with conditional logic
+  - Feature flag management overhead
+
+#### Option B: Blue-Green Deployment
+- **Approach**: Deploy to parallel environment, switch traffic
+- **Pros**:
+  - Complete environment isolation
+  - Full rollback by switching traffic back
+  - No runtime configuration complexity
+- **Cons**:
+  - Requires duplicate infrastructure
+  - Database migration complexity
+  - Longer rollback time (requires traffic switch)
+
+#### Option C: Canary Release
+- **Approach**: Deploy to subset of servers, gradually increase
+- **Pros**:
+  - Limited blast radius for issues
+  - Performance monitoring on small scale
+  - Natural rollback by routing traffic away
+- **Cons**:
+  - Complex load balancer configuration
+  - Partial deployment state complexity
+  - Database consistency challenges
+
+**Decision Rationale**:
+Selected Feature Flag approach because:
+1. **Speed**: Instant enable/disable without deployment
+2. **Flexibility**: Gradual rollout and A/B testing capabilities  
+3. **Safety**: Code deployed and validated before enabling
+4. **Existing Infrastructure**: Leverages current feature flag system
+5. **User Experience**: Smooth transitions without service interruption
+
+**Implementation Plan**:
+- Implement feature flag in configuration system
+- Wrap new functionality with flag checks
+- Create monitoring dashboards for feature adoption
+- Document flag lifecycle and cleanup procedures
+
+**Feature Flag Strategy**:
+- **Flag Name**: `staking.new-feature.enabled`
+- **Default Value**: `false` (disabled)
+- **Rollout Plan**: 
+  1. Internal team testing (1% traffic)
+  2. Beta user group (10% traffic)
+  3. Gradual rollout (25%, 50%, 100%)
+- **Monitoring**: Error rates, performance metrics, user adoption
+- **Cleanup**: Remove flag after 30 days of stable 100% rollout
+
+## Decision Review Process
+
+### Periodic Review
+- **Schedule**: Monthly review of active decisions
+- **Purpose**: Validate decisions are still appropriate
+- **Outcomes**: Continue, modify, or reverse decisions based on new evidence
+
+### Decision Reversal Process
+1. Document new context that invalidates previous decision
+2. Re-evaluate alternatives with current information
+3. Create implementation plan for decision change
+4. Update status to "Superseded" with reference to new decision
+5. Implement changes with appropriate testing and rollback plan
+
+## Decision Templates
+
+### Quick Decision Template
+```markdown
+**Decision**: [Brief description]
+**Date**: [YYYY-MM-DD]
+**Context**: [Why this decision was needed]
+**Chosen**: [Selected option]
+**Rationale**: [Key reasons for choice]
+**Owner**: [@person-responsible]
+```
+
+### Detailed Decision Template
+Use the full structure shown in Decision Details section above for complex or high-impact decisions.
+
+## Decision Categories
+
+### Technical Architecture
+- Technology stack choices
+- Design pattern selections
+- Infrastructure decisions
+- Integration approaches
+
+### Business Logic
+- Domain modeling decisions
+- Business rule implementations
+- Data consistency approaches
+- Transaction boundary definitions
+
+### Operational
+- Deployment strategies
+- Monitoring approaches
+- Security implementations
+- Performance optimization choices
+
+### Team Process
+- Code review standards
+- Testing strategies
+- Documentation requirements
+- Development workflow choices

@@ -1,0 +1,452 @@
+---
+description: Rollback template for deployment and change management
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Rollback Strategy Template
+
+## Rollback Overview
+
+**Feature**: [Feature name]
+**Rollback Strategy**: Feature flag controlled deployment with immediate disable capability
+**Rollback Time Target**: < 5 minutes for complete feature disable
+**Data Safety**: No data loss during rollback operations
+
+## Rollback Triggers
+
+### Automatic Rollback Conditions
+- Error rate > 5% for feature-specific operations
+- Response time p95 > 1000ms for critical endpoints
+- Database connection failures > 10% for feature queries
+- External service integration failures > 20%
+
+### Manual Rollback Conditions
+- Business stakeholder decision due to user feedback
+- Critical security vulnerability discovered
+- Data integrity issues identified
+- Performance degradation affecting other systems
+
+## Rollback Procedures
+
+### Phase 1: Immediate Feature Disable (< 1 minute)
+**Feature Flag Approach**
+
+1. **Access Feature Flag System**
+   ```bash
+   # Connect to feature flag management system
+   kubectl exec -it feature-flag-service-pod -- /bin/bash
+   # OR access via admin UI at https://flags.company.com
+   ```
+
+2. **Disable Feature Flag**
+   ```javascript
+   // Via API
+   curl -X POST https://api.flags.company.com/flags/new-feature.enabled \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -d '{"enabled": false}'
+   
+   // Via CLI
+   flag-cli disable new-feature.enabled --environment production
+   ```
+
+3. **Verify Feature Disabled**
+   ```bash
+   # Check feature flag status
+   flag-cli status new-feature.enabled --environment production
+   
+   # Verify no new feature traffic
+   curl https://api.company.com/health | jq '.features["new-feature"].enabled'
+   ```
+
+**Expected Result**: New feature functionality immediately stops serving users
+**Rollback Time**: 30 seconds - 1 minute
+**Risk Level**: Low (immediate, reversible)
+
+### Phase 2: Traffic Verification (1-2 minutes)
+**Monitor System Behavior**
+
+1. **Check Error Rates**
+   ```bash
+   # Monitor application logs
+   kubectl logs -f deployment/app-service --tail=100 | grep ERROR
+   
+   # Check monitoring dashboard
+   # Navigate to: https://monitoring.company.com/dashboard/app-health
+   ```
+
+2. **Verify Database Load**
+   ```sql
+   -- Check active connections
+   SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
+   
+   -- Monitor query performance
+   SELECT query, mean_time, calls FROM pg_stat_statements 
+   WHERE query LIKE '%new_feature_table%' 
+   ORDER BY mean_time DESC LIMIT 10;
+   ```
+
+3. **Confirm User Experience**
+   ```bash
+   # Test critical user flows
+   curl -X GET https://api.company.com/orders/user123 \
+     -H "Authorization: Bearer $USER_TOKEN"
+   
+   # Verify UI loads without feature
+   puppeteer-test --url https://app.company.com --feature-disabled
+   ```
+
+**Expected Result**: System operates normally without new feature
+**Verification Time**: 1-2 minutes
+**Success Criteria**: Error rates return to baseline, response times normal
+
+### Phase 3: Application Code Rollback (5-10 minutes)
+**If Feature Flag Disable Insufficient**
+
+1. **Identify Rollback Target**
+   ```bash
+   # Find last known good deployment
+   kubectl rollout history deployment/app-service
+   
+   # Get specific revision details
+   kubectl rollout history deployment/app-service --revision=5
+   ```
+
+2. **Execute Application Rollback**
+   ```bash
+   # Rollback to previous revision
+   kubectl rollout undo deployment/app-service
+   
+   # Or rollback to specific revision
+   kubectl rollout undo deployment/app-service --to-revision=5
+   
+   # Monitor rollback progress
+   kubectl rollout status deployment/app-service
+   ```
+
+3. **Verify Application Health**
+   ```bash
+   # Check pod status
+   kubectl get pods -l app=app-service
+   
+   # Verify health endpoints
+   kubectl exec deployment/app-service -- wget -qO- http://localhost:8080/health
+   ```
+
+**Expected Result**: Application reverted to previous stable version
+**Rollback Time**: 5-10 minutes (depending on deployment size)
+**Risk Level**: Medium (service restart required)
+
+### Phase 4: Database Rollback (10-30 minutes)
+**If Schema Changes Need Reverting**
+
+1. **Assess Database Impact**
+   ```sql
+   -- Check if new tables have data
+   SELECT COUNT(*) FROM new_feature_table;
+   
+   -- Identify schema changes to revert
+   SELECT * FROM schema_migrations WHERE version > 'BEFORE_FEATURE_VERSION';
+   ```
+
+2. **Backup Current State**
+   ```bash
+   # Create point-in-time backup
+   pg_dump -h db-host -U username -d production_db \
+     --schema-only > rollback_schema_backup_$(date +%Y%m%d_%H%M%S).sql
+   
+   # Backup data if needed
+   pg_dump -h db-host -U username -d production_db \
+     --table=new_feature_table > rollback_data_backup_$(date +%Y%m%d_%H%M%S).sql
+   ```
+
+3. **Execute Database Rollback**
+   ```sql
+   -- Run rollback migration
+   BEGIN;
+   
+   -- Drop new columns (if added to existing tables)
+   ALTER TABLE existing_table DROP COLUMN IF EXISTS new_feature_column;
+   
+   -- Drop new tables (preserve data if needed)
+   DROP TABLE IF EXISTS new_feature_table;
+   
+   -- Update migration version
+   DELETE FROM schema_migrations WHERE version = 'NEW_FEATURE_MIGRATION_VERSION';
+   
+   COMMIT;
+   ```
+
+4. **Verify Database Integrity**
+   ```sql
+   -- Check foreign key constraints
+   SELECT conname, conrelid::regclass FROM pg_constraint WHERE contype = 'f';
+   
+   -- Verify no orphaned data
+   SELECT * FROM existing_table WHERE referenced_id NOT IN 
+     (SELECT id FROM reference_table);
+   ```
+
+**Expected Result**: Database schema reverted to pre-feature state
+**Rollback Time**: 10-30 minutes (depending on data volume)
+**Risk Level**: High (potential data impact, requires careful execution)
+
+## Data Safety and Recovery
+
+### Data Preservation Strategy
+**Before Any Destructive Operations**
+
+1. **Create Data Snapshots**
+   ```sql
+   -- Export feature-related data before deletion
+   COPY (SELECT * FROM new_feature_table) TO '/tmp/feature_data_backup.csv' CSV HEADER;
+   
+   -- Create table backup
+   CREATE TABLE new_feature_table_backup AS SELECT * FROM new_feature_table;
+   ```
+
+2. **Document Data Dependencies**
+   ```sql
+   -- Find all tables referencing feature data
+   SELECT 
+     tc.table_name,
+     kcu.column_name,
+     ccu.table_name AS foreign_table_name,
+     ccu.column_name AS foreign_column_name
+   FROM information_schema.table_constraints AS tc
+   JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name
+   JOIN information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name
+   WHERE tc.constraint_type = 'FOREIGN KEY'
+     AND (tc.table_name LIKE '%new_feature%' OR ccu.table_name LIKE '%new_feature%');
+   ```
+
+### Data Recovery Procedures
+**If Data Restoration Needed**
+
+1. **Restore from Backup**
+   ```bash
+   # Restore database backup
+   psql -h db-host -U username -d production_db < rollback_data_backup_TIMESTAMP.sql
+   
+   # Restore specific table
+   psql -h db-host -U username -d production_db -c \
+     "\copy new_feature_table FROM '/tmp/feature_data_backup.csv' CSV HEADER"
+   ```
+
+2. **Validate Data Integrity**
+   ```sql
+   -- Check data counts match expected
+   SELECT COUNT(*) as current_count FROM new_feature_table;
+   
+   -- Verify referential integrity
+   SELECT COUNT(*) FROM new_feature_table nft
+   LEFT JOIN related_table rt ON nft.related_id = rt.id
+   WHERE rt.id IS NULL;
+   ```
+
+## Monitoring During Rollback
+
+### Key Metrics to Watch
+1. **Application Health**
+   - Error rate (target: < 0.1%)
+   - Response time p95 (target: < 200ms)
+   - Active user sessions (should remain stable)
+   - CPU and memory usage (should normalize)
+
+2. **Database Performance**
+   - Connection count (should decrease after rollback)
+   - Query performance (should improve)
+   - Lock contention (should resolve)
+   - Replication lag (should remain low)
+
+3. **User Experience**
+   - Page load times
+   - Feature availability (old features still work)
+   - Error reports from users
+   - Support ticket volume
+
+### Monitoring Commands
+```bash
+# Application metrics
+kubectl top pods -l app=app-service
+kubectl get events --sort-by=.metadata.creationTimestamp
+
+# Database monitoring
+psql -c "SELECT * FROM pg_stat_activity WHERE state = 'active';"
+psql -c "SELECT * FROM pg_stat_database WHERE datname = 'production_db';"
+
+# User traffic monitoring
+curl -s https://api.company.com/metrics/traffic | jq '.active_users'
+```
+
+## Communication Plan
+
+### Internal Communication
+**Immediate Notifications (< 2 minutes)**
+- Slack channel: #incidents-production
+- Email: engineering-alerts@company.com
+- PagerDuty: Alert on-call engineers
+
+**Stakeholder Updates (< 5 minutes)**
+- Product team: Feature temporarily disabled
+- Customer support: Prepared response for user inquiries
+- Management: Brief status and expected resolution time
+
+### External Communication
+**User-Facing Communication**
+- Status page update (if user-impacting)
+- In-app notification (if appropriate)
+- Support team briefing for user inquiries
+
+### Communication Templates
+```markdown
+**Internal Alert Template**
+SUBJECT: [RESOLVED] Feature Rollback - [Feature Name]
+
+STATUS: Feature successfully disabled via feature flag
+IMPACT: New feature functionality temporarily unavailable
+USERS AFFECTED: Estimated [X]% of active users
+ACTIONS TAKEN: 
+- Feature flag disabled at [TIME]
+- System monitoring shows normal operation
+- No data loss occurred
+
+NEXT STEPS:
+- Continue monitoring for [X] hours
+- Root cause analysis scheduled
+- Re-enable plan to be determined
+
+**Customer-Facing Template**
+We've temporarily disabled a new feature to ensure optimal 
+performance. All existing functionality remains available. 
+We'll provide updates as we work to restore the feature.
+```
+
+## Testing Rollback Procedures
+
+### Rollback Testing Schedule
+- **Monthly**: Feature flag disable testing in staging
+- **Quarterly**: Full rollback procedure in staging environment
+- **Pre-deployment**: Rollback procedure validation for each release
+
+### Staging Environment Rollback Test
+```bash
+#!/bin/bash
+# rollback-test.sh
+
+echo "Starting rollback test..."
+
+# 1. Deploy feature to staging
+kubectl apply -f feature-deployment-staging.yaml
+kubectl wait --for=condition=available --timeout=300s deployment/app-service-staging
+
+# 2. Enable feature flag
+flag-cli enable new-feature.enabled --environment staging
+
+# 3. Verify feature is working
+curl -f https://staging.company.com/api/feature/health || exit 1
+
+# 4. Test rollback procedure
+echo "Testing feature flag disable..."
+flag-cli disable new-feature.enabled --environment staging
+
+# 5. Verify feature is disabled
+sleep 10
+curl https://staging.company.com/api/feature/health | grep "disabled" || exit 1
+
+# 6. Test application rollback
+echo "Testing application rollback..."
+kubectl rollout undo deployment/app-service-staging
+kubectl rollout status deployment/app-service-staging
+
+# 7. Verify application health
+kubectl exec deployment/app-service-staging -- wget -qO- http://localhost:8080/health
+
+echo "Rollback test completed successfully!"
+```
+
+## Rollback Success Criteria
+
+### Phase 1 Success (Feature Flag Disable)
+- [ ] Feature flag successfully set to disabled
+- [ ] No new feature requests being processed
+- [ ] Error rates return to baseline within 2 minutes
+- [ ] Response times normalize within 2 minutes
+- [ ] No data corruption detected
+
+### Phase 2 Success (Application Rollback)
+- [ ] Application successfully reverted to previous version
+- [ ] All pods healthy and running
+- [ ] Health checks passing
+- [ ] Database connections stable
+- [ ] User traffic processing normally
+
+### Phase 3 Success (Database Rollback)
+- [ ] Schema changes successfully reverted
+- [ ] No foreign key constraint violations
+- [ ] Data integrity maintained
+- [ ] Application can connect and query database
+- [ ] Performance metrics back to baseline
+
+### Overall Success Criteria
+- [ ] System fully operational without new feature
+- [ ] No ongoing user impact
+- [ ] All critical business functions available
+- [ ] Monitoring shows stable metrics
+- [ ] Support ticket volume normal
+- [ ] Stakeholders informed of status
+
+## Post-Rollback Actions
+
+### Immediate Actions (< 1 hour)
+1. **System Verification**
+   - Confirm all services healthy
+   - Validate critical user flows
+   - Monitor error rates and performance
+
+2. **Documentation**
+   - Record rollback timeline and decisions
+   - Document any issues encountered
+   - Update incident tracking system
+
+### Short-term Actions (< 24 hours)
+1. **Root Cause Analysis**
+   - Identify what triggered rollback need
+   - Analyze logs and metrics from failure
+   - Document lessons learned
+
+2. **Communication**
+   - Detailed post-mortem to stakeholders
+   - Engineering team debrief
+   - Customer communication if needed
+
+### Medium-term Actions (< 1 week)
+1. **Fix Development**
+   - Address root cause issues
+   - Improve testing procedures
+   - Update deployment process if needed
+
+2. **Process Improvement**
+   - Update rollback procedures based on experience
+   - Enhance monitoring and alerting
+   - Improve feature flag strategies
+
+## Emergency Contacts
+
+### Technical Contacts
+- **On-call Engineer**: [PagerDuty rotation]
+- **Database Administrator**: [Contact info]
+- **DevOps Lead**: [Contact info]
+- **Security Team**: [Emergency contact]
+
+### Business Contacts
+- **Product Owner**: [Contact info]
+- **Customer Support Manager**: [Contact info]  
+- **Engineering Manager**: [Contact info]
+- **Incident Commander**: [Contact info]
+
+### Escalation Process
+1. **Level 1**: On-call engineer attempts rollback
+2. **Level 2**: Senior engineer and DBA involved
+3. **Level 3**: Engineering manager and product owner
+4. **Level 4**: CTO and business leadership

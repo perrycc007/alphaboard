@@ -1,0 +1,1272 @@
+---
+description: MCP tools comprehensive guide for enhanced development workflows
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# MCP Tools Comprehensive Guide
+
+## Available MCP Tools Overview
+
+This guide covers all available MCP (Model Control Protocol) tools and their optimal usage patterns for enhanced development workflows.
+
+### Core Tool Categories
+- **Framelink Figma MCP** - Design-to-code workflows
+- **Browser Tools MCP** - Real-time debugging and quality assurance
+- **Puppeteer MCP** - Automated testing and UI validation
+- **Notion API Integration** - Documentation and project management
+- **Additional Tools** - Specialized utilities for specific use cases
+
+## Framelink Figma MCP
+
+### Available Functions
+- `get_figma_data` - Extract design specifications, components, and properties
+- `download_figma_images` - Download assets and images from Figma files
+
+### Primary Use Cases
+- **Design-to-Code Workflows** - Convert Figma designs to implementation
+- **Asset Extraction** - Download images, icons, and design assets
+- **Design Validation** - Compare implementation with original designs
+
+### Workflow Examples
+
+#### Complete Design-to-Code Implementation
+```typescript
+// 1. Extract Figma design data
+const figmaData = await get_figma_data({
+  fileKey: "abc123def456", // From Figma URL
+  nodeId: "123:456"        // Specific component/frame (optional)
+});
+
+// 2. Download required assets
+await download_figma_images({
+  fileKey: "abc123def456",
+  localPath: "./src/assets/images",
+  nodes: [
+    {
+      nodeId: "123:456",
+      fileName: "hero-image.png",
+      imageRef: "image-hash-from-figma-data"
+    },
+    {
+      nodeId: "789:012", 
+      fileName: "icon-arrow.svg"
+      // No imageRef for vector SVGs
+    }
+  ],
+  pngScale: 2 // 2x resolution for retina displays
+});
+
+// 3. Implement component based on extracted data
+const HeroComponent: React.FC = () => {
+  // Use extracted dimensions, colors, typography from figmaData
+  const styles = {
+    width: figmaData.layout.width,
+    height: figmaData.layout.height,
+    backgroundColor: figmaData.fills[0].color,
+    fontSize: figmaData.typography.fontSize,
+  };
+  
+  return (
+    <div style={styles}>
+      <img src="./assets/images/hero-image.png" alt="Hero" />
+      <button>
+        <img src="./assets/images/icon-arrow.svg" alt="" />
+        Get Started
+      </button>
+    </div>
+  );
+};
+```
+
+#### Design Validation Workflow
+```typescript
+// 1. Get current Figma design
+const currentDesign = await get_figma_data({
+  fileKey: "current-design-key"
+});
+
+// 2. Take screenshot of implementation
+await puppeteer_screenshot({
+  name: "implementation-screenshot",
+  selector: ".hero-component"
+});
+
+// 3. Compare implementation with design specifications
+const designValidation = {
+  dimensions: {
+    expected: { width: currentDesign.width, height: currentDesign.height },
+    actual: { width: actualWidth, height: actualHeight },
+    matches: Math.abs(currentDesign.width - actualWidth) < 5
+  },
+  colors: {
+    expected: currentDesign.fills[0].color,
+    actual: extractedColor,
+    matches: colorsMatch(currentDesign.fills[0].color, extractedColor)
+  }
+};
+```
+
+### Best Practices
+- **File Key Extraction**: Extract from Figma URLs like `figma.com/file/FILE_KEY/...`
+- **Node ID Usage**: Use specific node IDs for targeted component extraction
+- **Asset Organization**: Organize downloaded assets in logical directory structures
+- **Design Validation**: Regularly compare implementations with updated designs
+
+## Browser Tools MCP
+
+### Available Functions
+- `getConsoleLogs` - Retrieve browser console logs
+- `getConsoleErrors` - Get console error messages
+- `getNetworkErrors` - Check network-related errors
+- `getNetworkLogs` - Retrieve all network activity
+- `takeScreenshot` - Capture current browser state
+- `getSelectedElement` - Inspect DOM elements
+- `wipeLogs` - Clear log memory
+- `runAccessibilityAudit` - WCAG compliance checking
+- `runPerformanceAudit` - Performance analysis
+- `runSEOAudit` - SEO optimization checking
+- `runNextJSAudit` - Next.js specific optimizations
+- `runBestPracticesAudit` - General code quality audit
+- `runDebuggerMode` - Enhanced debugging mode
+- `runAuditMode` - Comprehensive quality analysis
+
+### Debugging Workflow
+
+#### Complete Debugging Session
+```typescript
+// 1. Capture initial state
+await wipeLogs("start-fresh");
+await takeScreenshot({ name: "initial-state" });
+
+// 2. Gather error information
+const consoleErrors = await getConsoleErrors("initial-scan");
+const networkErrors = await getNetworkErrors("network-scan");
+const networkLogs = await getNetworkLogs("full-network-activity");
+
+// 3. Enable enhanced debugging
+await runDebuggerMode("deep-analysis");
+
+// 4. Analyze specific issues
+if (consoleErrors.length > 0) {
+  console.log("JavaScript Errors Found:", consoleErrors);
+  // Investigate specific error sources
+}
+
+if (networkErrors.length > 0) {
+  console.log("Network Issues Found:", networkErrors);
+  // Check API endpoints, CORS issues, etc.
+}
+
+// 5. Take detailed screenshots for visual debugging
+await takeScreenshot({ name: "error-state", selector: ".problematic-component" });
+
+// 6. Clean up debugging session
+await wipeLogs("cleanup-session");
+```
+
+#### Performance Analysis Workflow
+```typescript
+// 1. Baseline performance measurement
+await takeScreenshot({ name: "before-optimization" });
+const initialPerformance = await runPerformanceAudit("baseline");
+
+// 2. Implement optimizations
+// ... make performance improvements ...
+
+// 3. Measure improvements
+const optimizedPerformance = await runPerformanceAudit("after-optimization");
+await takeScreenshot({ name: "after-optimization" });
+
+// 4. Compare results
+const performanceImprovement = {
+  loadTime: {
+    before: initialPerformance.loadTime,
+    after: optimizedPerformance.loadTime,
+    improvement: initialPerformance.loadTime - optimizedPerformance.loadTime
+  },
+  score: {
+    before: initialPerformance.score,
+    after: optimizedPerformance.score,
+    improvement: optimizedPerformance.score - initialPerformance.score
+  }
+};
+```
+
+### Quality Assurance Workflow
+
+#### Comprehensive Quality Check
+```typescript
+// 1. Run all quality audits
+const accessibilityResults = await runAccessibilityAudit("a11y-check");
+const performanceResults = await runPerformanceAudit("performance-check");
+const seoResults = await runSEOAudit("seo-check");
+const bestPracticesResults = await runBestPracticesAudit("best-practices-check");
+
+// 2. Framework-specific audits
+const nextJSResults = await runNextJSAudit("nextjs-optimization");
+
+// 3. Comprehensive audit mode
+const fullAuditResults = await runAuditMode("complete-analysis");
+
+// 4. Visual documentation
+await takeScreenshot({ name: "qa-validation" });
+
+// 5. Generate quality report
+const qualityReport = {
+  accessibility: {
+    score: accessibilityResults.score,
+    issues: accessibilityResults.violations,
+    status: accessibilityResults.score > 90 ? 'PASS' : 'FAIL'
+  },
+  performance: {
+    score: performanceResults.score, 
+    metrics: performanceResults.metrics,
+    status: performanceResults.score > 85 ? 'PASS' : 'FAIL'
+  },
+  seo: {
+    score: seoResults.score,
+    recommendations: seoResults.recommendations,
+    status: seoResults.score > 80 ? 'PASS' : 'FAIL'
+  },
+  bestPractices: {
+    score: bestPracticesResults.score,
+    issues: bestPracticesResults.issues,
+    status: bestPracticesResults.score > 90 ? 'PASS' : 'FAIL'
+  }
+};
+```
+
+## Puppeteer MCP
+
+### Available Functions  
+- `puppeteer_navigate` - Navigate to URLs
+- `puppeteer_screenshot` - Capture screenshots
+- `puppeteer_click` - Click elements
+- `puppeteer_fill` - Fill form inputs
+- `puppeteer_select` - Select dropdown options
+- `puppeteer_hover` - Hover over elements
+- `puppeteer_evaluate` - Execute JavaScript in browser context
+
+### End-to-End Testing Workflow
+
+#### Complete User Journey Testing
+```typescript
+// 1. Navigate to application
+await puppeteer_navigate({ url: "http://localhost:3000" });
+await puppeteer_screenshot({ name: "landing-page" });
+
+// 2. User authentication flow
+await puppeteer_click({ selector: "#login-button" });
+await puppeteer_fill({ selector: "#email", value: "user@example.com" });
+await puppeteer_fill({ selector: "#password", value: "secure-password" });
+await puppeteer_click({ selector: "#submit-login" });
+await puppeteer_screenshot({ name: "after-login" });
+
+// 3. Navigate through main workflow
+await puppeteer_click({ selector: ".main-feature-button" });
+await puppeteer_screenshot({ name: "feature-page" });
+
+// 4. Form interaction testing
+await puppeteer_fill({ selector: "#user-input", value: "test data" });
+await puppeteer_select({ selector: "#dropdown", value: "option1" });
+await puppeteer_click({ selector: "#submit-form" });
+
+// 5. Validate results
+const result = await puppeteer_evaluate({ 
+  script: "document.querySelector('.success-message').textContent" 
+});
+await puppeteer_screenshot({ name: "success-state" });
+
+// 6. Test error scenarios
+await puppeteer_fill({ selector: "#user-input", value: "" }); // Invalid input
+await puppeteer_click({ selector: "#submit-form" });
+await puppeteer_screenshot({ name: "error-state" });
+```
+
+#### Interactive Testing and Validation
+```typescript
+// 1. Test hover effects and interactions
+await puppeteer_hover({ selector: ".interactive-element" });
+await puppeteer_screenshot({ name: "hover-state" });
+
+// 2. Test responsive design
+await puppeteer_evaluate({ 
+  script: "window.innerWidth = 768; window.dispatchEvent(new Event('resize'));" 
+});
+await puppeteer_screenshot({ name: "mobile-view" });
+
+// 3. Test keyboard navigation
+await puppeteer_evaluate({ 
+  script: `
+    const focusableElements = document.querySelectorAll('button, input, select, textarea, [tabindex]');
+    focusableElements.forEach((el, index) => {
+      el.setAttribute('data-tab-order', index);
+    });
+  ` 
+});
+
+// 4. Test form validation
+await puppeteer_fill({ selector: "#email", value: "invalid-email" });
+await puppeteer_click({ selector: "#submit" });
+const validationMessage = await puppeteer_evaluate({ 
+  script: "document.querySelector('.error-message').textContent" 
+});
+```
+
+## Tool Combination Workflows
+
+### Design-to-Implementation-to-Testing Pipeline
+
+#### Complete Development Workflow
+```typescript
+// Phase 1: Design Extraction (Figma MCP)
+const designData = await get_figma_data({ fileKey: "design-file-key" });
+await download_figma_images({
+  fileKey: "design-file-key",
+  localPath: "./assets",
+  nodes: extractImageNodes(designData)
+});
+
+// Phase 2: Implementation
+// ... implement component based on design data ...
+
+// Phase 3: Visual Validation (Puppeteer + Browser Tools)
+await puppeteer_navigate({ url: "http://localhost:3000/new-component" });
+await puppeteer_screenshot({ name: "implementation" });
+
+// Phase 4: Quality Assurance (Browser Tools)
+const accessibilityResults = await runAccessibilityAudit("component-a11y");
+const performanceResults = await runPerformanceAudit("component-performance");
+
+// Phase 5: Interactive Testing (Puppeteer)
+await puppeteer_click({ selector: ".interactive-element" });
+await puppeteer_fill({ selector: "input", value: "test data" });
+await puppeteer_screenshot({ name: "interaction-test" });
+
+// Phase 6: Cross-browser Validation
+// Repeat testing across different browser configurations
+
+// Phase 7: Report Generation
+const validationReport = {
+  designFidelity: compareWithFigmaDesign(designData, implementationScreenshot),
+  accessibility: accessibilityResults,
+  performance: performanceResults,
+  interactivity: interactionTestResults,
+  visualRegression: screenshotComparisons
+};
+```
+
+### Debugging and Optimization Pipeline
+
+#### Complete Issue Resolution Workflow
+```typescript
+// Phase 1: Issue Identification (Browser Tools)
+await wipeLogs("start-debugging");
+const errors = await getConsoleErrors("error-scan");
+const networkIssues = await getNetworkErrors("network-scan");
+await runDebuggerMode("enhanced-debugging");
+
+// Phase 2: Visual Documentation (Puppeteer + Browser Tools)
+await takeScreenshot({ name: "issue-state" });
+await puppeteer_navigate({ url: "http://localhost:3000/problematic-page" });
+await puppeteer_screenshot({ name: "detailed-issue-view" });
+
+// Phase 3: Interactive Debugging (Puppeteer)
+await puppeteer_evaluate({ 
+  script: `
+    console.log('Debug info:', {
+      userAgent: navigator.userAgent,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      localStorage: JSON.stringify(localStorage),
+      sessionStorage: JSON.stringify(sessionStorage)
+    });
+  ` 
+});
+
+// Phase 4: Fix Implementation
+// ... implement fixes based on findings ...
+
+// Phase 5: Validation (All Tools)
+await runAuditMode("post-fix-validation");
+await puppeteer_screenshot({ name: "fixed-state" });
+const validationLogs = await getConsoleLogs("post-fix-logs");
+
+// Phase 6: Cleanup
+await wipeLogs("cleanup");
+```
+
+## Tool Selection Guidelines
+
+### When to Use Figma MCP
+- **Design handoffs** from design team to development
+- **Asset extraction** for icons, images, and design tokens
+- **Design validation** comparing implementation to designs
+- **Responsive design** extracting breakpoint-specific layouts
+
+### When to Use Browser Tools MCP
+- **Real-time debugging** of JavaScript errors and network issues
+- **Quality assurance** with automated accessibility and performance audits
+- **Visual documentation** with screenshots for bug reports
+- **Continuous monitoring** during development process
+
+### When to Use Puppeteer MCP
+- **End-to-end testing** of complete user workflows
+- **Interactive testing** of UI components and user interactions
+- **Cross-browser validation** ensuring consistent behavior
+- **Automated regression testing** with screenshot comparisons
+
+### Tool Combination Strategies
+
+#### Three-Tool Workflow (Recommended)
+```typescript
+// Standard development workflow using all three core tools
+async function completeDevelopmentWorkflow(featureName: string) {
+  // 1. Design Phase (Figma MCP)
+  const design = await extractDesignSpecifications();
+  const assets = await downloadDesignAssets();
+  
+  // 2. Implementation Phase
+  const implementation = await implementFeature(design, assets);
+  
+  // 3. Validation Phase (Browser Tools + Puppeteer)
+  const qualityResults = await validateImplementation();
+  const interactionResults = await testUserInteractions();
+  
+  // 4. Documentation Phase
+  const documentation = await generateValidationReport();
+  
+  return {
+    implementation,
+    qualityResults,
+    interactionResults,
+    documentation
+  };
+}
+```
+
+#### Parallel Tool Usage
+```typescript
+// Use tools simultaneously for efficiency
+async function parallelValidation() {
+  const [accessibilityResults, performanceResults, screenshotResults] = 
+    await Promise.all([
+      runAccessibilityAudit("parallel-a11y"),
+      runPerformanceAudit("parallel-perf"), 
+      puppeteer_screenshot({ name: "parallel-visual" })
+    ]);
+    
+  return { accessibilityResults, performanceResults, screenshotResults };
+}
+```
+
+## Advanced Usage Patterns
+
+### Automated Quality Gates
+```typescript
+// Implement automated quality gates using MCP tools
+async function qualityGateValidation(): Promise<boolean> {
+  const results = await Promise.all([
+    runAccessibilityAudit("gate-a11y"),
+    runPerformanceAudit("gate-perf"),
+    runBestPracticesAudit("gate-bp")
+  ]);
+  
+  const [a11yResults, perfResults, bpResults] = results;
+  
+  const passesQualityGate = 
+    a11yResults.score >= 90 &&
+    perfResults.score >= 85 &&
+    bpResults.score >= 90;
+    
+  if (!passesQualityGate) {
+    await takeScreenshot({ name: "quality-gate-failure" });
+    await generateQualityReport(results);
+  }
+  
+  return passesQualityGate;
+}
+```
+
+### Progressive Enhancement Testing
+```typescript
+// Test progressive enhancement using Puppeteer
+async function testProgressiveEnhancement() {
+  // Test with JavaScript disabled
+  await puppeteer_evaluate({ 
+    script: "window.jsEnabled = false;" 
+  });
+  await puppeteer_screenshot({ name: "no-js-state" });
+  
+  // Test with slow network
+  await puppeteer_evaluate({ 
+    script: "navigator.connection = { effectiveType: '2g' };" 
+  });
+  await puppeteer_screenshot({ name: "slow-network-state" });
+  
+  // Test with reduced motion preferences
+  await puppeteer_evaluate({ 
+    script: "window.matchMedia = () => ({ matches: true });" 
+  });
+  await puppeteer_screenshot({ name: "reduced-motion-state" });
+}
+```
+
+### Performance Monitoring Pipeline
+```typescript
+// Continuous performance monitoring
+async function performanceMonitoringPipeline() {
+  const baselineResults = await runPerformanceAudit("baseline");
+  
+  // Implement feature changes
+  // ... development work ...
+  
+  const currentResults = await runPerformanceAudit("current");
+  
+  const performanceDelta = {
+    scoreChange: currentResults.score - baselineResults.score,
+    metricChanges: {
+      fcp: currentResults.fcp - baselineResults.fcp,
+      lcp: currentResults.lcp - baselineResults.lcp,
+      cls: currentResults.cls - baselineResults.cls
+    }
+  };
+  
+  if (performanceDelta.scoreChange < -5) {
+    await takeScreenshot({ name: "performance-regression" });
+    throw new Error("Performance regression detected");
+  }
+  
+  return performanceDelta;
+}
+```
+
+## Error Handling and Best Practices
+
+### Robust Tool Usage
+```typescript
+// Handle MCP tool failures gracefully
+async function robustMCPExecution<T>(
+  toolFunction: () => Promise<T>,
+  fallbackStrategy: () => Promise<T>,
+  retryAttempts: number = 3
+): Promise<T> {
+  for (let attempt = 1; attempt <= retryAttempts; attempt++) {
+    try {
+      return await toolFunction();
+    } catch (error) {
+      console.warn(`MCP tool attempt ${attempt} failed:`, error);
+      
+      if (attempt === retryAttempts) {
+        console.log("All attempts failed, using fallback strategy");
+        return await fallbackStrategy();
+      }
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  
+  throw new Error("All retry attempts exhausted");
+}
+
+// Usage example
+const auditResults = await robustMCPExecution(
+  () => runAccessibilityAudit("primary-audit"),
+  () => ({ score: 0, message: "Audit unavailable" }), // Fallback
+  3 // Retry attempts
+);
+```
+
+### Tool Integration Best Practices
+1. **Sequential vs Parallel**: Use parallel execution for independent operations, sequential for dependent operations
+2. **Error Recovery**: Implement fallback strategies for critical workflows
+3. **Resource Management**: Clean up resources (wipeLogs) after debugging sessions
+4. **Performance Impact**: Consider tool execution time in CI/CD pipelines
+5. **Data Persistence**: Store important results (screenshots, audit reports) for later analysis
+
+## Integration with Development Workflow
+
+### CI/CD Pipeline Integration
+```yaml
+# GitHub Actions example
+name: MCP Quality Gate
+on: [pull_request]
+
+jobs:
+  quality-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Start application
+        run: npm start &
+        
+      - name: Wait for application
+        run: sleep 30
+        
+      - name: Run MCP Quality Validation
+        run: |
+          # Use MCP tools for quality validation
+          node scripts/mcp-quality-gate.js
+          
+      - name: Upload Screenshots
+        uses: actions/upload-artifact@v2
+        with:
+          name: quality-screenshots
+          path: screenshots/
+```
+
+### Development Environment Setup
+```json
+{
+  "scripts": {
+    "dev:with-mcp": "concurrently \"npm run dev\" \"npm run mcp:monitor\"",
+    "mcp:monitor": "node scripts/mcp-continuous-monitoring.js",
+    "mcp:audit": "node scripts/mcp-full-audit.js",
+    "mcp:visual-test": "node scripts/mcp-visual-regression.js"
+  }
+}
+```
+
+This comprehensive MCP tools guide provides the foundation for enhanced development workflows using all available tools in combination for maximum efficiency and quality assurance.
+# MCP Tools Comprehensive Guide
+
+## Available MCP Tools Overview
+
+This guide covers all available MCP (Model Control Protocol) tools and their optimal usage patterns for enhanced development workflows.
+
+### Core Tool Categories
+- **Framelink Figma MCP** - Design-to-code workflows
+- **Browser Tools MCP** - Real-time debugging and quality assurance
+- **Puppeteer MCP** - Automated testing and UI validation
+- **Notion API Integration** - Documentation and project management
+- **Additional Tools** - Specialized utilities for specific use cases
+
+## Framelink Figma MCP
+
+### Available Functions
+- `get_figma_data` - Extract design specifications, components, and properties
+- `download_figma_images` - Download assets and images from Figma files
+
+### Primary Use Cases
+- **Design-to-Code Workflows** - Convert Figma designs to implementation
+- **Asset Extraction** - Download images, icons, and design assets
+- **Design Validation** - Compare implementation with original designs
+
+### Workflow Examples
+
+#### Complete Design-to-Code Implementation
+```typescript
+// 1. Extract Figma design data
+const figmaData = await get_figma_data({
+  fileKey: "abc123def456", // From Figma URL
+  nodeId: "123:456"        // Specific component/frame (optional)
+});
+
+// 2. Download required assets
+await download_figma_images({
+  fileKey: "abc123def456",
+  localPath: "./src/assets/images",
+  nodes: [
+    {
+      nodeId: "123:456",
+      fileName: "hero-image.png",
+      imageRef: "image-hash-from-figma-data"
+    },
+    {
+      nodeId: "789:012", 
+      fileName: "icon-arrow.svg"
+      // No imageRef for vector SVGs
+    }
+  ],
+  pngScale: 2 // 2x resolution for retina displays
+});
+
+// 3. Implement component based on extracted data
+const HeroComponent: React.FC = () => {
+  // Use extracted dimensions, colors, typography from figmaData
+  const styles = {
+    width: figmaData.layout.width,
+    height: figmaData.layout.height,
+    backgroundColor: figmaData.fills[0].color,
+    fontSize: figmaData.typography.fontSize,
+  };
+  
+  return (
+    <div style={styles}>
+      <img src="./assets/images/hero-image.png" alt="Hero" />
+      <button>
+        <img src="./assets/images/icon-arrow.svg" alt="" />
+        Get Started
+      </button>
+    </div>
+  );
+};
+```
+
+#### Design Validation Workflow
+```typescript
+// 1. Get current Figma design
+const currentDesign = await get_figma_data({
+  fileKey: "current-design-key"
+});
+
+// 2. Take screenshot of implementation
+await puppeteer_screenshot({
+  name: "implementation-screenshot",
+  selector: ".hero-component"
+});
+
+// 3. Compare implementation with design specifications
+const designValidation = {
+  dimensions: {
+    expected: { width: currentDesign.width, height: currentDesign.height },
+    actual: { width: actualWidth, height: actualHeight },
+    matches: Math.abs(currentDesign.width - actualWidth) < 5
+  },
+  colors: {
+    expected: currentDesign.fills[0].color,
+    actual: extractedColor,
+    matches: colorsMatch(currentDesign.fills[0].color, extractedColor)
+  }
+};
+```
+
+### Best Practices
+- **File Key Extraction**: Extract from Figma URLs like `figma.com/file/FILE_KEY/...`
+- **Node ID Usage**: Use specific node IDs for targeted component extraction
+- **Asset Organization**: Organize downloaded assets in logical directory structures
+- **Design Validation**: Regularly compare implementations with updated designs
+
+## Browser Tools MCP
+
+### Available Functions
+- `getConsoleLogs` - Retrieve browser console logs
+- `getConsoleErrors` - Get console error messages
+- `getNetworkErrors` - Check network-related errors
+- `getNetworkLogs` - Retrieve all network activity
+- `takeScreenshot` - Capture current browser state
+- `getSelectedElement` - Inspect DOM elements
+- `wipeLogs` - Clear log memory
+- `runAccessibilityAudit` - WCAG compliance checking
+- `runPerformanceAudit` - Performance analysis
+- `runSEOAudit` - SEO optimization checking
+- `runNextJSAudit` - Next.js specific optimizations
+- `runBestPracticesAudit` - General code quality audit
+- `runDebuggerMode` - Enhanced debugging mode
+- `runAuditMode` - Comprehensive quality analysis
+
+### Debugging Workflow
+
+#### Complete Debugging Session
+```typescript
+// 1. Capture initial state
+await wipeLogs("start-fresh");
+await takeScreenshot({ name: "initial-state" });
+
+// 2. Gather error information
+const consoleErrors = await getConsoleErrors("initial-scan");
+const networkErrors = await getNetworkErrors("network-scan");
+const networkLogs = await getNetworkLogs("full-network-activity");
+
+// 3. Enable enhanced debugging
+await runDebuggerMode("deep-analysis");
+
+// 4. Analyze specific issues
+if (consoleErrors.length > 0) {
+  console.log("JavaScript Errors Found:", consoleErrors);
+  // Investigate specific error sources
+}
+
+if (networkErrors.length > 0) {
+  console.log("Network Issues Found:", networkErrors);
+  // Check API endpoints, CORS issues, etc.
+}
+
+// 5. Take detailed screenshots for visual debugging
+await takeScreenshot({ name: "error-state", selector: ".problematic-component" });
+
+// 6. Clean up debugging session
+await wipeLogs("cleanup-session");
+```
+
+#### Performance Analysis Workflow
+```typescript
+// 1. Baseline performance measurement
+await takeScreenshot({ name: "before-optimization" });
+const initialPerformance = await runPerformanceAudit("baseline");
+
+// 2. Implement optimizations
+// ... make performance improvements ...
+
+// 3. Measure improvements
+const optimizedPerformance = await runPerformanceAudit("after-optimization");
+await takeScreenshot({ name: "after-optimization" });
+
+// 4. Compare results
+const performanceImprovement = {
+  loadTime: {
+    before: initialPerformance.loadTime,
+    after: optimizedPerformance.loadTime,
+    improvement: initialPerformance.loadTime - optimizedPerformance.loadTime
+  },
+  score: {
+    before: initialPerformance.score,
+    after: optimizedPerformance.score,
+    improvement: optimizedPerformance.score - initialPerformance.score
+  }
+};
+```
+
+### Quality Assurance Workflow
+
+#### Comprehensive Quality Check
+```typescript
+// 1. Run all quality audits
+const accessibilityResults = await runAccessibilityAudit("a11y-check");
+const performanceResults = await runPerformanceAudit("performance-check");
+const seoResults = await runSEOAudit("seo-check");
+const bestPracticesResults = await runBestPracticesAudit("best-practices-check");
+
+// 2. Framework-specific audits
+const nextJSResults = await runNextJSAudit("nextjs-optimization");
+
+// 3. Comprehensive audit mode
+const fullAuditResults = await runAuditMode("complete-analysis");
+
+// 4. Visual documentation
+await takeScreenshot({ name: "qa-validation" });
+
+// 5. Generate quality report
+const qualityReport = {
+  accessibility: {
+    score: accessibilityResults.score,
+    issues: accessibilityResults.violations,
+    status: accessibilityResults.score > 90 ? 'PASS' : 'FAIL'
+  },
+  performance: {
+    score: performanceResults.score, 
+    metrics: performanceResults.metrics,
+    status: performanceResults.score > 85 ? 'PASS' : 'FAIL'
+  },
+  seo: {
+    score: seoResults.score,
+    recommendations: seoResults.recommendations,
+    status: seoResults.score > 80 ? 'PASS' : 'FAIL'
+  },
+  bestPractices: {
+    score: bestPracticesResults.score,
+    issues: bestPracticesResults.issues,
+    status: bestPracticesResults.score > 90 ? 'PASS' : 'FAIL'
+  }
+};
+```
+
+## Puppeteer MCP
+
+### Available Functions  
+- `puppeteer_navigate` - Navigate to URLs
+- `puppeteer_screenshot` - Capture screenshots
+- `puppeteer_click` - Click elements
+- `puppeteer_fill` - Fill form inputs
+- `puppeteer_select` - Select dropdown options
+- `puppeteer_hover` - Hover over elements
+- `puppeteer_evaluate` - Execute JavaScript in browser context
+
+### End-to-End Testing Workflow
+
+#### Complete User Journey Testing
+```typescript
+// 1. Navigate to application
+await puppeteer_navigate({ url: "http://localhost:3000" });
+await puppeteer_screenshot({ name: "landing-page" });
+
+// 2. User authentication flow
+await puppeteer_click({ selector: "#login-button" });
+await puppeteer_fill({ selector: "#email", value: "user@example.com" });
+await puppeteer_fill({ selector: "#password", value: "secure-password" });
+await puppeteer_click({ selector: "#submit-login" });
+await puppeteer_screenshot({ name: "after-login" });
+
+// 3. Navigate through main workflow
+await puppeteer_click({ selector: ".main-feature-button" });
+await puppeteer_screenshot({ name: "feature-page" });
+
+// 4. Form interaction testing
+await puppeteer_fill({ selector: "#user-input", value: "test data" });
+await puppeteer_select({ selector: "#dropdown", value: "option1" });
+await puppeteer_click({ selector: "#submit-form" });
+
+// 5. Validate results
+const result = await puppeteer_evaluate({ 
+  script: "document.querySelector('.success-message').textContent" 
+});
+await puppeteer_screenshot({ name: "success-state" });
+
+// 6. Test error scenarios
+await puppeteer_fill({ selector: "#user-input", value: "" }); // Invalid input
+await puppeteer_click({ selector: "#submit-form" });
+await puppeteer_screenshot({ name: "error-state" });
+```
+
+#### Interactive Testing and Validation
+```typescript
+// 1. Test hover effects and interactions
+await puppeteer_hover({ selector: ".interactive-element" });
+await puppeteer_screenshot({ name: "hover-state" });
+
+// 2. Test responsive design
+await puppeteer_evaluate({ 
+  script: "window.innerWidth = 768; window.dispatchEvent(new Event('resize'));" 
+});
+await puppeteer_screenshot({ name: "mobile-view" });
+
+// 3. Test keyboard navigation
+await puppeteer_evaluate({ 
+  script: `
+    const focusableElements = document.querySelectorAll('button, input, select, textarea, [tabindex]');
+    focusableElements.forEach((el, index) => {
+      el.setAttribute('data-tab-order', index);
+    });
+  ` 
+});
+
+// 4. Test form validation
+await puppeteer_fill({ selector: "#email", value: "invalid-email" });
+await puppeteer_click({ selector: "#submit" });
+const validationMessage = await puppeteer_evaluate({ 
+  script: "document.querySelector('.error-message').textContent" 
+});
+```
+
+## Tool Combination Workflows
+
+### Design-to-Implementation-to-Testing Pipeline
+
+#### Complete Development Workflow
+```typescript
+// Phase 1: Design Extraction (Figma MCP)
+const designData = await get_figma_data({ fileKey: "design-file-key" });
+await download_figma_images({
+  fileKey: "design-file-key",
+  localPath: "./assets",
+  nodes: extractImageNodes(designData)
+});
+
+// Phase 2: Implementation
+// ... implement component based on design data ...
+
+// Phase 3: Visual Validation (Puppeteer + Browser Tools)
+await puppeteer_navigate({ url: "http://localhost:3000/new-component" });
+await puppeteer_screenshot({ name: "implementation" });
+
+// Phase 4: Quality Assurance (Browser Tools)
+const accessibilityResults = await runAccessibilityAudit("component-a11y");
+const performanceResults = await runPerformanceAudit("component-performance");
+
+// Phase 5: Interactive Testing (Puppeteer)
+await puppeteer_click({ selector: ".interactive-element" });
+await puppeteer_fill({ selector: "input", value: "test data" });
+await puppeteer_screenshot({ name: "interaction-test" });
+
+// Phase 6: Cross-browser Validation
+// Repeat testing across different browser configurations
+
+// Phase 7: Report Generation
+const validationReport = {
+  designFidelity: compareWithFigmaDesign(designData, implementationScreenshot),
+  accessibility: accessibilityResults,
+  performance: performanceResults,
+  interactivity: interactionTestResults,
+  visualRegression: screenshotComparisons
+};
+```
+
+### Debugging and Optimization Pipeline
+
+#### Complete Issue Resolution Workflow
+```typescript
+// Phase 1: Issue Identification (Browser Tools)
+await wipeLogs("start-debugging");
+const errors = await getConsoleErrors("error-scan");
+const networkIssues = await getNetworkErrors("network-scan");
+await runDebuggerMode("enhanced-debugging");
+
+// Phase 2: Visual Documentation (Puppeteer + Browser Tools)
+await takeScreenshot({ name: "issue-state" });
+await puppeteer_navigate({ url: "http://localhost:3000/problematic-page" });
+await puppeteer_screenshot({ name: "detailed-issue-view" });
+
+// Phase 3: Interactive Debugging (Puppeteer)
+await puppeteer_evaluate({ 
+  script: `
+    console.log('Debug info:', {
+      userAgent: navigator.userAgent,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      localStorage: JSON.stringify(localStorage),
+      sessionStorage: JSON.stringify(sessionStorage)
+    });
+  ` 
+});
+
+// Phase 4: Fix Implementation
+// ... implement fixes based on findings ...
+
+// Phase 5: Validation (All Tools)
+await runAuditMode("post-fix-validation");
+await puppeteer_screenshot({ name: "fixed-state" });
+const validationLogs = await getConsoleLogs("post-fix-logs");
+
+// Phase 6: Cleanup
+await wipeLogs("cleanup");
+```
+
+## Tool Selection Guidelines
+
+### When to Use Figma MCP
+- **Design handoffs** from design team to development
+- **Asset extraction** for icons, images, and design tokens
+- **Design validation** comparing implementation to designs
+- **Responsive design** extracting breakpoint-specific layouts
+
+### When to Use Browser Tools MCP
+- **Real-time debugging** of JavaScript errors and network issues
+- **Quality assurance** with automated accessibility and performance audits
+- **Visual documentation** with screenshots for bug reports
+- **Continuous monitoring** during development process
+
+### When to Use Puppeteer MCP
+- **End-to-end testing** of complete user workflows
+- **Interactive testing** of UI components and user interactions
+- **Cross-browser validation** ensuring consistent behavior
+- **Automated regression testing** with screenshot comparisons
+
+### Tool Combination Strategies
+
+#### Three-Tool Workflow (Recommended)
+```typescript
+// Standard development workflow using all three core tools
+async function completeDevelopmentWorkflow(featureName: string) {
+  // 1. Design Phase (Figma MCP)
+  const design = await extractDesignSpecifications();
+  const assets = await downloadDesignAssets();
+  
+  // 2. Implementation Phase
+  const implementation = await implementFeature(design, assets);
+  
+  // 3. Validation Phase (Browser Tools + Puppeteer)
+  const qualityResults = await validateImplementation();
+  const interactionResults = await testUserInteractions();
+  
+  // 4. Documentation Phase
+  const documentation = await generateValidationReport();
+  
+  return {
+    implementation,
+    qualityResults,
+    interactionResults,
+    documentation
+  };
+}
+```
+
+#### Parallel Tool Usage
+```typescript
+// Use tools simultaneously for efficiency
+async function parallelValidation() {
+  const [accessibilityResults, performanceResults, screenshotResults] = 
+    await Promise.all([
+      runAccessibilityAudit("parallel-a11y"),
+      runPerformanceAudit("parallel-perf"), 
+      puppeteer_screenshot({ name: "parallel-visual" })
+    ]);
+    
+  return { accessibilityResults, performanceResults, screenshotResults };
+}
+```
+
+## Advanced Usage Patterns
+
+### Automated Quality Gates
+```typescript
+// Implement automated quality gates using MCP tools
+async function qualityGateValidation(): Promise<boolean> {
+  const results = await Promise.all([
+    runAccessibilityAudit("gate-a11y"),
+    runPerformanceAudit("gate-perf"),
+    runBestPracticesAudit("gate-bp")
+  ]);
+  
+  const [a11yResults, perfResults, bpResults] = results;
+  
+  const passesQualityGate = 
+    a11yResults.score >= 90 &&
+    perfResults.score >= 85 &&
+    bpResults.score >= 90;
+    
+  if (!passesQualityGate) {
+    await takeScreenshot({ name: "quality-gate-failure" });
+    await generateQualityReport(results);
+  }
+  
+  return passesQualityGate;
+}
+```
+
+### Progressive Enhancement Testing
+```typescript
+// Test progressive enhancement using Puppeteer
+async function testProgressiveEnhancement() {
+  // Test with JavaScript disabled
+  await puppeteer_evaluate({ 
+    script: "window.jsEnabled = false;" 
+  });
+  await puppeteer_screenshot({ name: "no-js-state" });
+  
+  // Test with slow network
+  await puppeteer_evaluate({ 
+    script: "navigator.connection = { effectiveType: '2g' };" 
+  });
+  await puppeteer_screenshot({ name: "slow-network-state" });
+  
+  // Test with reduced motion preferences
+  await puppeteer_evaluate({ 
+    script: "window.matchMedia = () => ({ matches: true });" 
+  });
+  await puppeteer_screenshot({ name: "reduced-motion-state" });
+}
+```
+
+### Performance Monitoring Pipeline
+```typescript
+// Continuous performance monitoring
+async function performanceMonitoringPipeline() {
+  const baselineResults = await runPerformanceAudit("baseline");
+  
+  // Implement feature changes
+  // ... development work ...
+  
+  const currentResults = await runPerformanceAudit("current");
+  
+  const performanceDelta = {
+    scoreChange: currentResults.score - baselineResults.score,
+    metricChanges: {
+      fcp: currentResults.fcp - baselineResults.fcp,
+      lcp: currentResults.lcp - baselineResults.lcp,
+      cls: currentResults.cls - baselineResults.cls
+    }
+  };
+  
+  if (performanceDelta.scoreChange < -5) {
+    await takeScreenshot({ name: "performance-regression" });
+    throw new Error("Performance regression detected");
+  }
+  
+  return performanceDelta;
+}
+```
+
+## Error Handling and Best Practices
+
+### Robust Tool Usage
+```typescript
+// Handle MCP tool failures gracefully
+async function robustMCPExecution<T>(
+  toolFunction: () => Promise<T>,
+  fallbackStrategy: () => Promise<T>,
+  retryAttempts: number = 3
+): Promise<T> {
+  for (let attempt = 1; attempt <= retryAttempts; attempt++) {
+    try {
+      return await toolFunction();
+    } catch (error) {
+      console.warn(`MCP tool attempt ${attempt} failed:`, error);
+      
+      if (attempt === retryAttempts) {
+        console.log("All attempts failed, using fallback strategy");
+        return await fallbackStrategy();
+      }
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  
+  throw new Error("All retry attempts exhausted");
+}
+
+// Usage example
+const auditResults = await robustMCPExecution(
+  () => runAccessibilityAudit("primary-audit"),
+  () => ({ score: 0, message: "Audit unavailable" }), // Fallback
+  3 // Retry attempts
+);
+```
+
+### Tool Integration Best Practices
+1. **Sequential vs Parallel**: Use parallel execution for independent operations, sequential for dependent operations
+2. **Error Recovery**: Implement fallback strategies for critical workflows
+3. **Resource Management**: Clean up resources (wipeLogs) after debugging sessions
+4. **Performance Impact**: Consider tool execution time in CI/CD pipelines
+5. **Data Persistence**: Store important results (screenshots, audit reports) for later analysis
+
+## Integration with Development Workflow
+
+### CI/CD Pipeline Integration
+```yaml
+# GitHub Actions example
+name: MCP Quality Gate
+on: [pull_request]
+
+jobs:
+  quality-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Start application
+        run: npm start &
+        
+      - name: Wait for application
+        run: sleep 30
+        
+      - name: Run MCP Quality Validation
+        run: |
+          # Use MCP tools for quality validation
+          node scripts/mcp-quality-gate.js
+          
+      - name: Upload Screenshots
+        uses: actions/upload-artifact@v2
+        with:
+          name: quality-screenshots
+          path: screenshots/
+```
+
+### Development Environment Setup
+```json
+{
+  "scripts": {
+    "dev:with-mcp": "concurrently \"npm run dev\" \"npm run mcp:monitor\"",
+    "mcp:monitor": "node scripts/mcp-continuous-monitoring.js",
+    "mcp:audit": "node scripts/mcp-full-audit.js",
+    "mcp:visual-test": "node scripts/mcp-visual-regression.js"
+  }
+}
+```
+
+This comprehensive MCP tools guide provides the foundation for enhanced development workflows using all available tools in combination for maximum efficiency and quality assurance.

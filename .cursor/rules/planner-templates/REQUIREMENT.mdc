@@ -1,0 +1,123 @@
+---
+description: Requirements template for feature specification
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Requirement Template
+
+## Goal
+- Brief statement of the user/business outcome.
+
+## Scope
+- **In-scope:**
+  - Feature/functionality that will be implemented
+  - Components that will be modified or created
+  - Integration points that will be affected
+
+- **Out-of-scope:**
+  - Features/functionality explicitly not included
+  - Future considerations that are deferred
+  - Related work that belongs in separate tasks
+
+## Definition of Done
+- [ ] Feature behavior described and documented
+- [ ] Tests passing (unit/app/infra as applicable)
+- [ ] **No dead code / no unused params/imports**
+- [ ] **DB ingestions mocked in unit/app tests; real service function tested**
+- [ ] Accessibility/Performance audits (if UI) pass thresholds
+- [ ] Code review completed and approved
+- [ ] Documentation updated (if applicable)
+
+## Non-Functional Requirements
+
+### Performance
+- (e.g., p95 < 150ms for CreateOrder)
+- Response time requirements
+- Throughput expectations
+- Resource utilization limits
+
+### Security
+- Authentication requirements
+- Authorization rules
+- PII handling requirements
+- Secrets management approach
+
+### Reliability
+- Idempotency requirements
+- Retry strategies
+- Error handling approach
+- Failover mechanisms
+
+### Observability
+- Logging requirements (structured logs at application boundary)
+- Metrics to be captured
+- Tracing requirements
+- Monitoring alerts
+
+### Accessibility (if UI)
+- WCAG 2.1 AA targets
+- Screen reader compatibility
+- Keyboard navigation support
+- Color contrast requirements
+
+### Version Policies
+- (e.g., do not change Go/tool versions without approval)
+- Dependency management rules
+- Breaking change policies
+
+## Constraints & Dependencies
+
+### Services Touched
+- List of services that will be modified
+- External service dependencies
+- API contracts that may change
+
+### Migrations
+- Database schema changes required
+- Data migration needs
+- Migration rollback strategy
+
+### Feature Flags
+- Feature flags to be implemented
+- Feature flag strategy and rollback
+- Gradual rollout plan
+
+### External APIs
+- Third-party integrations affected
+- API version requirements
+- Rate limiting considerations
+
+## Acceptance Criteria
+
+### AC1: [Primary Functionality]
+- **Given** [initial state/condition]
+- **When** [action/trigger occurs]
+- **Then** [expected outcome]
+
+### AC2: [Error Handling]
+- **Given** [error condition]
+- **When** [action attempted]
+- **Then** [appropriate error response]
+
+### AC3: [Edge Cases]
+- **Given** [edge case scenario]
+- **When** [boundary condition tested]
+- **Then** [system behaves correctly]
+
+### AC4: [Performance/Quality]
+- **Given** [load/quality condition]
+- **When** [system under test]
+- **Then** [meets non-functional requirements]
+
+## Success Metrics
+- Quantifiable measures of success
+- User experience improvements
+- Performance benchmarks
+- Business value indicators
+
+## Risk Mitigation
+- Identified risks and mitigation strategies
+- Rollback procedures
+- Monitoring for early detection of issues
+- Communication plan for stakeholders

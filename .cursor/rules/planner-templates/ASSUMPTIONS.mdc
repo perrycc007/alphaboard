@@ -1,0 +1,210 @@
+---
+description: Assumptions template for project planning
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Assumptions Template
+
+**Purpose**: Document key assumptions that affect design and implementation decisions.
+
+**Process**: List assumptions that need validation, track validation status, and convert invalidated assumptions into design changes.
+
+## Business Assumptions
+
+### Business Rules and Logic
+- **Assumption 1**: Discounts are applied after tax calculation
+  - **Status**: ⏳ Needs Confirmation
+  - **Impact**: Affects calculation order in business logic
+  - **Validation Required By**: Product Owner
+  - **Deadline**: Before Task 2 (Application Layer) implementation
+
+- **Assumption 2**: Maximum discount percentage is 50%
+  - **Status**: ⏳ Needs Confirmation  
+  - **Impact**: Domain validation rules and edge case handling
+  - **Validation Required By**: Business Stakeholders
+  - **Deadline**: Before Task 1 (Domain Layer) implementation
+
+- **Assumption 3**: Currency is USD only for initial implementation
+  - **Status**: ✅ Confirmed
+  - **Impact**: Simplifies Money value object implementation
+  - **Validation**: Confirmed by Product Team on 2025-01-15
+  - **Future Consideration**: Multi-currency support in Phase 2
+
+### Business Workflow
+- **Assumption 4**: Orders can be cancelled only in "Pending" or "Approved" status
+  - **Status**: ⏳ Needs Confirmation
+  - **Impact**: State machine design and business rule validation
+  - **Validation Required By**: Business Analyst
+
+- **Assumption 5**: Payment processing is synchronous for this feature
+  - **Status**: ❌ Invalid - Async Required
+  - **Impact**: Application layer must handle async payment workflows
+  - **Action**: Update design to support async payment processing
+  - **Related Task**: Added to TASKS.md as "Task 7: Implement async payment handling"
+
+## Technical Assumptions
+
+### Infrastructure and System Requirements
+- **Assumption 6**: Existing authentication system will be used
+  - **Status**: ✅ Confirmed
+  - **Impact**: No need for new auth implementation
+  - **Validation**: Confirmed by Security Team
+
+- **Assumption 7**: Database schema changes are acceptable
+  - **Status**: ✅ Confirmed with Constraints
+  - **Impact**: Can add new tables, but migration must be backward compatible
+  - **Constraints**: Migration must support rollback, no breaking changes to existing tables
+  - **Validation**: Confirmed by DBA Team
+
+- **Assumption 8**: Feature flags infrastructure is available
+  - **Status**: ✅ Confirmed
+  - **Impact**: Safe deployment and rollback strategy possible
+  - **Details**: Current system supports boolean flags with user targeting
+
+- **Assumption 9**: Current monitoring and logging infrastructure is sufficient
+  - **Status**: ⏳ Needs Validation
+  - **Impact**: May need additional monitoring setup
+  - **Validation Required By**: DevOps Team
+  - **Test Plan**: Load testing will validate monitoring capacity
+
+### Performance and Scale
+- **Assumption 10**: Expected load is < 1000 requests per minute initially
+  - **Status**: ⏳ Needs Confirmation
+  - **Impact**: Affects performance testing thresholds and infrastructure sizing
+  - **Validation Required By**: Product and Infrastructure Teams
+
+- **Assumption 11**: 99.9% availability target is sufficient
+  - **Status**: ✅ Confirmed
+  - **Impact**: Standard reliability patterns and error handling acceptable
+  - **Details**: Consistent with existing system SLA
+
+### Integration Assumptions
+- **Assumption 12**: External API rate limits allow for expected usage
+  - **Status**: ⏳ Needs Validation
+  - **Impact**: May need rate limiting or request batching
+  - **Validation**: Test with external service provider
+
+- **Assumption 13**: Existing message queue can handle additional load
+  - **Status**: ⏳ Needs Validation
+  - **Impact**: May need queue scaling or partitioning
+  - **Validation Required By**: Infrastructure Team
+
+## User Experience Assumptions
+
+### User Interface and Interaction
+- **Assumption 14**: Users prefer real-time updates over batch processing
+  - **Status**: ⏳ Needs User Research
+  - **Impact**: WebSocket or polling implementation required
+  - **Validation Method**: User interview or A/B test
+
+- **Assumption 15**: Mobile responsiveness is required
+  - **Status**: ✅ Confirmed
+  - **Impact**: UI components must support mobile layouts
+  - **Details**: Must support screens down to 320px width
+
+- **Assumption 16**: Accessibility compliance (WCAG 2.1 AA) is mandatory
+  - **Status**: ✅ Confirmed
+  - **Impact**: Additional development time for accessibility features
+  - **Testing**: Automated accessibility audits required
+
+## Data and Security Assumptions
+
+### Data Handling
+- **Assumption 17**: Data retention period is 7 years for audit purposes
+  - **Status**: ✅ Confirmed
+  - **Impact**: Database design must support long-term storage
+  - **Compliance**: Required by financial regulations
+
+- **Assumption 18**: PII data can be processed in current infrastructure
+  - **Status**: ✅ Confirmed with Constraints
+  - **Impact**: Must follow existing PII handling procedures
+  - **Constraints**: Encryption at rest, audit logging, data access controls
+
+### Security Requirements
+- **Assumption 19**: Current security scanning tools will detect vulnerabilities
+  - **Status**: ✅ Confirmed
+  - **Impact**: Standard security practices sufficient
+  - **Additional**: Penetration testing scheduled post-deployment
+
+- **Assumption 20**: OAuth 2.0 authentication is acceptable for API access
+  - **Status**: ✅ Confirmed
+  - **Impact**: Can use existing OAuth infrastructure
+  - **Details**: Supports existing client applications
+
+## Version and Technology Assumptions
+
+### Technology Stack
+- **Assumption 21**: Current Go version (1.19) is sufficient
+  - **Status**: ✅ Confirmed - No Version Changes Allowed
+  - **Impact**: Must work within current Go version capabilities
+  - **Policy**: Version changes require explicit team approval
+
+- **Assumption 22**: Current React version supports required UI features
+  - **Status**: ✅ Confirmed
+  - **Impact**: Can use existing React patterns and components
+  - **Details**: React 18 with hooks and concurrent features
+
+- **Assumption 23**: PostgreSQL 14 features are available
+  - **Status**: ✅ Confirmed
+  - **Impact**: Can use modern PostgreSQL features for optimization
+  - **Examples**: JSON operators, computed columns, partitioning
+
+## Assumption Tracking
+
+### Status Legend
+- ✅ **Confirmed**: Assumption validated and accepted
+- ⏳ **Needs Confirmation**: Awaiting validation from stakeholders
+- ❌ **Invalid**: Assumption proven incorrect, requires design changes
+- 🔄 **Under Review**: Currently being investigated
+
+### Validation Process
+1. **Identify Assumption**: Document during design phase
+2. **Assign Validator**: Determine who can confirm or deny
+3. **Set Deadline**: When validation is needed for implementation
+4. **Track Status**: Regular check-ins on validation progress
+5. **Handle Invalid**: Convert to design changes or new requirements
+
+### Impact Assessment Template
+For each assumption, assess:
+- **Design Impact**: How does this affect the technical solution?
+- **Timeline Impact**: Does validation affect critical path?
+- **Resource Impact**: Additional work if assumption is wrong?
+- **Risk Level**: High/Medium/Low if assumption proves incorrect
+
+## Assumption Invalidation Process
+
+### When Assumption Proves Wrong
+1. **Document Impact**: What changes are needed in design/implementation?
+2. **Update DESIGN.md**: Revise solution options if needed
+3. **Update TASKS.md**: Add new tasks to address changes
+4. **Update REQUIREMENT.md**: Modify requirements if scope changes
+5. **Risk Assessment**: Evaluate impact on timeline and resources
+6. **Stakeholder Communication**: Inform relevant parties of changes
+
+### Example Invalidation
+**Original Assumption**: Payment processing is synchronous  
+**Invalidation**: External payment service requires async webhooks  
+**Impact**: Application layer must handle async workflows  
+**Changes Required**:
+- Add webhook endpoint for payment notifications
+- Implement event-driven payment status updates
+- Add payment status polling for resilience
+- Update UI to handle pending payment states
+
+## Review Schedule
+
+### Weekly Assumption Review
+- **When**: Every sprint planning meeting
+- **Who**: Product Owner, Tech Lead, Key Stakeholders
+- **Focus**: Validate pending assumptions, review invalidated assumptions
+
+### Pre-Implementation Review
+- **When**: Before starting each major task
+- **Purpose**: Ensure all assumptions for that task are validated
+- **Blocker**: Cannot proceed if critical assumptions unvalidated
+
+### Post-Implementation Review
+- **When**: After feature deployment
+- **Purpose**: Document lessons learned, validate assumptions held true
+- **Outcome**: Update assumption validation process based on experience

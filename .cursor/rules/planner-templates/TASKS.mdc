@@ -1,0 +1,315 @@
+---
+description: Task planning template for project management and execution
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Tasks Template
+
+## Legend
+
+### Status Options
+- **TODO**: Not yet started
+- **DOING**: Currently in progress  
+- **BLOCKED**: Cannot proceed due to dependency or issue
+- **DONE**: Completed successfully
+
+### Layer Categories
+- **DOMAIN**: Core business logic, entities, value objects
+- **APPLICATION**: Use cases, business workflows, service coordination
+- **INFRA**: Database, external APIs, infrastructure adapters
+- **INTERFACE**: HTTP handlers, CLI, RPC endpoints
+- **UI**: User interface components and presentation logic
+- **STATE**: State management, data flow, caching
+- **TEST**: Test implementation and validation
+
+### Mandatory Requirements
+**Every task must include**:
+- [ ] **Dead-code/unused-params cleanup** during implementation
+- [ ] **DB ingestion mocking** in unit/application tests where applicable  
+- [ ] **Test real service function** - never mock the actual business logic being tested
+- [ ] **Regenerate mocks** if contracts change during implementation
+
+## Task Breakdown Plan
+
+### 1. [TODO] (DOMAIN) Implement Core Domain Logic
+**Layer**: DOMAIN  
+**Estimated Effort**: 2-3 hours  
+**Priority**: High
+
+**Description**: 
+Create the core domain entities, value objects, and business rules.
+
+**Acceptance Criteria**:
+- [ ] Domain entities implement required business invariants
+- [ ] Value objects provide proper validation and immutability
+- [ ] Domain unit tests cover edge cases (0%, boundaries, validation)
+- [ ] No external dependencies in domain layer
+- [ ] All business rules are testable in isolation
+
+**Validation Steps**:
+- [ ] **No dead code** - verify no unused classes, methods, or variables
+- [ ] **No unused params/imports** - clean up all unused references
+- [ ] **Pure domain tests** - no infrastructure dependencies
+- [ ] **Test real domain logic** - test actual entity methods, not mocks
+
+**Files to Create/Modify**:
+- `src/domain/entities/NewEntity.ts`
+- `src/domain/value-objects/NewValueObject.ts`
+- `tests/domain/NewEntity.test.ts`
+
+**Dependencies**: None
+
+### 2. [TODO] (APPLICATION) Implement Use Case and Service Layer
+**Layer**: APPLICATION  
+**Estimated Effort**: 3-4 hours  
+**Priority**: High
+
+**Description**:
+Create application services and use cases that orchestrate domain logic.
+
+**Acceptance Criteria**:
+- [ ] Use case properly orchestrates domain objects
+- [ ] Service layer handles transaction boundaries
+- [ ] Application tests mock repositories and external services
+- [ ] **Mock DB ingestions** - all repository calls are mocked
+- [ ] **Test real service function** - test actual use case logic, not mocks
+- [ ] Error handling and validation at application boundary
+
+**Validation Steps**:
+- [ ] **No dead code** - remove any unused application logic
+- [ ] **No unused params/imports** - clean application service interfaces
+- [ ] **DB ingestions mocked** - verify no real database calls in tests
+- [ ] **Mock regeneration** - update mocks if repository contracts changed
+- [ ] **Real service testing** - test actual business workflow logic
+
+**Files to Create/Modify**:
+- `src/application/use-cases/NewUseCase.ts`
+- `src/application/services/NewApplicationService.ts`
+- `tests/application/NewUseCase.test.ts`
+
+**Dependencies**: Task 1 (Domain layer must be complete)
+
+### 3. [TODO] (INFRA) Implement Repository and External Adapters  
+**Layer**: INFRA  
+**Estimated Effort**: 2-3 hours  
+**Priority**: Medium
+
+**Description**:
+Implement infrastructure adapters for data persistence and external services.
+
+**Acceptance Criteria**:
+- [ ] Repository implements domain repository interface
+- [ ] Data mapping is mechanical - no business logic in infrastructure
+- [ ] Integration tests use real database/external services
+- [ ] Proper error handling and connection management
+- [ ] **No business branching** - infrastructure only does technical mapping
+
+**Validation Steps**:
+- [ ] **No dead code** - remove unused repository methods or adapters
+- [ ] **No unused params/imports** - clean infrastructure interfaces  
+- [ ] **Integration tests isolated** - test only adapter functionality
+- [ ] **No domain logic** - verify infrastructure only handles technical concerns
+- [ ] **Mechanical mapping** - no business rules in data transformation
+
+**Files to Create/Modify**:
+- `src/infrastructure/repositories/NewRepository.ts`
+- `src/infrastructure/adapters/ExternalServiceAdapter.ts`
+- `tests/integration/NewRepository.integration.test.ts`
+
+**Dependencies**: Task 1 (Domain interfaces needed)
+
+### 4. [TODO] (INTERFACE) Implement API Endpoints and Request Handling
+**Layer**: INTERFACE  
+**Estimated Effort**: 2 hours  
+**Priority**: Medium  
+
+**Description**:
+Create HTTP handlers, request validation, and response mapping.
+
+**Acceptance Criteria**:
+- [ ] Request validation at interface boundary
+- [ ] Proper HTTP status codes and error responses
+- [ ] Authentication and authorization checks
+- [ ] Request/response DTOs properly mapped
+- [ ] **No business logic** - interface only handles HTTP concerns
+
+**Validation Steps**:
+- [ ] **No dead code** - remove unused handlers or middleware
+- [ ] **No unused params/imports** - clean interface layer dependencies
+- [ ] **Boundary validation only** - no business logic in handlers
+- [ ] **Proper delegation** - handlers delegate to application layer
+- [ ] **Clean error mapping** - appropriate HTTP error responses
+
+**Files to Create/Modify**:
+- `src/interface/http/NewHandler.ts`
+- `src/interface/dto/NewRequestDto.ts`
+- `src/interface/dto/NewResponseDto.ts`
+- `tests/interface/NewHandler.test.ts`
+
+**Dependencies**: Task 2 (Application services needed)
+
+### 5. [TODO] (UI/STATE) Implement User Interface and State Management
+**Layer**: UI/STATE  
+**Estimated Effort**: 4-5 hours  
+**Priority**: Low
+
+**Description**:
+Create UI components and state management for new functionality.
+
+**Acceptance Criteria**:
+- [ ] UI components display data correctly
+- [ ] State management handles data flow properly
+- [ ] **No business logic in UI** - components only handle presentation
+- [ ] Accessibility checks pass (WCAG 2.1 AA)
+- [ ] Visual regression tests with screenshots
+- [ ] User interaction testing with puppeteer
+
+**Validation Steps**:
+- [ ] **No dead code** - remove unused components or state logic
+- [ ] **No unused params/imports** - clean UI component dependencies
+- [ ] **Presentation only** - UI components contain no business rules
+- [ ] **State separation** - state management separated from UI components
+- [ ] **A11y compliance** - accessibility audit passes
+- [ ] **Visual validation** - screenshot comparison with design
+
+**Files to Create/Modify**:
+- `src/ui/components/NewComponent.tsx`
+- `src/state/NewStateManager.ts`
+- `tests/ui/NewComponent.test.tsx`
+- `tests/e2e/NewFeature.e2e.ts`
+
+**Dependencies**: Task 4 (API endpoints needed for data fetching)
+
+### 6. [TODO] (TEST) Comprehensive Integration and E2E Testing
+**Layer**: TEST  
+**Estimated Effort**: 2-3 hours  
+**Priority**: Medium
+
+**Description**:
+Implement comprehensive testing across all layers and end-to-end workflows.
+
+**Acceptance Criteria**:
+- [ ] End-to-end tests cover main user workflows
+- [ ] Integration tests verify layer interactions  
+- [ ] Performance tests meet defined thresholds
+- [ ] **All DB ingestions mocked** in unit/application tests
+- [ ] **All real services tested** - business logic thoroughly validated
+
+**Validation Steps**:
+- [ ] **No dead code** - remove unused test utilities or fixtures
+- [ ] **No unused params/imports** - clean test dependencies
+- [ ] **Mock verification** - confirm all DB calls are properly mocked
+- [ ] **Real service coverage** - verify business logic is actually tested
+- [ ] **Performance validation** - tests meet defined performance criteria
+
+**Files to Create/Modify**:
+- `tests/e2e/NewFeatureWorkflow.e2e.ts`
+- `tests/integration/NewFeatureIntegration.test.ts`
+- `tests/performance/NewFeaturePerformance.test.ts`
+
+**Dependencies**: All previous tasks (complete feature implementation needed)
+
+## Findings Converted to Tasks
+
+*This section will be populated as REVIEW.md identifies issues during implementation.*
+
+**Process**: Any finding from REVIEW.md must be converted to an actionable task and added here.
+
+### Example Format:
+- **Finding**: [Description of issue found during review]
+- **Task Added**: [Specific task to address the finding]
+- **Priority**: [High/Medium/Low based on impact]
+- **Assigned To**: [Task number where this will be addressed]
+
+## Task Dependencies
+
+### Dependency Graph
+```
+Task 1 (DOMAIN)
+    ├── Task 2 (APPLICATION) - depends on domain interfaces
+    │   ├── Task 4 (INTERFACE) - depends on application services
+    │   └── Task 6 (TEST) - depends on complete application logic
+    └── Task 3 (INFRA) - depends on domain repository interfaces
+        └── Task 5 (UI/STATE) - depends on API endpoints
+            └── Task 6 (TEST) - depends on complete UI implementation
+```
+
+### Critical Path
+1. **Task 1** → **Task 2** → **Task 4** → **Task 5** → **Task 6**
+2. **Task 3** can be developed in parallel with **Task 2** after **Task 1** is complete
+
+### Parallel Development Opportunities
+- **Tasks 2 and 3** can be developed simultaneously after Task 1
+- **Task 5** can begin UI mockups while Task 4 is in progress
+- **Task 6** components can be prepared while other tasks are completing
+
+## Quality Gates
+
+### Per-Task Quality Checklist
+Before marking any task as DONE:
+
+#### Code Quality
+- [ ] **No dead code or unreachable branches**
+- [ ] **No unused parameters, imports, or variables**  
+- [ ] **No placeholder scaffolding left behind**
+- [ ] **Debug logs removed unless part of intentional feature flags**
+- [ ] **Clean imports with no unused dependencies**
+
+#### Testing Quality  
+- [ ] **DB ingestions properly mocked in unit/app tests**
+- [ ] **Real service functions tested (not mocked)**
+- [ ] **Mocks regenerated if contracts changed**
+- [ ] **Test coverage meets project standards**
+- [ ] **All tests pass consistently**
+
+#### Architecture Quality
+- [ ] **Layer separation maintained**
+- [ ] **No business logic in infrastructure or UI layers**
+- [ ] **Dependencies flow inward (outer depends on inner)**
+- [ ] **Interfaces properly defined between layers**
+- [ ] **No cross-domain business branching**
+
+### Overall Completion Criteria
+**All tasks must be DONE AND**:
+- [ ] **Feature flag implemented for safe rollback**
+- [ ] **Performance benchmarks met**
+- [ ] **Accessibility requirements satisfied (if UI)**
+- [ ] **Security review completed**
+- [ ] **Documentation updated**
+- [ ] **Code review approved**
+
+## Estimate Summary
+
+| Task | Layer | Effort | Priority | Status |
+|------|-------|---------|----------|---------|
+| 1 | DOMAIN | 2-3h | High | TODO |
+| 2 | APPLICATION | 3-4h | High | TODO |
+| 3 | INFRA | 2-3h | Medium | TODO |  
+| 4 | INTERFACE | 2h | Medium | TODO |
+| 5 | UI/STATE | 4-5h | Low | TODO |
+| 6 | TEST | 2-3h | Medium | TODO |
+
+**Total Estimated Effort**: 15-20 hours  
+**Critical Path**: 11-14 hours  
+**Parallel Development Potential**: 4-6 hour reduction possible
+
+## Risk Mitigation
+
+### High-Risk Tasks
+- **Task 2 (APPLICATION)**: Complex business logic coordination
+  - *Mitigation*: Thorough unit testing with mocked dependencies
+  - *Fallback*: Simplified workflow if complexity becomes blocking
+
+- **Task 5 (UI/STATE)**: User experience and accessibility requirements
+  - *Mitigation*: Early design review and accessibility testing
+  - *Fallback*: Phased UI release with basic functionality first
+
+### Technical Risks
+- **Integration Complexity**: Multiple layers must work together seamlessly
+  - *Mitigation*: Integration tests at each layer boundary
+  - *Monitoring*: Comprehensive logging and error tracking
+
+- **Performance Impact**: New functionality may affect existing performance
+  - *Mitigation*: Performance testing throughout implementation
+  - *Monitoring*: Performance metrics and alerting

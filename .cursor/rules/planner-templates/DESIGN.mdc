@@ -1,0 +1,312 @@
+---
+description: Design template for system architecture planning
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Design Template
+
+## Existing Code References
+
+**MANDATORY**: Reference existing code locations explicitly for reuse and extension points.
+
+### Use-case(s)
+- `src/application/use-cases/CreateOrder.ts` - Similar workflow pattern
+- `src/services/PaymentService.go` - Similar domain service structure
+- `internal/services/btc_staking_service.go` - Similar business logic coordination
+
+### Domain Entities/Value Objects  
+- `src/domain/order/Order.ts` - Similar aggregate structure
+- `src/domain/order/Money.ts` - Value object pattern
+- `pkg/types/staking_transaction.go` - Similar domain model
+
+### Repository Interfaces
+- `src/application/use-cases/CreateOrder.ts` (OrderRepository interface) - Repository pattern
+- `internal/db/btc_staking_repository.go` - Similar repository structure
+- Interface definitions in `internal/types/repository.go`
+
+### Infrastructure Adapters
+- `src/infrastructure/repositories/PrismaOrderRepository.ts` - ORM integration pattern
+- `internal/db/postgres_repository.go` - Database adapter pattern
+- `internal/clients/babylon_client.go` - External service adapter
+
+### UI Components (if any)
+- `src/ui/components/OrderSummary.tsx` - Similar display component
+- `src/components/StakingDashboard.tsx` - Similar data presentation
+- `packages/components/TransactionList.tsx` - Similar list component
+
+### State Modules (if any)  
+- `src/state/orders.store.ts` - State management pattern
+- `src/store/stakingStore.ts` - Similar state structure
+- `src/context/AppContext.tsx` - Context pattern
+
+## Solution Options
+
+### Option A — [Primary Approach Name]
+
+**Summary**: Brief description of the approach
+
+**Architecture**: 
+- Domain Layer: New entities/VOs required
+- Application Layer: New use cases and services
+- Infrastructure Layer: New adapters/repositories
+- UI Layer: New components and state management
+
+**Pros**:
+- Extensible and maintainable
+- Follows established patterns
+- Clear separation of concerns
+- Testable architecture
+
+**Cons**:
+- More complex initial implementation
+- Additional interfaces and wiring required
+- Steeper learning curve for developers
+
+**Risks**:
+- Incorrect mapping between DTO and domain
+- Potential over-engineering for simple use cases
+- Integration complexity with existing systems
+
+**Reuse Points**:
+- Extend existing CreateOrder pattern for similar workflow
+- Reuse Money value object for financial calculations
+- Leverage existing repository patterns for data access
+- No changes to existing DB schema required
+
+**Implementation Complexity**: Medium-High
+**Migration/Rollback**: Feature flag controlled, safe rollback path
+
+### Option B — [Alternative Approach Name]
+
+**Summary**: Alternative implementation approach
+
+**Architecture**:
+- Minimal domain changes
+- Focused application layer modifications
+- Reuse existing infrastructure
+- Simple UI integration
+
+**Pros**:
+- Simple and straightforward implementation
+- Quick to market
+- Minimal risk of breaking existing functionality
+- Low learning curve
+
+**Cons**:
+- Less flexible for future requirements
+- May accumulate technical debt
+- Tighter coupling between layers
+- Limited extensibility
+
+**Risks**:
+- Business logic may leak into inappropriate layers
+- Harder to test in isolation
+- Potential for code duplication
+
+**Reuse Points**:
+- Reuse existing Order entity with minor extensions
+- Leverage current repository implementations
+- Minimal new interfaces required
+
+**Implementation Complexity**: Low-Medium
+**Migration/Rollback**: Simple toggle, immediate rollback possible
+
+### Option C — [Third Alternative Name]
+
+**Summary**: Third implementation approach (if applicable)
+
+**Architecture**:
+- [Describe architectural approach]
+- [Key components and their roles]
+- [Integration points and boundaries]
+
+**Pros**:
+- [List advantages]
+- [Why this approach might be preferred]
+
+**Cons**:
+- [List disadvantages]
+- [Potential limitations]
+
+**Risks**:
+- [Technical risks]
+- [Business risks]
+- [Integration risks]
+
+**Reuse Points**:
+- [Existing code that can be leveraged]
+- [Patterns that can be followed]
+- [Infrastructure that can be reused]
+
+**Implementation Complexity**: [Low/Medium/High]
+**Migration/Rollback**: [Strategy and complexity]
+
+## Recommended Option
+
+**Choice**: Option A - [Selected Approach Name]
+
+**Rationale**:
+- **Extensibility**: Provides clear foundation for future requirements
+- **Maintainability**: Follows established architectural patterns
+- **Testability**: Clear separation enables comprehensive testing
+- **Team Alignment**: Consistent with existing codebase patterns
+- **Risk Management**: Feature flag strategy provides safe rollback
+
+**Trade-offs Accepted**:
+- Additional complexity in initial implementation
+- More interfaces and abstractions required
+- Longer initial development time
+
+## Data Flow & Mapping
+
+### Request Flow
+```
+HTTP Request → Application DTO → Domain (VOs/Aggregates) → Repository DTO → Database
+```
+
+### Response Flow  
+```
+Database → Repository DTO → Domain (VOs/Aggregates) → Application DTO → HTTP Response
+```
+
+### Key Mappings
+- **Request Validation**: Interface layer validates and converts to application DTOs
+- **Domain Translation**: Application layer converts DTOs to domain objects
+- **Persistence Mapping**: Infrastructure layer converts domain objects to persistence DTOs
+- **Mapping Rules**: All mapping is mechanical; no business branching in infrastructure
+
+### Data Consistency
+- Transaction boundaries managed at application layer
+- Domain invariants enforced in domain layer
+- Referential integrity handled by database constraints
+
+## Transactions & Idempotency
+
+### Transaction Strategy
+- **Boundary**: Application service layer controls transaction scope
+- **Atomicity**: All-or-nothing for business operations
+- **Isolation**: Appropriate isolation levels for concurrent operations
+- **Rollback**: Clear rollback triggers and compensation actions
+
+### Idempotency Design
+- **Idempotency Keys**: Client-provided or generated keys for operation uniqueness
+- **Detection**: Check for existing operations before processing
+- **Response**: Return existing result for duplicate requests
+- **Storage**: Idempotency records with appropriate TTL
+
+## Observability
+
+### Logging Strategy
+- **Structured Logs**: JSON format with consistent field names
+- **Application Boundary**: Log at service entry/exit points
+- **Domain Layer**: No logging (pure business logic)
+- **Error Context**: Include correlation IDs and relevant business context
+
+### Metrics
+- **Business Metrics**: Success/failure rates, processing times
+- **Technical Metrics**: Resource utilization, response times
+- **Custom Metrics**: Domain-specific measurements
+- **Alerting**: Thresholds for automated notifications
+
+### Tracing
+- **Distributed Tracing**: End-to-end request tracking
+- **Correlation IDs**: Consistent request tracking across services
+- **Performance**: Identify bottlenecks and optimization opportunities
+
+## Rollback Strategy
+
+### Feature Flag Implementation
+- **Flag Name**: `feature.new-functionality.v1`
+- **Granularity**: Per-user, per-tenant, or global toggle
+- **Default State**: Disabled for safe deployment
+
+### Rollback Procedures
+1. **Immediate**: Disable feature flag (takes effect immediately)
+2. **Code Rollback**: Revert application code if necessary
+3. **Data Rollback**: Database rollback procedures if schema changes
+4. **Verification**: Confirm system stability after rollback
+
+### Rollback Testing
+- Test rollback procedures in staging environment
+- Verify data integrity after rollback
+- Confirm monitoring and alerting during rollback
+
+## Security Considerations
+
+### Authentication & Authorization
+- Leverage existing authentication mechanisms
+- Define required permissions for new functionality
+- Implement proper authorization checks at API boundaries
+
+### Data Protection
+- PII handling according to existing policies
+- Encryption for sensitive data in transit and at rest
+- Audit logging for sensitive operations
+
+### Input Validation
+- Validate all inputs at interface boundaries
+- Sanitize data to prevent injection attacks
+- Rate limiting to prevent abuse
+
+## Performance Considerations
+
+### Expected Load
+- Estimated requests per second
+- Peak usage patterns
+- Growth projections
+
+### Optimization Strategy
+- Database query optimization
+- Caching strategy where appropriate
+- Connection pooling and resource management
+
+### Performance Testing
+- Load testing scenarios
+- Performance benchmarks to meet
+- Monitoring for performance regression
+
+## Testing Strategy
+
+### Unit Testing
+- **Domain Layer**: Pure functions, no external dependencies
+- **Application Layer**: Mock external dependencies, test real business logic
+- **Infrastructure Layer**: Integration tests with real adapters
+
+### Integration Testing
+- **API Integration**: End-to-end API testing
+- **Database Integration**: Real database operations
+- **External Service Integration**: Mock or test environments
+
+### Test Data Management
+- **Mock Strategy**: Mock external services and databases in unit tests
+- **Test Fixtures**: Reusable test data sets
+- **Test Environment**: Isolated testing environment setup
+
+## Open Questions
+
+### Technical Questions
+- **Q1**: Does the discount calculation need to support multiple currencies?
+- **Q2**: What is the expected transaction volume for sizing considerations?
+- **Q3**: Are there specific compliance requirements for audit trails?
+
+### Business Questions  
+- **Q4**: Should the system support partial failures and compensation?
+- **Q5**: What are the business rules for edge cases (e.g., concurrent modifications)?
+- **Q6**: Are there specific user experience requirements for error scenarios?
+
+### Integration Questions
+- **Q7**: How should this integrate with existing authentication/authorization?
+- **Q8**: Are there specific API versioning requirements?
+- **Q9**: What level of backward compatibility is required?
+
+## Assumptions
+
+**Document key assumptions that affect the design:**
+
+- Assumption 1: Existing authentication system will be used
+- Assumption 2: Database schema changes are acceptable
+- Assumption 3: Feature flags infrastructure is available
+- Assumption 4: Current monitoring and logging infrastructure is sufficient
+
+**Validation Required**: List assumptions that need stakeholder confirmation before implementation.

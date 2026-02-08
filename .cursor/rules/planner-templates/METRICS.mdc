@@ -1,0 +1,388 @@
+---
+description: Metrics template for performance and quality tracking
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Metrics Template
+
+## Success Metrics Overview
+
+**Feature**: [Feature name]  
+**Measurement Period**: 30 days post-deployment  
+**Review Schedule**: Weekly for first month, monthly thereafter  
+**Success Threshold**: 80% of metrics meet or exceed targets
+
+## Business Metrics
+
+### User Adoption and Engagement
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Feature adoption rate | 60% of eligible users | 0% | TBD | ➡️ | 🟡 Tracking |
+| Daily active users of feature | 1,000 users/day | 0 | TBD | ➡️ | 🟡 Tracking |
+| User retention (7-day) | 70% | N/A | TBD | ➡️ | 🟡 Tracking |
+| Feature usage frequency | 3 times/week avg | 0 | TBD | ➡️ | 🟡 Tracking |
+
+**Tracking Implementation**:
+```javascript
+// User interaction tracking
+analytics.track('feature_used', {
+  user_id: user.id,
+  feature_name: 'new_feature',
+  session_id: session.id,
+  timestamp: Date.now(),
+  usage_context: 'primary_workflow'
+});
+
+// Feature adoption tracking
+analytics.track('feature_adoption', {
+  user_id: user.id,
+  adoption_date: Date.now(),
+  user_segment: user.segment,
+  onboarding_path: 'direct'
+});
+```
+
+### Revenue and Business Impact
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Revenue per user increase | 15% | $X/month | TBD | ➡️ | 🟡 Tracking |
+| Customer satisfaction score | 4.5/5 | 4.2/5 | TBD | ➡️ | 🟡 Tracking |
+| Support ticket reduction | 20% | X tickets/week | TBD | ➡️ | 🟡 Tracking |
+| Task completion rate | 90% | 75% | TBD | ➡️ | 🟡 Tracking |
+
+### User Experience Metrics
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Task success rate | 95% | 85% | TBD | ➡️ | 🟡 Tracking |
+| Time to complete workflow | < 2 minutes | 3.5 minutes | TBD | ➡️ | 🟡 Tracking |
+| User error rate | < 5% | 12% | TBD | ➡️ | 🟡 Tracking |
+| Feature discoverability | 80% find within 30s | 45% | TBD | ➡️ | 🟡 Tracking |
+
+## Technical Performance Metrics
+
+### Application Performance
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| API response time p95 | < 150ms | 180ms | TBD | ➡️ | 🟡 Monitoring |
+| API response time p99 | < 500ms | 650ms | TBD | ➡️ | 🟡 Monitoring |
+| Feature-specific endpoint p95 | < 100ms | N/A | TBD | ➡️ | 🟡 Monitoring |
+| Throughput (requests/second) | 1000 RPS | 750 RPS | TBD | ➡️ | 🟡 Monitoring |
+
+**Monitoring Implementation**:
+```bash
+# Application performance monitoring
+curl -w "@curl-format.txt" -o /dev/null -s "https://api.company.com/feature/endpoint"
+
+# Custom metrics collection
+echo "feature_response_time_ms{endpoint=\"/api/feature\"} $(date +%s)" | \
+  curl -X POST http://prometheus-pushgateway:9091/metrics/job/feature-monitoring
+```
+
+### System Reliability
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Error rate (overall) | < 0.1% | 0.05% | TBD | ➡️ | 🟡 Monitoring |
+| Feature-specific error rate | < 0.5% | N/A | TBD | ➡️ | 🟡 Monitoring |
+| Service availability | 99.9% | 99.95% | TBD | ➡️ | 🟡 Monitoring |
+| Mean time to recovery (MTTR) | < 15 minutes | 20 minutes | TBD | ➡️ | 🟡 Monitoring |
+
+### Resource Utilization
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| CPU usage (avg) | < 70% | 45% | TBD | ➡️ | 🟡 Monitoring |
+| Memory usage (avg) | < 80% | 60% | TBD | ➡️ | 🟡 Monitoring |
+| Database connection pool | < 80% capacity | 40% | TBD | ➡️ | 🟡 Monitoring |
+| Database query response time | < 50ms p95 | 35ms p95 | TBD | ➡️ | 🟡 Monitoring |
+
+## Database and Data Metrics
+
+### Data Quality and Integrity
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Data validation error rate | < 0.1% | N/A | TBD | ➡️ | 🟡 Monitoring |
+| Data consistency checks | 100% pass | N/A | TBD | ➡️ | 🟡 Monitoring |
+| Backup success rate | 100% | 100% | TBD | ➡️ | 🟡 Monitoring |
+| Data migration accuracy | 100% | N/A | TBD | ➡️ | 🟡 Monitoring |
+
+**Data Quality Monitoring**:
+```sql
+-- Data validation queries
+SELECT 
+  COUNT(*) as total_records,
+  COUNT(*) FILTER (WHERE validation_status = 'valid') as valid_records,
+  (COUNT(*) FILTER (WHERE validation_status = 'valid') * 100.0 / COUNT(*)) as validation_rate
+FROM feature_data_table;
+
+-- Consistency checks
+SELECT 
+  COUNT(*) as orphaned_records
+FROM feature_child_table fc
+LEFT JOIN feature_parent_table fp ON fc.parent_id = fp.id
+WHERE fp.id IS NULL;
+```
+
+### Database Performance
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Query response time (p95) | < 100ms | 75ms | TBD | ➡️ | 🟡 Monitoring |
+| Database connection count | < 50 concurrent | 25 concurrent | TBD | ➡️ | 🟡 Monitoring |
+| Index usage efficiency | > 95% | N/A | TBD | ➡️ | 🟡 Monitoring |
+| Lock contention events | < 5/hour | 0 | TBD | ➡️ | 🟡 Monitoring |
+
+## Security Metrics
+
+### Security and Compliance
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Authentication failure rate | < 1% | 0.5% | TBD | ➡️ | 🟡 Monitoring |
+| Authorization bypass attempts | 0 | 0 | TBD | ➡️ | 🟡 Monitoring |
+| Input validation failures | < 0.1% | N/A | TBD | ➡️ | 🟡 Monitoring |
+| Security scan vulnerabilities | 0 high/critical | 0 | TBD | ➡️ | 🟡 Monitoring |
+
+**Security Monitoring**:
+```bash
+# Authentication monitoring
+grep "authentication_failed" /var/log/app/security.log | \
+  awk '{print $1}' | sort | uniq -c | sort -nr
+
+# Input validation monitoring
+grep "validation_error" /var/log/app/application.log | \
+  grep -E "sql_injection|xss_attempt|malformed_input" | wc -l
+```
+
+## Development and Quality Metrics
+
+### Code Quality
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Test coverage | > 90% | 85% | TBD | ➡️ | 🟡 Tracking |
+| Code review approval rate | 100% | 100% | TBD | ➡️ | 🟡 Tracking |
+| Build success rate | > 95% | 98% | TBD | ➡️ | 🟡 Tracking |
+| Static analysis violations | 0 critical | 0 | TBD | ➡️ | 🟡 Tracking |
+
+### Development Velocity
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Lead time (idea to production) | < 2 weeks | 3 weeks | TBD | ➡️ | 🟡 Tracking |
+| Deployment frequency | Daily | 2-3x/week | TBD | ➡️ | 🟡 Tracking |
+| Change failure rate | < 5% | 3% | TBD | ➡️ | 🟡 Tracking |
+| Bug detection in QA vs production | 90% in QA | 85% in QA | TBD | ➡️ | 🟡 Tracking |
+
+## Operational Metrics
+
+### Support and Maintenance
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Feature-related support tickets | < 5/week | 0 | TBD | ➡️ | 🟡 Tracking |
+| Bug reports from users | < 2/week | 0 | TBD | ➡️ | 🟡 Tracking |
+| Documentation completeness | 100% | N/A | TBD | ➡️ | 🟡 Tracking |
+| Knowledge base article views | > 100/week | 0 | TBD | ➡️ | 🟡 Tracking |
+
+### Deployment and Operations
+| Metric | Target | Baseline | Current | Trend | Status |
+|--------|--------|----------|---------|--------|--------|
+| Deployment success rate | 100% | 95% | TBD | ➡️ | 🟡 Tracking |
+| Rollback frequency | < 1/month | 0.5/month | TBD | ➡️ | 🟡 Tracking |
+| Feature flag toggle speed | < 30 seconds | N/A | TBD | ➡️ | 🟡 Tracking |
+| Monitoring alert accuracy | > 95% | 90% | TBD | ➡️ | 🟡 Tracking |
+
+## Metric Collection and Reporting
+
+### Data Collection Points
+```javascript
+// Frontend metrics collection
+window.analytics = {
+  trackFeatureUsage: (featureName, context) => {
+    fetch('/api/metrics/feature-usage', {
+      method: 'POST',
+      body: JSON.stringify({
+        feature: featureName,
+        context: context,
+        timestamp: Date.now(),
+        userId: getCurrentUserId(),
+        sessionId: getSessionId()
+      })
+    });
+  },
+  
+  trackPerformance: (operation, duration) => {
+    fetch('/api/metrics/performance', {
+      method: 'POST',
+      body: JSON.stringify({
+        operation: operation,
+        duration: duration,
+        timestamp: Date.now()
+      })
+    });
+  }
+};
+```
+
+```go
+// Backend metrics collection
+package metrics
+
+import (
+    "time"
+    "github.com/prometheus/client_golang/prometheus"
+)
+
+var (
+    featureUsageCounter = prometheus.NewCounterVec(
+        prometheus.CounterOpts{
+            Name: "feature_usage_total",
+            Help: "Total number of feature usages",
+        },
+        []string{"feature_name", "user_segment"},
+    )
+    
+    responseTimeHistogram = prometheus.NewHistogramVec(
+        prometheus.HistogramOpts{
+            Name: "api_response_time_seconds",
+            Help: "API response time in seconds",
+            Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+        },
+        []string{"endpoint", "method", "status_code"},
+    )
+)
+
+func RecordFeatureUsage(featureName, userSegment string) {
+    featureUsageCounter.WithLabelValues(featureName, userSegment).Inc()
+}
+
+func RecordResponseTime(endpoint, method, statusCode string, duration time.Duration) {
+    responseTimeHistogram.WithLabelValues(endpoint, method, statusCode).
+        Observe(duration.Seconds())
+}
+```
+
+### Automated Reporting
+```bash
+#!/bin/bash
+# weekly-metrics-report.sh
+
+echo "Weekly Feature Metrics Report - $(date)"
+echo "================================================"
+
+# Business metrics
+echo "📊 Business Metrics:"
+curl -s "http://analytics-api/metrics/feature-adoption?period=7d" | jq '.adoption_rate'
+curl -s "http://analytics-api/metrics/user-engagement?period=7d" | jq '.daily_active_users'
+
+# Technical metrics  
+echo "⚡ Performance Metrics:"
+curl -s "http://prometheus:9090/api/v1/query?query=histogram_quantile(0.95,api_response_time_seconds)" | \
+  jq '.data.result[0].value[1]'
+
+# Error rates
+echo "🚨 Error Metrics:"
+curl -s "http://prometheus:9090/api/v1/query?query=sum(rate(http_requests_total{status=~'5..'}[5m]))" | \
+  jq '.data.result[0].value[1]'
+
+# Generate report
+./generate-metrics-dashboard.py --format=html --output=/reports/weekly-$(date +%Y%m%d).html
+```
+
+### Dashboard Configuration
+```yaml
+# Grafana dashboard config
+dashboard:
+  title: "Feature Success Metrics"
+  panels:
+    - title: "User Adoption Rate"
+      type: "stat"
+      targets:
+        - expr: "feature_adoption_rate"
+          legendFormat: "Adoption Rate"
+      
+    - title: "API Response Times"
+      type: "graph"
+      targets:
+        - expr: "histogram_quantile(0.95, api_response_time_seconds)"
+          legendFormat: "95th Percentile"
+        - expr: "histogram_quantile(0.50, api_response_time_seconds)"  
+          legendFormat: "Median"
+      
+    - title: "Error Rate"
+      type: "graph"
+      targets:
+        - expr: "sum(rate(http_requests_total{status=~'5..'}[5m]))"
+          legendFormat: "5xx Errors"
+```
+
+## Success Criteria and Review Process
+
+### Weekly Review Criteria
+**Week 1-2: Foundation Metrics**
+- [ ] Monitoring systems collecting all defined metrics
+- [ ] Baseline measurements established
+- [ ] Alert thresholds configured
+- [ ] Initial user adoption > 10%
+
+**Week 3-4: Performance Validation**  
+- [ ] All performance metrics within target ranges
+- [ ] No critical errors or service degradation
+- [ ] User adoption trend positive
+- [ ] Support ticket volume normal
+
+**Month 1: Full Assessment**
+- [ ] 80% of business metrics meet targets
+- [ ] All technical metrics within acceptable ranges  
+- [ ] User satisfaction scores positive
+- [ ] No major incidents or rollbacks required
+
+### Metric Review Schedule
+- **Daily**: Automated alerts and critical metrics
+- **Weekly**: Full metrics review and trend analysis
+- **Monthly**: Success criteria assessment and goal adjustment
+- **Quarterly**: Long-term trend analysis and metric optimization
+
+### Success Thresholds
+| Metric Category | Success Threshold | Action if Below |
+|-----------------|------------------|----------------|
+| User Adoption | 60% of target | Increase marketing, improve UX |
+| Performance | 90% within targets | Performance optimization sprint |
+| Reliability | 99.5% availability | Infrastructure improvements |
+| User Satisfaction | 4.0/5.0 average | UX research and improvements |
+
+### Failure Response Plan
+**If Success Criteria Not Met:**
+1. **Immediate Assessment** (< 1 day)
+   - Identify which metrics are below target
+   - Analyze potential root causes
+   - Determine if feature flag disable is needed
+
+2. **Improvement Plan** (< 1 week)
+   - Create specific action plan for each failing metric
+   - Assign owners and timelines
+   - Implement monitoring for improvement tracking
+
+3. **Re-evaluation** (2 weeks)
+   - Measure improvement progress
+   - Adjust targets if external factors identified
+   - Consider feature modifications if needed
+
+## Long-term Metric Evolution
+
+### Metric Maturity Process
+**Phase 1: Launch Metrics (0-30 days)**
+- Focus on basic functionality and adoption
+- Monitor for critical issues and performance
+- Establish baseline measurements
+
+**Phase 2: Optimization Metrics (30-90 days)**
+- Add user experience and efficiency metrics
+- Monitor feature usage patterns
+- Identify optimization opportunities
+
+**Phase 3: Business Impact Metrics (90+ days)**
+- Measure long-term business value
+- Track competitive advantages
+- Plan feature evolution based on data
+
+### Continuous Improvement
+- **Monthly**: Review metric relevance and adjust collection
+- **Quarterly**: Add new metrics based on business evolution  
+- **Annually**: Comprehensive metric strategy review
+- **As needed**: Remove obsolete metrics to reduce noise

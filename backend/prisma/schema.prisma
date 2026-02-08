@@ -1,0 +1,572 @@
+// Alphaboard - Leader-based Trading Decision Platform
+// PostgreSQL schema managed by Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────
+// Stocks & Market Data
+// ─────────────────────────────────────────────────────────
+
+model Stock {
+  id            String          @id @default(cuid())
+  ticker        String          @unique
+  name          String
+  sector        String?
+  industry      String?
+  exchange      String?
+  avgVolume     BigInt?
+  marketCap     BigInt?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  dailyBars      StockDaily[]
+  intradayBars   StockIntraday[]
+  stages         StockStage[]
+  themeStocks    ThemeStock[]
+  setups         Setup[]
+  swingPoints    SwingPoint[]
+  dailyBases     DailyBase[]
+  barEvidence    BarEvidence[]
+  alerts         Alert[]
+  watchlistItems WatchlistItem[]
+}
+
+model StockDaily {
+  id       String   @id @default(cuid())
+  stockId  String
+  date     DateTime @db.Date
+  open     Decimal  @db.Decimal(12, 4)
+  high     Decimal  @db.Decimal(12, 4)
+  low      Decimal  @db.Decimal(12, 4)
+  close    Decimal  @db.Decimal(12, 4)
+  volume   BigInt
+  // Pre-computed MAs for fast screening
+  sma20    Decimal? @db.Decimal(12, 4)
+  sma50    Decimal? @db.Decimal(12, 4)
+  sma150   Decimal? @db.Decimal(12, 4)
+  sma200   Decimal? @db.Decimal(12, 4)
+  ema6     Decimal? @db.Decimal(12, 4)
+  ema20    Decimal? @db.Decimal(12, 4)
+  rsRank   Decimal? @db.Decimal(6, 2)
+  atr14    Decimal? @db.Decimal(12, 4)
+
+  stock Stock @relation(fields: [stockId], references: [id])
+
+  @@unique([stockId, date])
+  @@index([date])
+  @@index([stockId, date(sort: Desc)])
+}
+
+model StockIntraday {
+  id        String   @id @default(cuid())
+  stockId   String
+  timestamp DateTime
+  open      Decimal  @db.Decimal(12, 4)
+  high      Decimal  @db.Decimal(12, 4)
+  low       Decimal  @db.Decimal(12, 4)
+  close     Decimal  @db.Decimal(12, 4)
+  volume    BigInt
+  ema6      Decimal? @db.Decimal(12, 4)
+  ema20     Decimal? @db.Decimal(12, 4)
+
+  stock Stock @relation(fields: [stockId], references: [id])
+
+  @@unique([stockId, timestamp])
+  @@index([stockId, timestamp(sort: Desc)])
+}
+
+model StockStage {
+  id         String        @id @default(cuid())
+  stockId    String
+  date       DateTime      @db.Date
+  stage      StageEnum
+  category   StockCategory
+  isTemplate Boolean       @default(false)
+  metadata   Json?
+
+  stock Stock @relation(fields: [stockId], references: [id])
+
+  @@unique([stockId, date])
+  @@index([date, stage])
+  @@index([date, category])
+}
+
+enum StageEnum {
+  STAGE_1
+  STAGE_2
+  STAGE_3
+  STAGE_4
+}
+
+enum StockCategory {
+  HOT
+  FORMER_HOT
+  COMMODITY
+  NONE
+}
+
+// ─────────────────────────────────────────────────────────
+// Index & Breadth Data
+// ─────────────────────────────────────────────────────────
+
+model IndexEntity {
+  id     String @id @default(cuid())
+  ticker String @unique
+  name   String
+
+  dailyBars IndexDaily[]
+}
+
+model IndexDaily {
+  id      String      @id @default(cuid())
+  indexId  String
+  date    DateTime    @db.Date
+  open    Decimal     @db.Decimal(12, 4)
+  high    Decimal     @db.Decimal(12, 4)
+  low     Decimal     @db.Decimal(12, 4)
+  close   Decimal     @db.Decimal(12, 4)
+  volume  BigInt
+
+  index IndexEntity @relation(fields: [indexId], references: [id])
+
+  @@unique([indexId, date])
+  @@index([date])
+}
+
+model BreadthSnapshot {
+  id           String   @id @default(cuid())
+  date         DateTime @unique @db.Date
+  naad         Decimal? @db.Decimal(10, 2)
+  naa50r       Decimal? @db.Decimal(6, 2)
+  naa200r      Decimal? @db.Decimal(6, 2)
+  nahl         Decimal? @db.Decimal(10, 2)
+  avgWeightIdx Decimal? @db.Decimal(12, 4)
+}
+
+// ─────────────────────────────────────────────────────────
+// Theme & Supply Chain
+// ─────────────────────────────────────────────────────────
+
+model Theme {
+  id          String             @id @default(cuid())
+  name        String             @unique
+  description String?
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  groups SupplyChainGroup[]
+}
+
+model SupplyChainGroup {
+  id        String       @id @default(cuid())
+  themeId   String
+  name      String
+  sortOrder Int          @default(0)
+
+  theme       Theme        @relation(fields: [themeId], references: [id])
+  themeStocks ThemeStock[]
+
+  @@unique([themeId, name])
+}
+
+model ThemeStock {
+  id      String @id @default(cuid())
+  stockId String
+  groupId String
+
+  stock Stock            @relation(fields: [stockId], references: [id])
+  group SupplyChainGroup @relation(fields: [groupId], references: [id])
+
+  @@unique([stockId, groupId])
+}
+
+// ─────────────────────────────────────────────────────────
+// Swing Points (foundational S/R)
+// ─────────────────────────────────────────────────────────
+
+model SwingPoint {
+  id        String    @id @default(cuid())
+  stockId   String
+  type      SwingType
+  timeframe Timeframe
+  price     Decimal   @db.Decimal(12, 4)
+  barDate   DateTime
+  absValue  Decimal   @db.Decimal(12, 4)
+  lookahead Int       @default(10)
+  createdAt DateTime  @default(now())
+
+  stock Stock @relation(fields: [stockId], references: [id])
+
+  @@index([stockId, timeframe, type])
+  @@index([stockId, barDate])
+}
+
+enum SwingType {
+  HIGH
+  LOW
+}
+
+enum Timeframe {
+  DAILY
+  INTRADAY
+}
+
+// ─────────────────────────────────────────────────────────
+// Daily Bases
+// ─────────────────────────────────────────────────────────
+
+model DailyBase {
+  id           String     @id @default(cuid())
+  stockId      String
+  peakPrice    Decimal    @db.Decimal(12, 4)
+  peakDate     DateTime   @db.Date
+  baseLow      Decimal    @db.Decimal(12, 4)
+  retracePct   Decimal    @db.Decimal(6, 4)
+  durationDays Int
+  pivotPrice   Decimal?   @db.Decimal(12, 4)
+  status       BaseStatus @default(FORMING)
+  detectedAt   DateTime   @default(now())
+
+  stock Stock @relation(fields: [stockId], references: [id])
+
+  @@index([stockId, status])
+}
+
+enum BaseStatus {
+  FORMING
+  COMPLETE
+  BROKEN_OUT
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────
+// Setup Detection (with state machine)
+// ─────────────────────────────────────────────────────────
+
+model Setup {
+  id          String     @id @default(cuid())
+  stockId     String
+  type        SetupType
+  timeframe   Timeframe
+  direction   Direction
+  state       SetupState @default(BUILDING)
+  detectedAt  DateTime   @default(now())
+  expiresAt   DateTime?
+  lastStateAt DateTime   @default(now())
+
+  pivotPrice  Decimal? @db.Decimal(12, 4)
+  stopPrice   Decimal? @db.Decimal(12, 4)
+  targetPrice Decimal? @db.Decimal(12, 4)
+  riskReward  Decimal? @db.Decimal(6, 2)
+
+  evidence    Json?
+  waitingFor  String?
+  metadata    Json?
+  dailyBaseId String?
+
+  stock       Stock        @relation(fields: [stockId], references: [id])
+  tradeIdeas  TradeIdea[]
+  barEvidence BarEvidence[]
+
+  @@index([state, type])
+  @@index([timeframe, state])
+  @@index([detectedAt])
+  @@index([stockId, state])
+}
+
+enum SetupType {
+  // Daily setups
+  VCP
+  BREAKOUT_PIVOT
+  BREAKOUT_VCB
+  BREAKOUT_WEDGE
+  FAIL_BREAKOUT
+  FAIL_BASE
+  MOMENTUM_CONTINUATION
+  PULLBACK_BUY
+  UNDERCUT_RALLY
+  DOUBLE_TOP
+  // Intraday setups
+  INTRADAY_BASE
+  CROSS_620
+  GAP_UP
+  GAP_DOWN
+  TIRING_DOWN
+}
+
+enum Direction {
+  LONG
+  SHORT
+}
+
+enum SetupState {
+  BUILDING
+  READY
+  TRIGGERED
+  VIOLATED
+  EXPIRED
+}
+
+// ─────────────────────────────────────────────────────────
+// Bar Evidence (Confirmation & Violation)
+// ─────────────────────────────────────────────────────────
+
+model BarEvidence {
+  id            String          @id @default(cuid())
+  stockId       String
+  timeframe     Timeframe
+  barDate       DateTime
+  pattern       EvidencePattern
+  bias          EvidenceBias
+  isViolation   Boolean         @default(false)
+  keyLevelType  KeyLevelType
+  keyLevelPrice Decimal         @db.Decimal(12, 4)
+  volumeState   VolumeState
+  setupId       String?
+  createdAt     DateTime        @default(now())
+
+  stock Stock  @relation(fields: [stockId], references: [id])
+  setup Setup? @relation(fields: [setupId], references: [id])
+
+  @@index([stockId, timeframe, barDate])
+  @@index([setupId])
+}
+
+enum EvidencePattern {
+  DRY_UP
+  LOWER_WICK_ABSORPTION
+  BULLISH_ENGULFING
+  RESISTANCE_DRY_UP
+  UPPER_WICK_REJECTION
+  BEARISH_ENGULFING
+  SUPPORT_BROKEN
+  PIVOT_BROKEN
+  RESISTANCE_RECLAIMED
+}
+
+enum EvidenceBias {
+  BULLISH
+  BEARISH
+}
+
+enum VolumeState {
+  EXPANSION
+  CONTRACTION
+  NORMAL
+}
+
+enum KeyLevelType {
+  SWING_HIGH
+  SWING_LOW
+  BASE_LOW
+  BASE_HIGH
+  VCP_PIVOT
+  MA_20
+  MA_50
+  MA_200
+  VWAP
+}
+
+// ─────────────────────────────────────────────────────────
+// Trade Lifecycle (5 stages)
+// ─────────────────────────────────────────────────────────
+
+model TradeIdea {
+  id          String          @id @default(cuid())
+  userId      String?
+  setupId     String?
+  stockId     String
+  direction   Direction
+  bias        Bias
+  entryPrice  Decimal?        @db.Decimal(12, 4)
+  stopPrice   Decimal         @db.Decimal(12, 4)
+  targetPrice Decimal?        @db.Decimal(12, 4)
+  riskPercent Decimal         @db.Decimal(4, 2)
+  riskReward  Decimal?        @db.Decimal(6, 2)
+  status      TradeIdeaStatus @default(PENDING)
+  createdAt   DateTime        @default(now())
+  notes       String?
+
+  user   User?        @relation(fields: [userId], references: [id])
+  setup  Setup?       @relation(fields: [setupId], references: [id])
+  intent TradeIntent?
+
+  @@index([userId, status])
+}
+
+model TradeIntent {
+  id          String   @id @default(cuid())
+  tradeIdeaId String   @unique
+  confirmedAt DateTime @default(now())
+
+  tradeIdea TradeIdea @relation(fields: [tradeIdeaId], references: [id])
+  orders    Order[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  intentId      String
+  brokerOrderId String?
+  type          OrderType
+  side          Direction
+  quantity      Decimal     @db.Decimal(12, 4)
+  limitPrice    Decimal?    @db.Decimal(12, 4)
+  stopPrice     Decimal?    @db.Decimal(12, 4)
+  status        OrderStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  intent     TradeIntent @relation(fields: [intentId], references: [id])
+  executions Execution[]
+}
+
+model Execution {
+  id         String   @id @default(cuid())
+  orderId    String
+  price      Decimal  @db.Decimal(12, 4)
+  quantity   Decimal  @db.Decimal(12, 4)
+  fee        Decimal? @db.Decimal(12, 4)
+  executedAt DateTime @default(now())
+
+  order      Order     @relation(fields: [orderId], references: [id])
+  position   Position? @relation(fields: [positionId], references: [id])
+  positionId String?
+}
+
+model Position {
+  id            String         @id @default(cuid())
+  userId        String?
+  ticker        String
+  direction     Direction
+  quantity      Decimal        @db.Decimal(12, 4)
+  avgEntry      Decimal        @db.Decimal(12, 4)
+  currentStop   Decimal?       @db.Decimal(12, 4)
+  realizedPnl   Decimal        @default(0) @db.Decimal(12, 4)
+  unrealizedPnl Decimal        @default(0) @db.Decimal(12, 4)
+  status        PositionStatus @default(OPEN)
+  openedAt      DateTime       @default(now())
+  closedAt      DateTime?
+
+  executions Execution[]
+
+  @@index([userId, status])
+}
+
+enum TradeIdeaStatus {
+  PENDING
+  CONFIRMED
+  SKIPPED
+  EXPIRED
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+}
+
+enum OrderStatus {
+  PENDING
+  SUBMITTED
+  PARTIAL
+  FILLED
+  CANCELLED
+  REJECTED
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+}
+
+enum Bias {
+  BULLISH
+  BEARISH
+  BOTH
+}
+
+// ─────────────────────────────────────────────────────────
+// User & Preferences
+// ─────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  preferences UserPreference?
+  watchlists  Watchlist[]
+  alerts      Alert[]
+  tradeIdeas  TradeIdea[]
+}
+
+model UserPreference {
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  defaultRiskPct Decimal     @default(0.5) @db.Decimal(4, 2)
+  riskProfile    RiskProfile @default(NORMAL)
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum RiskProfile {
+  CONSERVATIVE
+  NORMAL
+  AGGRESSIVE
+}
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  user  User            @relation(fields: [userId], references: [id])
+  items WatchlistItem[]
+
+  @@unique([userId, name])
+}
+
+model WatchlistItem {
+  id          String @id @default(cuid())
+  watchlistId String
+  stockId     String
+
+  watchlist Watchlist @relation(fields: [watchlistId], references: [id])
+  stock     Stock     @relation(fields: [stockId], references: [id])
+
+  @@unique([watchlistId, stockId])
+}
+
+model Alert {
+  id          String    @id @default(cuid())
+  userId      String
+  stockId     String?
+  type        AlertType
+  condition   Json
+  isTriggered Boolean   @default(false)
+  triggeredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user  User   @relation(fields: [userId], references: [id])
+  stock Stock? @relation(fields: [stockId], references: [id])
+}
+
+enum AlertType {
+  PRICE_LEVEL
+  EMA_CROSS_620
+  SETUP_DETECTED
+  GROUP_CROSS
+  STAGE_CHANGE
+}

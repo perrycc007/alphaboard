@@ -1,0 +1,94 @@
+---
+description: Responsive sizing rules - ALL UI components must scale with screen size
+globs: ["**/*.tsx", "**/*.jsx"]
+alwaysApply: true
+---
+
+# Responsive Sizing Rules
+
+**MANDATORY**: All UI components must use responsive Tailwind classes to scale appropriately across screen sizes.
+
+## Text Sizes
+
+| Element | Classes |
+|---------|---------|
+| Page title (h1) | `text-2xl sm:text-3xl lg:text-4xl xl:text-5xl` |
+| Section title (h2) | `text-xl sm:text-2xl lg:text-3xl` |
+| Card title (h3) | `text-base sm:text-lg lg:text-xl xl:text-2xl` |
+| Body text | `text-sm sm:text-base lg:text-lg` |
+| Small text | `text-xs sm:text-sm lg:text-base` |
+| Tiny/label text | `text-[10px] sm:text-xs lg:text-sm` |
+
+## Spacing
+
+| Size | Classes |
+|------|---------|
+| Large | `p-4 sm:p-6 lg:p-8 xl:p-10` |
+| Medium | `p-3 sm:p-4 lg:p-5 xl:p-6` |
+| Small | `p-2 sm:p-3 lg:p-4` |
+| Gaps | `gap-2 sm:gap-3 lg:gap-4` or `gap-3 sm:gap-4 lg:gap-5` |
+
+## Icons
+
+| Size | Classes |
+|------|---------|
+| Large | `w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7` |
+| Medium | `w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6` |
+| Small | `w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-5 lg:h-5` |
+
+## Buttons
+
+```tsx
+// Height + padding scale together
+className="h-8 sm:h-9 lg:h-10 xl:h-11 px-3 sm:px-4 lg:px-5 text-xs sm:text-sm lg:text-base"
+```
+
+## Cards & Containers
+
+```tsx
+// Padding
+className="p-3 sm:p-4 lg:p-5 xl:p-6"
+
+// Border radius (larger elements)
+className="rounded-lg sm:rounded-xl"
+```
+
+## Avatars
+
+| Size | Classes |
+|------|---------|
+| Large | `w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16` |
+| Medium | `w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12` |
+| Small | `w-6 h-6 sm:w-8 sm:h-8` |
+
+## Exceptions (No responsive needed)
+
+- Layout utilities: `flex`, `grid`, `hidden`, `block`
+- Colors: `bg-*`, `text-*` (color only)
+- Borders: `border`, `border-*`
+- Very small fixed elements (2-4px)
+- Elements inside already-scaled containers
+
+## Bad vs Good Examples
+
+```tsx
+// ❌ BAD - Static sizing
+<h1 className="text-3xl font-bold">Title</h1>
+<div className="p-6">Content</div>
+<button className="h-10 px-6 text-sm">Click</button>
+
+// ✅ GOOD - Responsive sizing
+<h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">Title</h1>
+<div className="p-4 sm:p-5 lg:p-6">Content</div>
+<button className="h-8 sm:h-9 lg:h-10 px-4 sm:px-5 lg:px-6 text-xs sm:text-sm lg:text-base">Click</button>
+```
+
+## Checklist for New Components
+
+- [ ] Page/section titles have responsive text sizes
+- [ ] Body text scales appropriately
+- [ ] Container padding is responsive
+- [ ] Gaps/margins scale with screen size
+- [ ] Buttons have responsive height, padding, and text
+- [ ] Icons scale with their containers
+- [ ] Border radius scales on larger elements

@@ -1,0 +1,296 @@
+---
+description: Review template for code and design evaluation
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Review & Risk Checklist Template
+
+**Purpose**: Run this checklist after each task completes. Any finding becomes a new entry in TASKS.md.
+
+**Process**: 
+1. Complete task implementation
+2. Run through relevant sections of this checklist
+3. Document any findings in "Findings" section
+4. Convert each finding to an actionable task in TASKS.md
+5. Request permission to proceed with next task
+
+## Logic Risks
+
+### Domain Logic Validation
+- [ ] **Domain invariants enforced** where expected
+  - Business rules properly validated in domain entities
+  - Value objects reject invalid states
+  - Aggregates maintain consistency boundaries
+
+- [ ] **No business branching leaked** into infra/UI layers
+  - Infrastructure layer contains no business logic
+  - UI components contain no business rules
+  - Database layer only performs mechanical mapping
+
+- [ ] **Mapping is mechanical** - no business rules in repositories
+  - Repository implementations only translate data formats
+  - No conditional business logic in data access layer
+  - Domain objects properly reconstructed from persistence
+
+- [ ] **No switch/case routing** across domains
+  - No business type switching in shared modules
+  - Event processing doesn't branch on business types
+  - Polymorphism used instead of conditional dispatching
+
+### Business Logic Integrity
+- [ ] **Business workflows properly orchestrated** in application layer
+- [ ] **Transaction boundaries correctly defined** 
+- [ ] **Error handling maintains data consistency**
+- [ ] **Idempotency implemented** where required
+- [ ] **Concurrency issues addressed** (optimistic/pessimistic locking)
+
+## Code Hygiene
+
+### Dead Code and Unused Elements
+- [ ] **No dead code or unreachable branches**
+  - All code paths are reachable and tested
+  - No commented-out code blocks left behind
+  - No unused classes, methods, or functions
+
+- [ ] **No unused params/imports/variables**
+  - All method parameters are actually used
+  - Import statements only include used dependencies  
+  - Local variables are referenced and needed
+  - Generic type parameters are utilized
+
+- [ ] **No placeholder scaffolding left**
+  - TODO comments addressed or moved to issues
+  - Temporary/debugging code removed
+  - Mock implementations replaced with real logic
+
+- [ ] **Debug logs removed; feature flags intentional**
+  - Console.log/print statements removed from production code
+  - Logging uses structured logging framework
+  - Debug flags are intentional and documented
+
+### Code Quality
+- [ ] **Consistent naming conventions** followed
+- [ ] **Proper error handling** throughout the code
+- [ ] **Documentation updated** for public interfaces
+- [ ] **Code complexity** remains manageable
+- [ ] **Design patterns** used appropriately
+
+## Testing Requirements
+
+### Test Structure and Quality
+- [ ] **Domain tests are pure and deterministic**
+  - No external dependencies (no database, no network calls)
+  - Consistent results regardless of execution environment
+  - Fast execution time (unit tests should be < 100ms each)
+
+- [ ] **Use-case tests mock DB ingestions/external calls; real service tested**
+  - Repository calls are mocked appropriately
+  - External API calls are stubbed
+  - **Actual business logic is tested**, not mocked
+  - Service layer coordination logic is validated
+
+- [ ] **Mocks regenerated if contracts changed**
+  - Mock objects reflect current interface contracts
+  - Test doubles updated when real dependencies change
+  - Integration test mocks match production behavior
+
+- [ ] **Adapter integration tests isolated**
+  - Infrastructure tests only validate adapter functionality
+  - External dependencies properly isolated in test environment
+  - Integration tests don't affect other test suites
+
+- [ ] **UI has a11y checks if applicable**
+  - Accessibility testing automated where possible
+  - Keyboard navigation verified
+  - Screen reader compatibility tested
+  - Color contrast requirements met
+
+### Test Coverage and Validation
+- [ ] **Critical business logic covered** by tests
+- [ ] **Edge cases and error scenarios** tested
+- [ ] **Performance requirements** validated in tests
+- [ ] **Test data management** strategy followed
+- [ ] **Test environment isolation** maintained
+
+## Performance & Security
+
+### Performance Considerations
+- [ ] **No accidental N+1 queries** or heavy sync I/O in app layer
+  - Database queries optimized for expected load
+  - Batch operations used where appropriate
+  - Async/await patterns used correctly
+  - Resource cleanup handled properly
+
+- [ ] **Resource utilization** within acceptable limits
+  - Memory usage patterns analyzed
+  - Connection pooling configured appropriately
+  - Caching strategy implemented where beneficial
+  - Performance benchmarks met
+
+### Security Validation
+- [ ] **Sensitive data not logged**
+  - PII/PHI redacted from logs
+  - API keys and secrets not exposed
+  - User passwords never logged in plain text
+  - Financial data properly masked
+
+- [ ] **Auth/validation at interface layer only**
+  - Authentication logic not duplicated in business layer
+  - Authorization checks at API boundaries
+  - Input validation at system entry points
+  - Domain layer remains auth-agnostic
+
+- [ ] **Input sanitization** performed appropriately
+- [ ] **SQL injection prevention** measures in place
+- [ ] **XSS protection** implemented (if applicable)
+- [ ] **Rate limiting** configured for public endpoints
+
+## Architecture Compliance
+
+### Layer Separation Validation
+- [ ] **Domain layer independence** maintained
+  - No framework dependencies in domain code
+  - No database-specific code in domain logic
+  - No HTTP/UI concerns in domain layer
+
+- [ ] **Application layer coordination** appropriate
+  - Use cases properly orchestrate domain objects
+  - Transaction management handled at application boundary
+  - External service integration through interfaces
+
+- [ ] **Infrastructure layer isolation** maintained
+  - Database/external service details contained in adapters
+  - Framework-specific code isolated from business logic
+  - Configuration management properly abstracted
+
+- [ ] **Interface layer simplicity** preserved
+  - HTTP handlers only handle protocol concerns
+  - Request/response mapping without business logic
+  - Authentication/authorization at appropriate boundaries
+
+### Dependency Flow
+- [ ] **Dependencies flow inward** (outer layers depend on inner)
+- [ ] **Interfaces properly defined** between layers
+- [ ] **Dependency injection** used for loose coupling
+- [ ] **Circular dependencies avoided**
+
+## Common Mistakes (Catchlist)
+
+### Backend-Specific Anti-Patterns
+- [ ] **Repositories don't accept flags/event types** (violation)
+  - Repository methods accept domain objects, not raw events
+  - No business branching based on event types in data layer
+  - Intent-revealing repository method names
+
+- [ ] **No cross-domain "god" utilities** introduced
+  - Utilities are focused on single domain concerns
+  - No shared modules with switch/case on business types
+  - Domain-specific logic stays in respective domains
+
+- [ ] **UI doesn't import domain/repository directly**
+  - UI components only depend on presentation layer
+  - State management layer mediates between UI and services
+  - No direct business logic in UI components
+
+- [ ] **State layer doesn't perform persistence**
+  - State management focuses on data flow and caching
+  - Persistence operations handled by dedicated repositories
+  - Clear separation between state and storage concerns
+
+### General Anti-Patterns
+- [ ] **Version bumps without approval** (critical violation)
+  - Go/Node.js/framework versions not changed
+  - Dependency versions remain stable
+  - Any version changes explicitly approved
+
+- [ ] **No premature optimization** without performance justification
+- [ ] **No over-engineering** for simple requirements  
+- [ ] **No copy-paste code** without understanding
+- [ ] **No magic numbers** or hard-coded values without explanation
+
+## Testing Anti-Patterns
+- [ ] **No mocking of the system under test**
+  - Business logic being tested is real, not mocked
+  - Only external dependencies (DB, APIs) are mocked
+  - Service/use case logic actually executed in tests
+
+- [ ] **No brittle integration tests**
+  - Tests don't break due to unrelated changes
+  - Proper test data isolation and cleanup
+  - Tests are deterministic and repeatable
+
+## Findings
+
+*Document any issues discovered during review. Each finding MUST be converted to an actionable task.*
+
+### Finding Template:
+**Finding [Number]: [Brief Description]**
+- **Severity**: [Critical/High/Medium/Low]
+- **Category**: [Logic Risk/Code Hygiene/Testing/Performance/Security/Architecture]
+- **Description**: [Detailed description of the issue]
+- **Impact**: [What could go wrong if not addressed]
+- **Evidence**: [Code references, test failures, performance metrics]
+- **Action Required**: [Specific steps to resolve]
+- **Task Created**: [Reference to new task added to TASKS.md]
+
+### Example Findings:
+
+**Finding 1: Unused parameter in OrderService.processOrder**
+- **Severity**: Low
+- **Category**: Code Hygiene
+- **Description**: Method signature includes `validationFlags` parameter that is never used
+- **Impact**: Code confusion, potential dead code accumulation
+- **Evidence**: `src/services/OrderService.ts:42` - parameter declared but not referenced
+- **Action Required**: Remove unused parameter or implement intended validation
+- **Task Created**: → Added to TASKS.md as "Task 7: Clean up unused parameters in OrderService"
+
+**Finding 2: Business logic detected in repository layer**
+- **Severity**: High  
+- **Category**: Architecture/Logic Risk
+- **Description**: `OrderRepository.updateOrderStatus()` contains switch statement for business rules
+- **Impact**: Violates clean architecture, makes testing difficult, business logic scattered
+- **Evidence**: `src/repositories/OrderRepository.ts:78-95` - switch on order status with business calculations
+- **Action Required**: Move business logic to domain/application layer, make repository mechanical
+- **Task Created**: → Added to TASKS.md as "Task 8: Extract business logic from OrderRepository"
+
+**Finding 3: DB not mocked in use case test**
+- **Severity**: Medium
+- **Category**: Testing  
+- **Description**: `CreateOrderUseCase.test.ts` makes real database calls instead of mocking repository
+- **Impact**: Slow tests, test environment dependencies, potential test data pollution
+- **Evidence**: `tests/application/CreateOrderUseCase.test.ts:25` - real DB connection used
+- **Action Required**: Mock repository interface, test real use case logic
+- **Task Created**: → Added to TASKS.md as "Task 9: Fix CreateOrderUseCase test mocking"
+
+## Review Sign-off
+
+**Reviewer**: [Name]  
+**Date**: [YYYY-MM-DD]  
+**Task Reviewed**: [Task Number and Description]  
+**Status**: [PASS/FAIL/CONDITIONAL]
+
+### Review Summary:
+- **Findings Count**: [Number] ([Critical: X], [High: Y], [Medium: Z], [Low: W])
+- **Tasks Added**: [List of new task numbers created from findings]
+- **Recommendation**: [Proceed/Address findings first/Major rework needed]
+
+### Next Steps:
+1. [Action item 1]
+2. [Action item 2]  
+3. [Action item 3]
+
+**Permission Required**: Before proceeding to next task, address all Critical and High severity findings, and get explicit approval.
+
+---
+
+## Finding-to-Task Loop Process
+
+**MANDATORY PROCESS**: 
+1. Any finding discovered during review MUST produce a new task in TASKS.md
+2. New tasks added to "Findings Converted to Tasks" section  
+3. Cannot proceed to next planned task until all Critical/High findings addressed
+4. Finding resolution tasks take priority over planned tasks
+5. Re-review after finding tasks completed
+
+**Quality Gate**: No task can be marked DONE until review checklist passes without Critical or High severity findings.

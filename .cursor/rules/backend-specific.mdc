@@ -1,0 +1,705 @@
+---
+description: Backend-specific development rules for Go and API services
+globs: ["**/*.go", "**/*.mod", "**/*.sum", "**/Dockerfile", "**/docker-compose.yml", "**/Makefile"]
+alwaysApply: false
+---
+
+# Backend-Specific Development Rules
+
+## Version Management
+
+**CRITICAL**: Never change versions without explicit permission.
+
+### Version Policies
+- [ ] **Never change Go version** without explicit approval
+- [ ] **Never change dependency versions** without team discussion  
+- [ ] **Never update tool versions** without permission
+- [ ] **Revert accidental version changes** immediately
+- [ ] **Version changes require** team discussion and approval
+
+```go
+// ❌ BAD - Changing Go version in go.mod
+go 1.21 → go 1.22 // Requires approval
+
+// ❌ BAD - Updating dependencies without permission
+github.com/gin-gonic/gin v1.9.1 → v1.10.0 // Requires approval
+```
+
+## Separation of Concerns Over Deduplication
+
+**Prefer clear separation of domain concerns over aggressive DRY**
+
+### Core Principle
+- **Some duplication is acceptable** if it preserves clean boundaries
+- **Avoid cross-domain abstractions** requiring switch/case or type assertions
+- **Don't centralize logic** into "god" utilities to eliminate duplication
+- **Prefer small, cohesive modules** with localized duplication
+
+```go
+// ❌ BAD - Cross-domain utility with business branching
+func ProcessEntity(entity interface{}, entityType string) error {
+    switch entityType {
+    case "order":
+        return processOrder(entity.(*Order))
+    case "user": 
+        return processUser(entity.(*User))
+    case "payment":
+        return processPayment(entity.(*Payment))
+    }
+    return errors.New("unknown entity type")
+}
+
+// ✅ GOOD - Separate, focused handlers
+type OrderProcessor struct{}
+func (p *OrderProcessor) Process(order *Order) error { /* order-specific logic */ }
+
+type UserProcessor struct{}  
+func (p *UserProcessor) Process(user *User) error { /* user-specific logic */ }
+
+type PaymentProcessor struct{}
+func (p *PaymentProcessor) Process(payment *Payment) error { /* payment-specific logic */ }
+```
+
+## Avoid Switch/Case for Business Branching
+
+**Do not use switch/case for business types or event routing within shared modules**
+
+### What to Avoid
+```go
+// ❌ BAD - Business branching in shared module
+func HandleEvent(event *Event) error {
+    switch event.Type {
+    case "OrderCreated":
+        return handleOrderCreated(event)
+    case "PaymentProcessed":
+        return handlePaymentProcessed(event) 
+    case "UserRegistered":
+        return handleUserRegistered(event)
+    }
+    return errors.New("unknown event type")
+}
+```
+
+### Preferred Approaches
+
+#### 1. Polymorphism/Interfaces at Domain Layer
+```go
+// ✅ GOOD - Strategy pattern for business variability
+type PricingStrategy interface {
+    Calculate(items []Item) Money
+}
+
+type RegularPricing struct{}
+func (p *RegularPricing) Calculate(items []Item) Money { /* regular logic */ }
+
+type PremiumPricing struct{}  
+func (p *PremiumPricing) Calculate(items []Item) Money { /* premium logic */ }
+
+type Order struct {
+    strategy PricingStrategy
+}
+
+func (o *Order) CalculateTotal() Money {
+    return o.strategy.Calculate(o.items) // No branching needed
+}
+```
+
+#### 2. Explicit Use-Case Handlers
+```go
+// ✅ GOOD - Separate handlers per workflow
+type CreateOrderHandler struct {
+    repo OrderRepository
+}
+
+func (h *CreateOrderHandler) Handle(cmd CreateOrderCommand) error {
+    // Create order specific logic
+}
+
+type ApproveOrderHandler struct {
+    repo OrderRepository
+    notifier NotificationService
+}
+
+func (h *ApproveOrderHandler) Handle(cmd ApproveOrderCommand) error {
+    // Approve order specific logic
+}
+```
+
+#### 3. Composition Over Conditionals
+```go
+// ✅ GOOD - Inject behavior rather than branching
+type OrderService struct {
+    validator    OrderValidator
+    pricer      PricingService
+    fulfiller   FulfillmentService
+}
+
+func (s *OrderService) ProcessOrder(order *Order) error {
+    if err := s.validator.Validate(order); err != nil {
+        return err
+    }
+    
+    total := s.pricer.CalculateTotal(order)
+    order.SetTotal(total)
+    
+    return s.fulfiller.Fulfill(order)
+}
+```
+
+### Acceptable Switch/Case Usage
+Switch/case is acceptable for:
+
+#### 1. Parsing Low-Level Protocol Values
+```go
+// ✅ GOOD - Infrastructure layer protocol parsing
+func ParseHTTPStatus(code int) Status {
+    switch code {
+    case 200:
+        return StatusOK
+    case 404:
+        return StatusNotFound  
+    case 500:
+        return StatusInternalError
+    default:
+        return StatusUnknown
+    }
+}
+```
+
+#### 2. Mapping Static Constants
+```go
+// ✅ GOOD - Static constant mapping
+func MapErrorToHTTPStatus(err error) int {
+    switch err.(type) {
+    case *ValidationError:
+        return 400
+    case *NotFoundError:
+        return 404
+    case *InternalError:
+        return 500
+    default:
+        return 500
+    }
+}
+```
+
+#### 3. Simple Localized Logic
+```go
+// ✅ GOOD - Simple domain entity logic
+func (o *Order) GetStatusLabel() string {
+    switch o.status {
+    case StatusPending:
+        return "Pending"
+    case StatusApproved:
+        return "Approved"
+    case StatusShipped:
+        return "Shipped"
+    default:
+        return "Unknown"
+    }
+}
+```
+
+## Database Layer Separation
+
+**The DB layer handles only persistence (CRUD) and simple data mappings**
+
+### Core Rules
+- [ ] **No business logic** in DB layer
+- [ ] **No event processing** in repositories
+- [ ] **No domain rules** in DB methods
+- [ ] **Accept processed data structures** only (aggregates, VOs, DTOs)
+- [ ] **DB layer is agnostic** to business rules and event types
+
+### Examples
+
+#### ❌ Bad - Business Logic in DB Layer
+```go
+// ❌ BAD - Repository with business logic
+func (r *OrderRepository) UpdateOrderStatus(orderID string, eventType string) error {
+    var newStatus string
+    switch eventType { // ❌ Business branching in DB layer
+    case "payment_received":
+        newStatus = "paid"
+    case "payment_failed":
+        newStatus = "payment_failed"  
+    case "shipped":
+        newStatus = "shipped"
+    }
+    
+    return r.db.Exec("UPDATE orders SET status = ? WHERE id = ?", newStatus, orderID)
+}
+```
+
+#### ✅ Good - Clean DB Layer
+```go
+// ✅ GOOD - Repository accepts processed domain data
+func (r *OrderRepository) UpdateOrder(order *Order) error {
+    // Mechanical mapping - no business logic
+    orderData := &OrderData{
+        ID:     order.GetID(),
+        Status: order.GetStatus(), // Status already determined by domain
+        Total:  order.GetTotal().Amount(),
+        UpdatedAt: time.Now(),
+    }
+    
+    return r.db.Save(orderData)
+}
+
+// ✅ GOOD - Intent-revealing repository methods
+func (r *OrderRepository) SaveOrder(order *Order) error { /* ... */ }
+func (r *OrderRepository) MarkAsShipped(orderID OrderID) error { /* ... */ }
+func (r *OrderRepository) UpdateAllowlist(address string, allowlist []string) error { /* ... */ }
+```
+
+## Clean Architecture Boundaries
+
+### Domain Layer
+- **Core entities**, value objects, domain interfaces, invariants
+- **No framework** or infrastructure dependencies
+- **Use polymorphism** and domain-specific types for business variability
+
+```go
+// ✅ GOOD - Pure domain entity
+type Order struct {
+    id       OrderID
+    items    []OrderItem
+    customer Customer
+    status   OrderStatus
+}
+
+func (o *Order) CalculateTotal() Money {
+    total := Money{Amount: 0}
+    for _, item := range o.items {
+        total = total.Add(item.GetSubtotal())
+    }
+    return total
+}
+
+func (o *Order) CanBeCancelled() bool {
+    return o.status == StatusPending || o.status == StatusApproved
+}
+```
+
+### Application/Service Layer  
+- **Orchestrates use cases**, coordinates domain objects
+- **Enforces workflows** and transaction boundaries
+- **Converts requests** to domain commands/value objects
+- **Prefer separate handlers** over shared handlers with branching
+
+```go
+// ✅ GOOD - Application service coordinating domain objects
+type CreateOrderService struct {
+    orderRepo    OrderRepository
+    inventory    InventoryService  
+    pricing      PricingService
+    eventBus     EventBus
+}
+
+func (s *CreateOrderService) CreateOrder(cmd CreateOrderCommand) (*Order, error) {
+    // 1. Convert to domain objects
+    customer := Customer{ID: cmd.CustomerID, Email: cmd.Email}
+    items := mapToOrderItems(cmd.Items)
+    
+    // 2. Apply domain logic
+    order := Order{
+        ID:       GenerateOrderID(),
+        Customer: customer,
+        Items:    items,
+        Status:   StatusPending,
+    }
+    
+    // 3. Business rules and coordination
+    if err := s.inventory.ReserveItems(items); err != nil {
+        return nil, err
+    }
+    
+    total := s.pricing.CalculateTotal(order)
+    order.SetTotal(total)
+    
+    // 4. Persistence
+    if err := s.orderRepo.SaveOrder(&order); err != nil {
+        s.inventory.ReleaseItems(items) // Compensating action
+        return nil, err
+    }
+    
+    // 5. Events
+    s.eventBus.Publish(OrderCreatedEvent{OrderID: order.ID})
+    
+    return &order, nil
+}
+```
+
+### Infrastructure Layer
+- **Database implementations**, external APIs, messaging
+- **Performs mappings** to/from domain models
+- **No domain branching** by type
+- **Keep protocol/driver concerns isolated**
+
+```go
+// ✅ GOOD - Infrastructure adapter
+type PostgresOrderRepository struct {
+    db *sql.DB
+}
+
+func (r *PostgresOrderRepository) SaveOrder(order *Order) error {
+    // Mechanical mapping only
+    query := `
+        INSERT INTO orders (id, customer_id, total, status, created_at)
+        VALUES ($1, $2, $3, $4, $5)
+    `
+    
+    _, err := r.db.Exec(query,
+        order.GetID(),
+        order.GetCustomer().ID, 
+        order.GetTotal().Amount(),
+        string(order.GetStatus()),
+        order.GetCreatedAt(),
+    )
+    
+    return err
+}
+```
+
+### Interface Layer
+- **HTTP handlers**, CLI, RPC handlers
+- **Validation**, request/response mapping, auth enforcement
+- **No business rules** - delegate to application layer
+
+```go  
+// ✅ GOOD - Interface layer with clear delegation
+type OrderHandler struct {
+    createOrderService *CreateOrderService
+}
+
+func (h *OrderHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
+    // 1. Request validation and parsing
+    var req CreateOrderRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid request", http.StatusBadRequest)
+        return
+    }
+    
+    // 2. Auth enforcement  
+    userID := extractUserID(r) // Auth concern
+    if userID == "" {
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
+    
+    // 3. Convert to application command
+    cmd := CreateOrderCommand{
+        CustomerID: userID,
+        Items:      req.Items,
+        Email:      req.Email,
+    }
+    
+    // 4. Delegate to application layer
+    order, err := h.createOrderService.CreateOrder(cmd)
+    if err != nil {
+        // Error mapping based on error type
+        statusCode := mapErrorToHTTPStatus(err)
+        http.Error(w, err.Error(), statusCode)
+        return
+    }
+    
+    // 5. Response mapping
+    response := mapOrderToResponse(order)
+    json.NewEncoder(w).Encode(response)
+}
+```
+
+## Event and Workflow Processing
+
+### Event Processing Rules
+- **Process events** in application/service layer
+- **Translate events** to domain commands first
+- **Apply domain rules** in domain layer
+- **No event types** passed to repositories
+
+```go
+// ✅ GOOD - Event processing in application layer
+type OrderEventHandler struct {
+    orderService *OrderService
+}
+
+func (h *OrderEventHandler) HandlePaymentReceived(event PaymentReceivedEvent) error {
+    // Translate event to domain command
+    cmd := MarkOrderAsPaidCommand{
+        OrderID:   event.OrderID,
+        Amount:    event.Amount,
+        PaymentID: event.PaymentID,
+    }
+    
+    // Delegate to application service
+    return h.orderService.MarkOrderAsPaid(cmd)
+}
+
+// Application service applies domain rules
+func (s *OrderService) MarkOrderAsPaid(cmd MarkOrderAsPaidCommand) error {
+    order, err := s.orderRepo.FindByID(cmd.OrderID)
+    if err != nil {
+        return err
+    }
+    
+    // Apply domain logic
+    if err := order.MarkAsPaid(cmd.Amount); err != nil {
+        return err
+    }
+    
+    // Save updated aggregate
+    return s.orderRepo.UpdateOrder(order)
+}
+```
+
+### Workflow Processing  
+- **Avoid central processors** that branch on event type
+- **Prefer discrete handlers** per event/use case
+- **Wire via dispatcher** for loose coupling
+
+```go
+// ❌ BAD - Central processor with branching
+func (p *CentralEventProcessor) ProcessEvent(event Event) error {
+    switch event.Type {
+    case "OrderCreated":
+        return p.handleOrderCreated(event)
+    case "PaymentReceived":
+        return p.handlePaymentReceived(event)
+    // More branching...
+    }
+}
+
+// ✅ GOOD - Discrete handlers with dispatcher
+type EventDispatcher struct {
+    handlers map[string]EventHandler
+}
+
+func (d *EventDispatcher) Register(eventType string, handler EventHandler) {
+    d.handlers[eventType] = handler
+}
+
+func (d *EventDispatcher) Dispatch(event Event) error {
+    handler, exists := d.handlers[event.Type]
+    if !exists {
+        return errors.New("no handler for event type")
+    }
+    return handler.Handle(event)
+}
+
+// Separate focused handlers
+type OrderCreatedHandler struct{}
+func (h *OrderCreatedHandler) Handle(event Event) error { /* focused logic */ }
+
+type PaymentReceivedHandler struct{}  
+func (h *PaymentReceivedHandler) Handle(event Event) error { /* focused logic */ }
+```
+
+## Repositories and DTOs
+
+### Repository Design
+- **Intent-revealing methods** aligned to aggregates/use cases
+- **No generic, leaky methods** requiring branching logic
+- **Use DTOs or mappers** for domain ↔ persistence conversion
+
+```go
+// ❌ BAD - Generic leaky method
+func (r *OrderRepository) UpdateOrderWithEvent(orderID string, eventType string, data map[string]interface{}) error {
+    // Branching logic in repository ❌
+}
+
+// ✅ GOOD - Intent-revealing methods  
+type OrderRepository interface {
+    SaveOrder(order *Order) error
+    UpdateOrder(order *Order) error
+    MarkOrderAsShipped(orderID OrderID, trackingNumber string) error
+    UpdateOrderAllowlist(orderID OrderID, allowlist []CustomerID) error
+    FindByID(id OrderID) (*Order, error)
+}
+```
+
+### DTO Mapping
+```go
+// ✅ GOOD - Mechanical mapping between layers
+type OrderDTO struct {
+    ID         string    `db:"id"`
+    CustomerID string    `db:"customer_id"`
+    Total      float64   `db:"total"`
+    Status     string    `db:"status"`
+    CreatedAt  time.Time `db:"created_at"`
+}
+
+func (dto *OrderDTO) ToDomain() *Order {
+    return &Order{
+        ID:         OrderID(dto.ID),
+        CustomerID: CustomerID(dto.CustomerID),
+        Total:      Money{Amount: dto.Total},
+        Status:     OrderStatus(dto.Status),
+        CreatedAt:  dto.CreatedAt,
+    }
+}
+
+func FromDomain(order *Order) *OrderDTO {
+    return &OrderDTO{
+        ID:         string(order.GetID()),
+        CustomerID: string(order.GetCustomerID()),
+        Total:      order.GetTotal().Amount(),
+        Status:     string(order.GetStatus()),
+        CreatedAt:  order.GetCreatedAt(),
+    }
+}
+```
+
+## Testing Strategy
+
+### Layer-Specific Testing
+- **Domain tests**: Pure, no infrastructure dependencies
+- **Application tests**: Mock repositories/interfaces  
+- **Integration tests**: Real infrastructure adapters only
+- **Avoid shared test helpers** that couple domains
+
+```go
+// ✅ GOOD - Domain layer test (pure)
+func TestOrder_CalculateTotal(t *testing.T) {
+    items := []OrderItem{
+        {Price: Money{Amount: 10.00}, Quantity: 2},
+        {Price: Money{Amount: 5.00}, Quantity: 1},
+    }
+    
+    order := Order{Items: items}
+    total := order.CalculateTotal()
+    
+    assert.Equal(t, 25.00, total.Amount())
+}
+
+// ✅ GOOD - Application layer test (mocked dependencies)
+func TestCreateOrderService_CreateOrder(t *testing.T) {
+    mockRepo := &MockOrderRepository{}
+    mockInventory := &MockInventoryService{}
+    
+    service := &CreateOrderService{
+        orderRepo: mockRepo,
+        inventory: mockInventory,
+    }
+    
+    cmd := CreateOrderCommand{/* ... */}
+    order, err := service.CreateOrder(cmd)
+    
+    assert.NoError(t, err)
+    assert.True(t, mockRepo.SaveOrderCalled)
+    assert.True(t, mockInventory.ReserveItemsCalled)
+}
+
+// ✅ GOOD - Integration test (real infrastructure)
+func TestPostgresOrderRepository_SaveOrder(t *testing.T) {
+    db := setupTestDatabase()
+    repo := &PostgresOrderRepository{db: db}
+    
+    order := &Order{/* test data */}
+    err := repo.SaveOrder(order)
+    
+    assert.NoError(t, err)
+    // Verify data was saved correctly
+}
+```
+
+## Common Violations to Avoid
+
+### ❌ What NOT to Do
+```go
+// ❌ Central handler with business branching
+func ProcessBusinessEvent(eventType string, data interface{}) error {
+    switch eventType {
+    case "order_created", "order_updated", "order_cancelled":
+        return handleOrderEvent(data, eventType)
+    case "payment_received", "payment_failed":  
+        return handlePaymentEvent(data, eventType)
+    }
+}
+
+// ❌ Repository accepting event types
+func (r *OrderRepo) UpdateOrderFromEvent(orderID string, eventType string) error {
+    switch eventType {
+    case "payment_received":
+        return r.markAsPaid(orderID)
+    case "shipped":
+        return r.markAsShipped(orderID)
+    }
+}
+
+// ❌ God utility knowing multiple domains
+func ProcessAllEntities(entities []interface{}, processingType string) error {
+    for _, entity := range entities {
+        switch e := entity.(type) {
+        case *Order:
+            processOrder(e, processingType)
+        case *User:
+            processUser(e, processingType)  
+        case *Payment:
+            processPayment(e, processingType)
+        }
+    }
+}
+```
+
+### ✅ What TO Do Instead
+```go
+// ✅ Separate focused use-case handlers
+type CreateOrderHandler struct{ /* dependencies */ }
+type ApproveOrderHandler struct{ /* dependencies */ }  
+type CancelOrderHandler struct{ /* dependencies */ }
+
+// ✅ Repository methods accepting domain aggregates
+func (r *OrderRepo) SaveOrder(order *Order) error { /* ... */ }
+func (r *OrderRepo) UpdateOrder(order *Order) error { /* ... */ }
+
+// ✅ Domain interfaces with implementations
+type PaymentProcessor interface {
+    ProcessPayment(payment *Payment) error
+}
+
+type StripeProcessor struct{}
+func (s *StripeProcessor) ProcessPayment(payment *Payment) error { /* ... */ }
+
+type PayPalProcessor struct{}  
+func (p *PayPalProcessor) ProcessPayment(payment *Payment) error { /* ... */ }
+```
+
+## Practical Guidance
+
+When you feel the need for switch/case to select behavior across business variants:
+
+### 1. Define Domain Interface
+```go
+type DiscountStrategy interface {
+    CalculateDiscount(order *Order) Money
+}
+
+type RegularCustomerDiscount struct{}
+type PremiumCustomerDiscount struct{}
+type SeasonalDiscount struct{}
+```
+
+### 2. Split Into Distinct Use Cases
+```go  
+type ProcessRegularOrderHandler struct{}
+type ProcessPremiumOrderHandler struct{}
+type ProcessBulkOrderHandler struct{}
+```
+
+### 3. Use Dependency Injection
+```go
+type OrderService struct {
+    discountStrategy DiscountStrategy // Injected at composition time
+    pricingService   PricingService
+}
+```
+
+### 4. Allow Intentional Duplication
+```go
+// Prefer clear, separate modules over forced abstraction
+type RegularOrderProcessor struct{ /* regular-specific fields */ }
+type PremiumOrderProcessor struct{ /* premium-specific fields */ }
+// Some code duplication is OK for clarity
+```
+
+**Optimize for**: Readability, change isolation, and testability over minimal line count.

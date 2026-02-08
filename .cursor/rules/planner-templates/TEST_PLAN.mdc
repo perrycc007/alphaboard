@@ -1,0 +1,320 @@
+---
+description: Test planning template for comprehensive testing strategies
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Test Plan Template
+
+## Testing Scope
+
+### Features Under Test
+- **Primary Feature**: [Main functionality being implemented]
+- **Integration Points**: [Systems and services that interact with the feature]
+- **User Workflows**: [End-to-end user journeys to be validated]
+- **Edge Cases**: [Boundary conditions and error scenarios]
+
+### Testing Layers
+- **Domain Layer**: Pure business logic validation
+- **Application Layer**: Use case coordination and workflow testing
+- **Infrastructure Layer**: Data persistence and external service integration
+- **Interface Layer**: API endpoints and request/response handling
+- **UI Layer**: User interface components and interactions (if applicable)
+
+## Test Matrix
+
+### Domain Layer Testing
+| Test Case | Input Scenario | Expected Behavior | Mocking Strategy |
+|-----------|---------------|-------------------|------------------|
+| Valid business rule | Standard business scenario | Correct domain logic execution | None (pure domain) |
+| Invalid input validation | Boundary/invalid inputs | Proper validation errors | None (pure domain) |
+| Edge case handling | Extreme values, empty data | Graceful handling or appropriate errors | None (pure domain) |
+| Business invariant enforcement | Data that violates business rules | Domain exceptions thrown | None (pure domain) |
+
+**Example Domain Tests**:
+```go
+// ✅ GOOD - Pure domain testing
+func TestOrder_CalculateTotal_WithDiscount(t *testing.T) {
+    items := []OrderItem{
+        {Price: Money{100}, Quantity: 2}, // $200
+        {Price: Money{50}, Quantity: 1},  // $50
+    }
+    discount := PercentageDiscount{Percent: 10} // 10% off
+    
+    order := Order{Items: items, Discount: discount}
+    total := order.CalculateTotal()
+    
+    assert.Equal(t, Money{225}, total) // $250 - 10% = $225
+}
+```
+
+### Application Layer Testing
+| Test Case | Scenario | Mocking Required | Real Logic Tested |
+|-----------|----------|------------------|-------------------|
+| Use case orchestration | Complete business workflow | Repository, external services | ✅ Real use case logic |
+| Transaction boundary | Multi-step operations | Database transactions | ✅ Real coordination logic |
+| Error handling | External service failures | External dependencies | ✅ Real error handling |
+| Business validation | Application-level rules | Infrastructure dependencies | ✅ Real validation logic |
+
+**Mandatory Application Testing Rules**:
+- [ ] **Mock DB ingestions** - All repository calls must be mocked
+- [ ] **Test real service function** - Actual business logic must be executed
+- [ ] **Regenerate mocks** if repository contracts change
+- [ ] **No mocking of system under test** - Use case logic must be real
+
+**Example Application Tests**:
+```go
+// ✅ GOOD - Mock infrastructure, test real use case
+func TestCreateOrderUseCase_Execute(t *testing.T) {
+    // Mock dependencies
+    mockRepo := &MockOrderRepository{}
+    mockPaymentService := &MockPaymentService{}
+    mockInventoryService := &MockInventoryService{}
+    
+    // Real use case under test
+    useCase := &CreateOrderUseCase{
+        orderRepo: mockRepo,
+        paymentService: mockPaymentService,
+        inventoryService: mockInventoryService,
+    }
+    
+    // Test real business logic
+    cmd := CreateOrderCommand{
+        CustomerID: "cust123",
+        Items: []OrderItemRequest{{ProductID: "prod1", Quantity: 2}},
+    }
+    
+    order, err := useCase.Execute(cmd) // ✅ Testing real use case logic
+    
+    // Verify real business logic executed correctly
+    assert.NoError(t, err)
+    assert.Equal(t, "cust123", order.CustomerID)
+    assert.True(t, mockRepo.SaveCalled)
+    assert.True(t, mockInventoryService.ReserveCalled)
+}
+```
+
+### Infrastructure Layer Testing
+| Test Case | Integration Point | Test Environment | Validation Focus |
+|-----------|------------------|------------------|-------------------|
+| Database operations | PostgreSQL | Test database | CRUD operations, data integrity |
+| External API integration | Third-party services | Mock/test endpoints | Request/response mapping |
+| Message queue integration | RabbitMQ/Kafka | Test queue | Message publishing/consuming |
+| File system operations | Local/cloud storage | Temporary test storage | File operations, permissions |
+
+**Example Infrastructure Tests**:
+```go
+// ✅ GOOD - Real infrastructure integration test
+func TestPostgresOrderRepository_SaveOrder(t *testing.T) {
+    db := setupTestDatabase() // Real test database
+    repo := &PostgresOrderRepository{db: db}
+    
+    order := &Order{
+        ID: OrderID("order123"),
+        CustomerID: CustomerID("cust456"),
+        Total: Money{Amount: 100.00},
+        Status: StatusPending,
+    }
+    
+    err := repo.SaveOrder(order) // Real database operation
+    
+    assert.NoError(t, err)
+    
+    // Verify data was actually saved
+    savedOrder, err := repo.FindByID(OrderID("order123"))
+    assert.NoError(t, err)
+    assert.Equal(t, order.Total, savedOrder.Total)
+}
+```
+
+### Interface Layer Testing
+| Test Case | Endpoint/Interface | Input | Expected Output | Status Code |
+|-----------|-------------------|-------|-----------------|-------------|
+| Valid request | POST /api/orders | Valid order data | Order created response | 201 |
+| Invalid request | POST /api/orders | Missing required fields | Validation errors | 400 |
+| Unauthorized access | POST /api/orders | No auth token | Authentication error | 401 |
+| Resource not found | GET /api/orders/999 | Non-existent order ID | Not found error | 404 |
+
+### UI Layer Testing (if applicable)
+| Test Case | User Action | Expected UI Behavior | Accessibility Check |
+|-----------|-------------|---------------------|-------------------|
+| Display order summary | Load order page | Order details visible | Screen reader compatible |
+| Form validation | Submit invalid form | Validation errors shown | Keyboard navigation works |
+| Loading states | Async operation | Loading indicator displayed | Focus management |
+| Error handling | Network failure | Error message displayed | Error announcement |
+
+## Testing Tools and Framework
+
+### Unit Testing
+- **Framework**: Jest (TypeScript/JavaScript) or Go testing (Go)
+- **Mocking**: Jest mocks or testify/mock (Go)
+- **Assertions**: Built-in assertions or testify/assert
+- **Coverage Target**: 90% for domain and application layers
+
+### Integration Testing
+- **Database**: Test containers or in-memory database
+- **External Services**: WireMock or similar service virtualization
+- **Message Queues**: Testcontainers or embedded test brokers
+- **Coverage Target**: 80% for infrastructure layer
+
+### End-to-End Testing
+- **Framework**: Playwright or Puppeteer (UI), Postman/Newman (API)
+- **Test Data**: Isolated test datasets with cleanup
+- **Environment**: Dedicated testing environment
+- **Coverage Target**: Critical user workflows only
+
+### Performance Testing
+- **Tools**: JMeter, k6, or Artillery
+- **Metrics**: Response time, throughput, resource utilization
+- **Thresholds**: p95 < 150ms, p99 < 500ms
+- **Load Scenarios**: Normal load, peak load, stress testing
+
+## Test Data Management
+
+### Test Data Strategy
+- **Unit Tests**: Hard-coded test data in test files
+- **Integration Tests**: Test fixtures with database seeding
+- **E2E Tests**: Dedicated test data sets with isolation
+- **Performance Tests**: Large datasets generated programmatically
+
+### Data Cleanup
+- **Unit Tests**: No cleanup needed (no external dependencies)
+- **Integration Tests**: Automatic cleanup after each test
+- **E2E Tests**: Environment reset between test suites
+- **Shared Resources**: Clear separation, no test interference
+
+### Mock Data Generation
+```typescript
+// ✅ GOOD - Consistent test data builders
+class OrderTestDataBuilder {
+  private order: Partial<Order> = {};
+
+  static aValidOrder(): OrderTestDataBuilder {
+    return new OrderTestDataBuilder().withDefaults();
+  }
+
+  withCustomerID(customerID: string): OrderTestDataBuilder {
+    this.order.customerID = customerID;
+    return this;
+  }
+
+  withTotal(amount: number): OrderTestDataBuilder {
+    this.order.total = new Money(amount);
+    return this;
+  }
+
+  build(): Order {
+    return new Order(this.order);
+  }
+
+  private withDefaults(): OrderTestDataBuilder {
+    this.order = {
+      id: "order123",
+      customerID: "cust456",
+      total: new Money(100.00),
+      status: OrderStatus.Pending,
+      items: [
+        { productID: "prod1", quantity: 2, price: new Money(50.00) }
+      ]
+    };
+    return this;
+  }
+}
+
+// Usage in tests
+const order = OrderTestDataBuilder
+  .aValidOrder()
+  .withCustomerID("special-customer")
+  .withTotal(250.00)
+  .build();
+```
+
+## Quality Gates and Thresholds
+
+### Code Quality Metrics
+- [ ] **Test Coverage**: 90% for domain, 80% for application, 70% for infrastructure
+- [ ] **No Dead Code**: Zero unreachable code or unused parameters
+- [ ] **Mock Strategy Compliance**: DB mocked in unit/app tests, real services tested
+- [ ] **Test Performance**: Unit tests < 100ms each, integration tests < 5s each
+
+### Performance Benchmarks
+- **Response Time**: p95 < 150ms for critical operations
+- **Throughput**: Support expected load + 50% buffer
+- **Resource Usage**: CPU < 70%, Memory < 80% under normal load
+- **Database**: Query response time < 100ms for 95% of queries
+
+### Security Testing
+- [ ] **Authentication**: All protected endpoints require valid auth
+- [ ] **Authorization**: Users can only access permitted resources
+- [ ] **Input Validation**: All inputs properly validated and sanitized
+- [ ] **Data Protection**: Sensitive data properly encrypted and logged safely
+
+### Accessibility Testing (UI)
+- [ ] **WCAG 2.1 AA Compliance**: Automated accessibility audit passes
+- [ ] **Keyboard Navigation**: All functionality accessible via keyboard
+- [ ] **Screen Reader**: Compatible with major screen readers
+- [ ] **Color Contrast**: Meets minimum contrast requirements
+
+## Test Execution Strategy
+
+### Test Pyramid Distribution
+```
+    E2E Tests (5%)
+   /               \
+  Integration (15%) \
+ /                   \
+Unit Tests (80%)     /
+```
+
+### Continuous Integration
+- **Unit Tests**: Run on every commit
+- **Integration Tests**: Run on pull requests
+- **E2E Tests**: Run on staging deployments
+- **Performance Tests**: Run weekly or before releases
+
+### Test Environment Management
+- **Local Development**: Unit tests, fast feedback
+- **Pull Request**: Integration tests, full validation
+- **Staging**: E2E tests, performance validation
+- **Production**: Smoke tests, monitoring validation
+
+## Risk-Based Testing Priorities
+
+### High Priority (Must Test)
+- **Core Business Logic**: Critical business rules and calculations
+- **Data Integrity**: Ensure data consistency and accuracy
+- **Security**: Authentication, authorization, input validation
+- **Integration Points**: External service communication
+
+### Medium Priority (Should Test)
+- **Error Handling**: Graceful degradation and recovery
+- **Performance**: Response times and resource usage
+- **User Experience**: UI functionality and accessibility
+- **Edge Cases**: Boundary conditions and unusual scenarios
+
+### Low Priority (Nice to Test)
+- **Configuration**: Different environment settings
+- **Logging**: Log message content and format
+- **Monitoring**: Metrics and alerting functionality
+- **Documentation**: API documentation accuracy
+
+## Test Reporting and Metrics
+
+### Test Results Reporting
+- **Coverage Reports**: Generated automatically with CI/CD
+- **Test Results**: Integrated with development workflow
+- **Performance Reports**: Baseline and trend analysis
+- **Accessibility Reports**: Automated audit results
+
+### Key Metrics to Track
+- **Test Execution Time**: Monitor for test suite performance
+- **Test Flakiness**: Identify and fix unreliable tests
+- **Bug Discovery Rate**: Tests catching issues before production
+- **Code Coverage Trends**: Ensure coverage maintains or improves
+
+### Success Criteria
+- [ ] All test categories pass with defined thresholds
+- [ ] No critical security vulnerabilities
+- [ ] Performance benchmarks met
+- [ ] Accessibility compliance achieved
+- [ ] Zero tolerance for dead code or unused parameters

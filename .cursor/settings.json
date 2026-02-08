@@ -1,0 +1,87 @@
+{
+  "workbench.colorTheme": "Default Dark+",
+  "editor.fontSize": 14,
+  "editor.lineHeight": 1.5,
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.wordWrap": "on",
+  "editor.minimap.enabled": false,
+  "editor.rulers": [80, 120],
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+  "git.autofetch": true,
+  
+  "go.useLanguageServer": true,
+  "go.lintTool": "golangci-lint",
+  "go.formatTool": "goimports",
+  "go.generateTestsFlags": ["-exported"],
+  "go.testFlags": ["-v"],
+  "go.coverOnSave": true,
+  "go.coverageDecorator": {
+    "type": "gutter",
+    "coveredHighlightColor": "rgba(64,128,128,0.5)",
+    "uncoveredHighlightColor": "rgba(128,64,64,0.25)"
+  },
+  
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.linting.flake8Enabled": true,
+  "python.linting.mypyEnabled": true,
+  "python.formatting.provider": "black",
+  "python.sortImports.args": ["--profile", "black"],
+  
+  "typescript.preferences.includePackageJsonAutoImports": "on",
+  "typescript.suggest.autoImports": true,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "javascript.suggest.autoImports": true,
+  
+  "files.associations": {
+    "*.mdc": "markdown",
+    "BUILD": "python",
+    "*.toml": "toml"
+  },
+  
+  "files.exclude": {
+    "**/.pants.d": true,
+    "**/.pids": true,
+    "**/.pantsd": true,
+    "**/node_modules": true,
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.DS_Store": true
+  },
+  
+  "search.exclude": {
+    "**/.pants.d": true,
+    "**/.pids": true,
+    "**/.pantsd": true,
+    "**/node_modules": true,
+    "**/__pycache__": true,
+    "**/dist": true,
+    "**/build": true,
+    "playground/lovable/learn-bloom-studio/node_modules": true,
+    "playground/lovable/learn-bloom-studio/dist": true
+  },
+  
+  "emmet.includeLanguages": {
+    "typescript": "html",
+    "javascript": "html"
+  },
+  
+  "explorer.excludeGitIgnore": true,
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  
+  "pants.enableCompilerHints": true,
+  "pants.enableLinting": true,
+  
+  "workbench.editor.enablePreview": false,
+  "breadcrumbs.enabled": true,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true
+}

@@ -1,0 +1,255 @@
+---
+description: Main rules for expert software engineering assistance and development modes
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Expert Software Engineer Assistant - Main Rules
+
+## 🚀 Quick Start
+
+**This file is part of a comprehensive rules system. For complete documentation, see [README.md](./README.mdc).**
+
+### Key Mode Activations
+- **`"Planner Mode"`** - Creates `.cursor/{yyyy-mm-dd}-{task-slug}/` with comprehensive planning artifacts
+- **`"Architecture Mode"`** - Deep system architecture analysis and design
+- **`"Debugger Mode"`** - Enhanced debugging with MCP tools
+- **`"Implement Mode"`** - Full implementation with testing and validation
+- **`"Ultrarun Mode"`** - Maximum research and thinking time
+
+### Critical Requirements ⚡
+- **✅ Always check for dead code and unused parameters** in every change
+- **✅ Mock DB ingestions in tests** and test real service functions  
+- **✅ Ask for permission** before proceeding with implementation tasks
+- **✅ Use MCP tools** for enhanced capabilities and validation
+
+## 📁 Complete Rules System
+
+### Core Documentation
+- **[README.md](./README.mdc)** - Complete overview and quick start guide
+- **[core-rules.md](./core-rules.mdc)** - Fundamental principles and code quality mandates
+- **[architecture-rules.md](./architecture-rules.mdc)** - Layer separation and dependency flow
+- **[backend-specific.md](./backend-specific.mdc)** - Go-specific rules and anti-patterns
+- **[development-modes.md](./development-modes.mdc)** - All development modes with detailed processes
+- **[mcp-tools.md](./mcp-tools.mdc)** - Comprehensive MCP tools guide and workflows
+- **[testing-standards.md](./testing-standards.mdc)** - Testing requirements with examples
+
+### Planning Templates
+Located in **[planner-templates/](./planner-templates/)**:
+- **[REQUIREMENT.md](./planner-templates/REQUIREMENT.mdc)** - Requirements and acceptance criteria
+- **[DESIGN.md](./planner-templates/DESIGN.mdc)** - Multi-solution design with code references  
+- **[TASKS.md](./planner-templates/TASKS.mdc)** - Task breakdown with quality gates
+- **[REVIEW.md](./planner-templates/REVIEW.mdc)** - Risk checklist and finding-to-task loop
+- **[DECISIONS.md](./planner-templates/DECISIONS.mdc)** - Decision tracking and rationale
+- **[ASSUMPTIONS.md](./planner-templates/ASSUMPTIONS.mdc)** - Assumption validation
+- **[TEST_PLAN.md](./planner-templates/TEST_PLAN.mdc)** - Comprehensive testing strategy
+- **[ROLLBACK.md](./planner-templates/ROLLBACK.mdc)** - Rollback procedures and safety
+- **[METRICS.md](./planner-templates/METRICS.mdc)** - Success metrics and monitoring
+
+## 🎯 Core Principles Summary
+
+### Universal Development Rules
+1. **Codebase Analysis First** - Always review existing patterns before implementing
+2. **KISS Principle** - Choose simplest yet effective approach  
+3. **Code Reusability** - Reuse existing components and patterns
+4. **Architectural Consistency** - Follow established patterns and conventions
+
+### Analysis Frameworks (Mandatory)
+**Elon Algorithm** - Apply in order: Question → Delete → Simplify → Accelerate → Automate
+- Step 1: Question every requirement (especially from experts)
+- Step 2: Delete parts/processes (if not adding back 10%, not deleting enough)
+- Step 3: Simplify only after steps 1-2
+- Step 4: Accelerate cycle time
+- Step 5: Automate last, never first
+
+**Idiot Index** - `Implementation Cost / Minimum Viable Solution`
+- Target: < 1.5 | Acceptable: < 3.0 | Warning: > 3.0 | Critical: > 10.0
+- High index = over-engineering, return to Step 1
+
+### Code Quality Mandates
+- **No dead code** or unreachable branches in all changes
+- **No unused parameters/imports/variables** introduced
+- **Clean imports** with no unused dependencies
+- **Debug logs removed** unless intentional feature flags
+
+### Testing Requirements (Mandatory)
+- **Mock DB ingestions** - never hit real databases in unit/app tests
+- **Test real service functions** - test actual business logic, not mocks
+- **Regenerate mocks** when contracts change
+- **Integration tests** for adapters only with real infrastructure
+
+### Backend-Specific Rules
+- **Never change Go version** without explicit approval
+- **Separation of concerns over deduplication** - some duplication acceptable for clean boundaries
+- **No switch/case for business branching** - use polymorphism and interfaces instead
+- **Database layer separation** - DB layer handles only persistence, no business logic
+
+## 🛠️ Standard Development Workflow
+
+### 1. Analysis Phase
+```bash
+# Required analysis steps
+grep_search "similar functionality patterns"
+codebase_search "How does existing feature X work?"
+file_search "existing components/modules"
+```
+
+### 2. Planning Phase (Complex Tasks)
+```
+User activates: "Planner Mode"
+
+Process:
+1. ✅ Confirm task scope and requirements
+2. ✅ Perform deep codebase analysis  
+3. ✅ Create .cursor/{yyyy-mm-dd}-{task-slug}/ with all artifacts
+4. ✅ Generate 2-3 design solutions with existing code references
+5. ✅ Break down into layer-first tasks with quality gates
+6. ✅ Request approval before implementation
+
+Result: Complete planning artifacts ready for implementation
+```
+
+### 3. Implementation Phase
+```
+Layer-first approach:
+Domain → Application → Infrastructure → Interface → UI/State
+
+Quality checks per task:
+- No dead code or unused parameters ✅
+- Mock DB ingestions in tests ✅  
+- Test real service functions ✅
+- Architecture compliance ✅
+```
+
+### 4. Validation Phase
+```typescript
+// MCP tools validation workflow
+await runAccessibilityAudit("feature-validation");
+await runPerformanceAudit("feature-validation");
+await takeScreenshot({ name: "implementation-validation" });
+```
+
+## 🧩 MCP Tools Quick Reference
+
+### Core Tool Categories
+- **Figma MCP** - Design-to-code workflows, asset extraction
+- **Browser Tools MCP** - Real-time debugging, quality audits
+- **Puppeteer MCP** - Automated testing, UI validation
+
+### Standard Three-Tool Workflow
+```typescript
+// 1. Design extraction (if applicable)
+const figmaData = await get_figma_data({ fileKey: "design-key" });
+
+// 2. Implementation
+// ... development work ...
+
+// 3. Quality validation
+const [a11y, perf] = await Promise.all([
+  runAccessibilityAudit("validation"),
+  runPerformanceAudit("validation")
+]);
+
+// 4. Interactive testing
+await puppeteer_click({ selector: ".new-feature" });
+await takeScreenshot({ name: "final-validation" });
+```
+
+## 🚫 Critical Anti-Patterns
+
+### Code Quality Violations
+```go
+// ❌ BAD - Dead code and unused parameters
+func processOrder(order Order, unusedFlag bool) {
+    deadVariable := "never used"
+    if false { // Dead code
+        return
+    }
+}
+```
+
+### Testing Violations
+```go
+// ❌ BAD - Mocking system under test
+mockService := &MockOrderService{}
+result := mockService.Process(order) // Testing mock, not real logic
+
+// ❌ BAD - Real DB in unit test  
+db := sql.Open("postgres", "real-connection")
+service := &OrderService{db: db} // Should be mocked
+```
+
+### Architecture Violations
+```go
+// ❌ BAD - Business logic in infrastructure
+func (r *OrderRepo) Save(order *Order) error {
+    if order.Status == "pending" { // Business rule in DB layer
+        order.ApplyDiscount()
+    }
+}
+
+// ❌ BAD - Cross-domain business branching
+switch entityType { // Business branching on types
+case "order":
+    return processOrder(entity)
+case "user":
+    return processUser(entity)  
+}
+```
+
+## ⚡ Quality Gates Checklist
+
+### Pre-Implementation
+- [ ] Requirements clearly defined
+- [ ] Existing patterns analyzed
+- [ ] Architecture approach decided
+- [ ] Testing strategy planned
+
+### Per-Task Validation
+- [ ] **No dead code or unreachable branches**
+- [ ] **No unused parameters, imports, or variables**
+- [ ] **DB ingestions properly mocked in unit/app tests**  
+- [ ] **Real service functions tested (not mocked)**
+- [ ] **Layer separation maintained**
+- [ ] **Dependencies flow inward only**
+
+### Pre-Deployment
+- [ ] All quality audits passing
+- [ ] Performance benchmarks met
+- [ ] Accessibility compliance achieved
+- [ ] Rollback strategy validated
+
+## 🎛️ Mode Selection Guide
+
+| Use Case | Recommended Mode | Key Benefits |
+|----------|------------------|---------------|
+| Complex multi-step tasks | **Planner Mode** | Comprehensive artifacts, approval gates |
+| System architecture decisions | **Architecture Mode** | Deep analysis, multiple solutions |
+| Issue investigation | **Debugger Mode** | Enhanced debugging, visual validation |
+| Feature implementation | **Implement Mode** | Full workflow, testing integration |
+| Complex research needed | **Ultrarun Mode** | Maximum analysis, extensive exploration |
+
+## 📞 Getting Help
+
+### For Team Members
+1. **New to system**: Start with [README.md](./README.mdc) 
+2. **Specific questions**: Check relevant specialized files
+3. **Examples needed**: Review template files and examples
+4. **Rule clarification**: Reference anti-patterns and examples
+
+### For Rule Improvements
+1. **Propose changes**: Update relevant files with rationale
+2. **Add examples**: Include both good and bad patterns
+3. **Update templates**: Modify planning artifacts as needed
+4. **Test changes**: Validate with real-world scenarios
+
+---
+
+## 🎯 Remember: The Four Pillars
+
+1. **🔍 Always analyze existing patterns first**
+2. **⚠️ Always check for dead code and unused parameters** 
+3. **🧪 Always mock DB ingestions, test real service functions**
+4. **🛠️ Always use MCP tools for enhanced capabilities**
+
+**For complete details, examples, and templates, see [README.md](./README.mdc)**
