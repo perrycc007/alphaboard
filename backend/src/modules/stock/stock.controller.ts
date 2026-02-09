@@ -25,6 +25,19 @@ export class StockController {
     });
   }
 
+  @Get('leaders')
+  findLeaders(
+    @Query('minGain') minGain?: string,
+    @Query('theme') theme?: string,
+    @Query('days') days?: string,
+  ) {
+    return this.stockService.findLeaders({
+      minGain: minGain ? parseFloat(minGain) : undefined,
+      theme,
+      days: days ? parseInt(days, 10) : undefined,
+    });
+  }
+
   @Get('screen')
   screen(
     @Query('stage') stage?: StageEnum,

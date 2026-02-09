@@ -1,0 +1,140 @@
+/* ---- Google Fonts ---- */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@import "tailwindcss";
+
+/* ============================================
+   ALPHABOARD DESIGN SYSTEM
+   Dark-mode trading terminal aesthetic
+   ============================================ */
+
+@theme {
+  /* ---- Background layers ---- */
+  --color-bg-base: #06080f;
+  --color-bg-surface: #0d1117;
+  --color-bg-elevated: #161b22;
+  --color-bg-overlay: #1c2333;
+  --color-bg-hover: #21283b;
+  --color-bg-active: #282e3e;
+
+  /* ---- Border ---- */
+  --color-border-default: #2a3041;
+  --color-border-muted: #1e2536;
+  --color-border-accent: #3b82f6;
+
+  /* ---- Text hierarchy ---- */
+  --color-text-primary: #e6edf3;
+  --color-text-secondary: #8b949e;
+  --color-text-muted: #545d68;
+  --color-text-inverse: #06080f;
+
+  /* ---- Brand / Accent ---- */
+  --color-accent: #3b82f6;
+  --color-accent-hover: #2563eb;
+  --color-accent-muted: #1e3a5f;
+
+  /* ---- Semantic: Trading ---- */
+  --color-bullish: #22c55e;
+  --color-bullish-muted: #163b28;
+  --color-bearish: #ef4444;
+  --color-bearish-muted: #3b1a1a;
+
+  /* ---- Semantic: Status ---- */
+  --color-warning: #f59e0b;
+  --color-warning-muted: #3b2e10;
+  --color-info: #3b82f6;
+  --color-info-muted: #1e3a5f;
+
+  /* ---- Stage colors ---- */
+  --color-stage-1: #6b7280;
+  --color-stage-2: #22c55e;
+  --color-stage-3: #f59e0b;
+  --color-stage-4: #ef4444;
+
+  /* ---- Setup type colors ---- */
+  --color-setup-vcp: #8b5cf6;
+  --color-setup-breakout: #3b82f6;
+  --color-setup-pullback: #06b6d4;
+  --color-setup-momentum: #f59e0b;
+  --color-setup-undercut: #ec4899;
+  --color-setup-double-top: #ef4444;
+  --color-setup-fail: #6b7280;
+  --color-setup-gap: #10b981;
+  --color-setup-cross620: #a855f7;
+  --color-setup-intraday-base: #14b8a6;
+  --color-setup-tiring-down: #f97316;
+
+  /* ---- Category colors ---- */
+  --color-cat-hot: #f59e0b;
+  --color-cat-former-hot: #78716c;
+  --color-cat-commodity: #06b6d4;
+
+  /* ---- Typography ---- */
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* ---- Sidebar ---- */
+  --sidebar-width: 240px;
+  --sidebar-collapsed-width: 64px;
+
+  /* ---- Slide panel ---- */
+  --slide-panel-width: 480px;
+
+  /* ---- Transitions ---- */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- Global base styles ---- */
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---- Custom scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ---- Heading font class ---- */
+.font-heading {
+  font-family: var(--font-sans);
+}
+
+/* ---- Monospace font for prices/numbers ---- */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ---- Focus ring utility ---- */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
