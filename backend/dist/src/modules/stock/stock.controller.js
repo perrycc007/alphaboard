@@ -32,20 +32,24 @@ let StockController = class StockController {
             search,
         });
     }
-    findLeaders(minGain, theme, days) {
+    findLeaders(minGain, theme, days, page, limit) {
         return this.stockService.findLeaders({
             minGain: minGain ? parseFloat(minGain) : undefined,
             theme,
             days: days ? parseInt(days, 10) : undefined,
+            page: page ? parseInt(page, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
         });
     }
-    screen(stage, category, isTemplate, minRsRank, sector) {
+    screen(stage, category, isTemplate, minRsRank, sector, page, limit) {
         const filter = {
             stage,
             category,
             isTemplate: isTemplate !== undefined ? isTemplate === 'true' : undefined,
             minRsRank: minRsRank ? parseFloat(minRsRank) : undefined,
             sector,
+            page: page ? parseInt(page, 10) : undefined,
+            limit: limit ? parseInt(limit, 10) : undefined,
         };
         return this.screeningService.screen(filter);
     }
@@ -77,8 +81,10 @@ __decorate([
     __param(0, (0, common_1.Query)('minGain')),
     __param(1, (0, common_1.Query)('theme')),
     __param(2, (0, common_1.Query)('days')),
+    __param(3, (0, common_1.Query)('page')),
+    __param(4, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], StockController.prototype, "findLeaders", null);
 __decorate([
@@ -88,8 +94,10 @@ __decorate([
     __param(2, (0, common_1.Query)('isTemplate')),
     __param(3, (0, common_1.Query)('minRsRank')),
     __param(4, (0, common_1.Query)('sector')),
+    __param(5, (0, common_1.Query)('page')),
+    __param(6, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, String, String, String, String]),
+    __metadata("design:paramtypes", [String, String, String, String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], StockController.prototype, "screen", null);
 __decorate([

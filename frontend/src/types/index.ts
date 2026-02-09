@@ -17,7 +17,7 @@ export type SetupType =
   | 'BREAKOUT_WEDGE'
   | 'FAIL_BREAKOUT'
   | 'FAIL_BASE'
-  | 'MOMENTUM_CONTINUATION'
+  | 'HIGH_TIGHT_FLAG'
   | 'PULLBACK_BUY'
   | 'UNDERCUT_RALLY'
   | 'DOUBLE_TOP'

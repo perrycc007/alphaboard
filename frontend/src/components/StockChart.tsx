@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import {
   createChart,
+  createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
   ColorType,
@@ -18,6 +19,8 @@ interface StockChartProps {
   height?: number
   showMAs?: boolean
   showSpy?: boolean
+  /** When true, draw entry/exit markers instead of horizontal price lines (for simulation) */
+  showMarkers?: boolean
 }
 
 // MA line configs
@@ -43,6 +46,7 @@ export function StockChart({
   height = 360,
   showMAs = true,
   showSpy = false,
+  showMarkers = false,
 }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -156,45 +160,86 @@ export function StockChart({
       }
     }
 
-    // Setup annotation lines (horizontal price levels)
+    // Setup annotations
     if (setups && setups.length > 0) {
-      for (const setup of setups) {
-        if (setup.pivotPrice != null) {
-          candleSeries.createPriceLine({
-            price: Number(setup.pivotPrice),
-            color: '#8b5cf6',
-            lineWidth: 1,
-            lineStyle: LineStyle.Dashed,
-            axisLabelVisible: true,
-            title: `Pivot (${setup.type})`,
-          })
+      if (showMarkers) {
+        // Simulation mode: draw entry/exit markers on candles
+        const markers: Array<{
+          time: string
+          position: 'belowBar' | 'aboveBar'
+          color: string
+          shape: 'arrowUp' | 'arrowDown'
+          text: string
+        }> = []
+
+        for (const setup of setups) {
+          const meta = setup.metadata as Record<string, unknown> | undefined
+          // Entry marker
+          if (meta?.entryDate) {
+            markers.push({
+              time: toChartDate(meta.entryDate as string),
+              position: setup.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+              color: '#22c55e',
+              shape: setup.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
+              text: `${setup.type}`,
+            })
+          }
+          // Exit marker
+          if (meta?.exitDate) {
+            const finalR = meta.finalR as number | undefined
+            markers.push({
+              time: toChartDate(meta.exitDate as string),
+              position: setup.direction === 'LONG' ? 'aboveBar' : 'belowBar',
+              color: finalR != null && finalR >= 0 ? '#3b82f6' : '#ef4444',
+              shape: setup.direction === 'LONG' ? 'arrowDown' : 'arrowUp',
+              text: finalR != null ? `${finalR.toFixed(1)}R` : 'Exit',
+            })
+          }
         }
-        if (setup.stopPrice != null) {
-          candleSeries.createPriceLine({
-            price: Number(setup.stopPrice),
-            color: '#ef4444',
-            lineWidth: 1,
-            lineStyle: LineStyle.Dotted,
-            axisLabelVisible: true,
-            title: 'Stop',
-          })
-        }
-        if (setup.targetPrice != null) {
-          candleSeries.createPriceLine({
-            price: Number(setup.targetPrice),
-            color: '#22c55e',
-            lineWidth: 1,
-            lineStyle: LineStyle.Dotted,
-            axisLabelVisible: true,
-            title: 'Target',
-          })
+
+        // Sort markers by time (required by lightweight-charts)
+        markers.sort((a, b) => a.time.localeCompare(b.time))
+        createSeriesMarkers(candleSeries, markers)
+      } else {
+        // Normal mode: draw horizontal price lines
+        for (const setup of setups) {
+          if (setup.pivotPrice != null) {
+            candleSeries.createPriceLine({
+              price: Number(setup.pivotPrice),
+              color: '#8b5cf6',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: `Pivot (${setup.type})`,
+            })
+          }
+          if (setup.stopPrice != null) {
+            candleSeries.createPriceLine({
+              price: Number(setup.stopPrice),
+              color: '#ef4444',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dotted,
+              axisLabelVisible: true,
+              title: 'Stop',
+            })
+          }
+          if (setup.targetPrice != null) {
+            candleSeries.createPriceLine({
+              price: Number(setup.targetPrice),
+              color: '#22c55e',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dotted,
+              axisLabelVisible: true,
+              title: 'Target',
+            })
+          }
         }
       }
     }
 
     // Fit content
     chart.timeScale().fitContent()
-  }, [sortedBars, setups, showMAs, height])
+  }, [sortedBars, setups, showMAs, showMarkers, height])
 
   // Init chart on mount or data change
   useEffect(() => {

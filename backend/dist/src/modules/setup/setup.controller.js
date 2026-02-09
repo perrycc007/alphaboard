@@ -28,11 +28,21 @@ let SetupController = class SetupController {
     getActiveSetups(type, direction, timeframe) {
         return this.orchestrator.getActiveSetups({ type, direction, timeframe });
     }
+    async triggerScan() {
+        return { message: 'Scan triggered' };
+    }
+    async simulateSetups(ticker, from) {
+        const fromDate = from ? new Date(from) : new Date('2008-01-01');
+        return this.orchestrator.simulateDetection(ticker, fromDate);
+    }
     getSetupById(id) {
         return this.orchestrator.getSetupById(id);
     }
-    async triggerScan() {
-        return { message: 'Scan triggered' };
+    getSetupEvidence(id) {
+        return this.prisma.barEvidence.findMany({
+            where: { setupId: id },
+            orderBy: { barDate: 'desc' },
+        });
     }
     async getStockEvidence(ticker, timeframe) {
         const stock = await this.prisma.stock.findUniqueOrThrow({
@@ -47,12 +57,6 @@ let SetupController = class SetupController {
             take: 100,
         });
     }
-    getSetupEvidence(id) {
-        return this.prisma.barEvidence.findMany({
-            where: { setupId: id },
-            orderBy: { barDate: 'desc' },
-        });
-    }
 };
 exports.SetupController = SetupController;
 __decorate([
@@ -65,6 +69,20 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], SetupController.prototype, "getActiveSetups", null);
 __decorate([
+    (0, common_1.Post)('setups/scan'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], SetupController.prototype, "triggerScan", null);
+__decorate([
+    (0, common_1.Get)('setups/simulate/:ticker'),
+    __param(0, (0, common_1.Param)('ticker')),
+    __param(1, (0, common_1.Query)('from')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String]),
+    __metadata("design:returntype", Promise)
+], SetupController.prototype, "simulateSetups", null);
+__decorate([
     (0, common_1.Get)('setups/:id'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
@@ -72,11 +90,12 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], SetupController.prototype, "getSetupById", null);
 __decorate([
-    (0, common_1.Post)('setups/scan'),
+    (0, common_1.Get)('setups/:id/evidence'),
+    __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
-    __metadata("design:returntype", Promise)
-], SetupController.prototype, "triggerScan", null);
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], SetupController.prototype, "getSetupEvidence", null);
 __decorate([
     (0, common_1.Get)('stocks/:ticker/evidence'),
     __param(0, (0, common_1.Param)('ticker')),
@@ -85,13 +104,6 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], SetupController.prototype, "getStockEvidence", null);
-__decorate([
-    (0, common_1.Get)('setups/:id/evidence'),
-    __param(0, (0, common_1.Param)('id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", void 0)
-], SetupController.prototype, "getSetupEvidence", null);
 exports.SetupController = SetupController = __decorate([
     (0, common_1.Controller)('api'),
     (0, nestjs_better_auth_1.AllowAnonymous)(),

@@ -8,6 +8,8 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeft,
+  Filter,
+  BarChart3,
 } from 'lucide-react'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { cn } from '@/lib/utils'
@@ -16,8 +18,10 @@ const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/themes', label: 'Themes', icon: Layers },
   { to: '/watchlist', label: 'Watchlist', icon: Eye },
+  { to: '/screener', label: 'Screener', icon: Filter },
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/playbook', label: 'Playbook', icon: Trophy },
+  { to: '/simulate', label: 'Simulator', icon: BarChart3 },
 ] as const
 
 const BOTTOM_ITEMS = [

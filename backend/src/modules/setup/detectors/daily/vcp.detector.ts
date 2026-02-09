@@ -27,6 +27,8 @@ export class VcpDetector implements DailyDetector {
     _swingPoints: SwingPointResult[],
     context: DailyDetectorContext,
   ): DetectedSetup | null {
+    if (!context.isStage2) return null;
+
     const completeBases = context.activeBases?.filter(
       (b) => b.status === 'COMPLETE',
     );
@@ -75,8 +77,14 @@ export class VcpDetector implements DailyDetector {
 
     if (validContractions === 0) return null;
 
-    const pivotPrice =
-      cycles[cycles.length - 1].high;
+    const pivotPrice = cycles[cycles.length - 1].high;
+    const latestBar = bars[bars.length - 1];
+
+    // Pivot must be within 8% of current price
+    const pivotPct =
+      ((pivotPrice - latestBar.close) / latestBar.close) * 100;
+    if (pivotPct > 8 || pivotPct < -8) return null;
+
     const stopPrice = cycles[cycles.length - 1].low;
     const riskPerShare = pivotPrice - stopPrice;
 

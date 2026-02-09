@@ -11,12 +11,12 @@ export declare class MarketController {
             latest: {
                 id: string;
                 date: Date;
+                indexId: string;
                 open: import("@prisma/client-runtime-utils").Decimal;
                 high: import("@prisma/client-runtime-utils").Decimal;
                 low: import("@prisma/client-runtime-utils").Decimal;
                 close: import("@prisma/client-runtime-utils").Decimal;
                 volume: bigint;
-                indexId: string;
             };
         }[];
         breadth: {
@@ -42,11 +42,11 @@ export declare class MarketController {
     getIndexDaily(ticker: string, range?: string): Promise<{
         id: string;
         date: Date;
+        indexId: string;
         open: import("@prisma/client-runtime-utils").Decimal;
         high: import("@prisma/client-runtime-utils").Decimal;
         low: import("@prisma/client-runtime-utils").Decimal;
         close: import("@prisma/client-runtime-utils").Decimal;
         volume: bigint;
-        indexId: string;
     }[]>;
 }

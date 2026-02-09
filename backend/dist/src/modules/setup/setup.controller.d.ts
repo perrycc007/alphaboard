@@ -24,32 +24,36 @@ export declare class SetupController {
     } & {
         id: string;
         stockId: string;
-        type: import("@prisma/client").$Enums.SetupType;
         metadata: import("@prisma/client/runtime/client").JsonValue | null;
-        pivotPrice: import("@prisma/client-runtime-utils").Decimal | null;
-        direction: import("@prisma/client").$Enums.Direction;
+        type: import("@prisma/client").$Enums.SetupType;
         timeframe: import("@prisma/client").$Enums.Timeframe;
-        stopPrice: import("@prisma/client-runtime-utils").Decimal | null;
-        riskReward: import("@prisma/client-runtime-utils").Decimal | null;
-        targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
-        dailyBaseId: string | null;
-        waitingFor: string | null;
-        evidence: import("@prisma/client/runtime/client").JsonValue | null;
-        detectedAt: Date;
+        direction: import("@prisma/client").$Enums.Direction;
         state: import("@prisma/client").$Enums.SetupState;
+        detectedAt: Date;
         expiresAt: Date | null;
         lastStateAt: Date;
+        pivotPrice: import("@prisma/client-runtime-utils").Decimal | null;
+        stopPrice: import("@prisma/client-runtime-utils").Decimal | null;
+        targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
+        riskReward: import("@prisma/client-runtime-utils").Decimal | null;
+        evidence: import("@prisma/client/runtime/client").JsonValue | null;
+        waitingFor: string | null;
+        dailyBaseId: string | null;
     })[]>;
+    triggerScan(): Promise<{
+        message: string;
+    }>;
+    simulateSetups(ticker: string, from?: string): Promise<import("./setup-orchestrator.service").SimulatedSetup[]>;
     getSetupById(id: string): Promise<{
         barEvidence: {
             id: string;
             createdAt: Date;
             stockId: string;
+            timeframe: import("@prisma/client").$Enums.Timeframe;
             pattern: import("@prisma/client").$Enums.EvidencePattern;
             bias: import("@prisma/client").$Enums.EvidenceBias;
             keyLevelType: import("@prisma/client").$Enums.KeyLevelType;
             keyLevelPrice: import("@prisma/client-runtime-utils").Decimal;
-            timeframe: import("@prisma/client").$Enums.Timeframe;
             barDate: Date;
             isViolation: boolean;
             volumeState: import("@prisma/client").$Enums.VolumeState;
@@ -73,48 +77,45 @@ export declare class SetupController {
     } & {
         id: string;
         stockId: string;
-        type: import("@prisma/client").$Enums.SetupType;
         metadata: import("@prisma/client/runtime/client").JsonValue | null;
-        pivotPrice: import("@prisma/client-runtime-utils").Decimal | null;
-        direction: import("@prisma/client").$Enums.Direction;
+        type: import("@prisma/client").$Enums.SetupType;
         timeframe: import("@prisma/client").$Enums.Timeframe;
-        stopPrice: import("@prisma/client-runtime-utils").Decimal | null;
-        riskReward: import("@prisma/client-runtime-utils").Decimal | null;
-        targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
-        dailyBaseId: string | null;
-        waitingFor: string | null;
-        evidence: import("@prisma/client/runtime/client").JsonValue | null;
-        detectedAt: Date;
+        direction: import("@prisma/client").$Enums.Direction;
         state: import("@prisma/client").$Enums.SetupState;
+        detectedAt: Date;
         expiresAt: Date | null;
         lastStateAt: Date;
+        pivotPrice: import("@prisma/client-runtime-utils").Decimal | null;
+        stopPrice: import("@prisma/client-runtime-utils").Decimal | null;
+        targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
+        riskReward: import("@prisma/client-runtime-utils").Decimal | null;
+        evidence: import("@prisma/client/runtime/client").JsonValue | null;
+        waitingFor: string | null;
+        dailyBaseId: string | null;
     }>;
-    triggerScan(): Promise<{
-        message: string;
-    }>;
-    getStockEvidence(ticker: string, timeframe?: Timeframe): Promise<{
+    getSetupEvidence(id: string): import("@prisma/client").Prisma.PrismaPromise<{
         id: string;
         createdAt: Date;
         stockId: string;
+        timeframe: import("@prisma/client").$Enums.Timeframe;
         pattern: import("@prisma/client").$Enums.EvidencePattern;
         bias: import("@prisma/client").$Enums.EvidenceBias;
         keyLevelType: import("@prisma/client").$Enums.KeyLevelType;
         keyLevelPrice: import("@prisma/client-runtime-utils").Decimal;
-        timeframe: import("@prisma/client").$Enums.Timeframe;
         barDate: Date;
         isViolation: boolean;
         volumeState: import("@prisma/client").$Enums.VolumeState;
         setupId: string | null;
     }[]>;
-    getSetupEvidence(id: string): import("@prisma/client").Prisma.PrismaPromise<{
+    getStockEvidence(ticker: string, timeframe?: Timeframe): Promise<{
         id: string;
         createdAt: Date;
         stockId: string;
+        timeframe: import("@prisma/client").$Enums.Timeframe;
         pattern: import("@prisma/client").$Enums.EvidencePattern;
         bias: import("@prisma/client").$Enums.EvidenceBias;
         keyLevelType: import("@prisma/client").$Enums.KeyLevelType;
         keyLevelPrice: import("@prisma/client-runtime-utils").Decimal;
-        timeframe: import("@prisma/client").$Enums.Timeframe;
         barDate: Date;
         isViolation: boolean;
         volumeState: import("@prisma/client").$Enums.VolumeState;

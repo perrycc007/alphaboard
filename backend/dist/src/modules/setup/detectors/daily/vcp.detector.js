@@ -6,6 +6,8 @@ const primitives_1 = require("../../primitives");
 class VcpDetector {
     type = client_1.SetupType.VCP;
     detect(bars, _swingPoints, context) {
+        if (!context.isStage2)
+            return null;
         const completeBases = context.activeBases?.filter((b) => b.status === 'COMPLETE');
         if (!completeBases || completeBases.length === 0)
             return null;
@@ -42,6 +44,10 @@ class VcpDetector {
         if (validContractions === 0)
             return null;
         const pivotPrice = cycles[cycles.length - 1].high;
+        const latestBar = bars[bars.length - 1];
+        const pivotPct = ((pivotPrice - latestBar.close) / latestBar.close) * 100;
+        if (pivotPct > 8 || pivotPct < -8)
+            return null;
         const stopPrice = cycles[cycles.length - 1].low;
         const riskPerShare = pivotPrice - stopPrice;
         const recentVolumes = baseBars.slice(-10).map((b) => b.volume);

@@ -21,16 +21,31 @@ export class SetupController {
     return this.orchestrator.getActiveSetups({ type, direction, timeframe });
   }
 
+  @Post('setups/scan')
+  async triggerScan() {
+    return { message: 'Scan triggered' };
+  }
+
+  @Get('setups/simulate/:ticker')
+  async simulateSetups(
+    @Param('ticker') ticker: string,
+    @Query('from') from?: string,
+  ) {
+    const fromDate = from ? new Date(from) : new Date('2008-01-01');
+    return this.orchestrator.simulateDetection(ticker, fromDate);
+  }
+
   @Get('setups/:id')
   getSetupById(@Param('id') id: string) {
     return this.orchestrator.getSetupById(id);
   }
 
-  @Post('setups/scan')
-  async triggerScan() {
-    // Admin/cron endpoint to trigger a manual scan
-    // In practice, this would iterate over all active stocks
-    return { message: 'Scan triggered' };
+  @Get('setups/:id/evidence')
+  getSetupEvidence(@Param('id') id: string) {
+    return this.prisma.barEvidence.findMany({
+      where: { setupId: id },
+      orderBy: { barDate: 'desc' },
+    });
   }
 
   // Evidence endpoints
@@ -49,14 +64,6 @@ export class SetupController {
       },
       orderBy: { barDate: 'desc' },
       take: 100,
-    });
-  }
-
-  @Get('setups/:id/evidence')
-  getSetupEvidence(@Param('id') id: string) {
-    return this.prisma.barEvidence.findMany({
-      where: { setupId: id },
-      orderBy: { barDate: 'desc' },
     });
   }
 }

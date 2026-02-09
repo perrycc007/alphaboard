@@ -99,34 +99,56 @@ let StockService = class StockService {
             orderBy: { date: 'asc' },
             distinct: ['stockId'],
         });
+        if (stage2Entries.length === 0)
+            return [];
+        const stockIds = stage2Entries.map((e) => e.stockId);
+        const allDailyBars = await this.prisma.stockDaily.findMany({
+            where: {
+                stockId: { in: stockIds },
+                date: { gte: cutoffDate },
+            },
+            orderBy: { date: 'asc' },
+            select: {
+                stockId: true,
+                date: true,
+                open: true,
+                high: true,
+                low: true,
+                close: true,
+            },
+        });
+        const barsByStock = new Map();
+        for (const bar of allDailyBars) {
+            const existing = barsByStock.get(bar.stockId);
+            if (existing) {
+                existing.push(bar);
+            }
+            else {
+                barsByStock.set(bar.stockId, [bar]);
+            }
+        }
         const leaders = [];
         for (const entry of stage2Entries) {
-            const [entryBar, peakBar] = await Promise.all([
-                this.prisma.stockDaily.findFirst({
-                    where: {
-                        stockId: entry.stockId,
-                        date: { gte: entry.date },
-                    },
-                    orderBy: { date: 'asc' },
-                }),
-                this.prisma.stockDaily.findFirst({
-                    where: {
-                        stockId: entry.stockId,
-                        date: { gte: entry.date },
-                    },
-                    orderBy: { high: 'desc' },
-                }),
-            ]);
-            if (!entryBar || !peakBar)
+            const bars = barsByStock.get(entry.stockId);
+            if (!bars || bars.length === 0)
                 continue;
+            const entryBar = bars.find((b) => b.date.getTime() >= entry.date.getTime());
+            if (!entryBar)
+                continue;
+            let peakBar = entryBar;
+            for (const bar of bars) {
+                if (bar.date.getTime() >= entryBar.date.getTime() &&
+                    Number(bar.high) > Number(peakBar.high)) {
+                    peakBar = bar;
+                }
+            }
             const entryPrice = Number(entryBar.close);
             const peakPrice = Number(peakBar.high);
             const peakGain = ((peakPrice - entryPrice) / entryPrice) * 100;
             if (peakGain < minGain)
                 continue;
-            const entryDate = entryBar.date;
-            const peakDate = peakBar.date;
-            const duration = Math.round((peakDate.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+            const duration = Math.round((peakBar.date.getTime() - entryBar.date.getTime()) /
+                (1000 * 60 * 60 * 24));
             const themeName = entry.stock.themeStocks?.[0]?.group?.theme?.name ?? null;
             leaders.push({
                 ticker: entry.stock.ticker,
@@ -134,15 +156,20 @@ let StockService = class StockService {
                 peakGain: Math.round(peakGain * 10) / 10,
                 duration,
                 theme: themeName,
-                entryDate: entryDate.toISOString(),
-                peakDate: peakDate.toISOString(),
+                entryDate: entryBar.date.toISOString(),
+                peakDate: peakBar.date.toISOString(),
                 entryPrice,
                 peakPrice,
                 stage: entry.stage,
             });
         }
         leaders.sort((a, b) => b.peakGain - a.peakGain);
-        return leaders;
+        const page = params.page ?? 1;
+        const limit = params.limit ?? 25;
+        const total = leaders.length;
+        const skip = (page - 1) * limit;
+        const items = leaders.slice(skip, skip + limit);
+        return { items, total, page, limit };
     }
 };
 exports.StockService = StockService;

@@ -30,11 +30,15 @@ export class StockController {
     @Query('minGain') minGain?: string,
     @Query('theme') theme?: string,
     @Query('days') days?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.stockService.findLeaders({
       minGain: minGain ? parseFloat(minGain) : undefined,
       theme,
       days: days ? parseInt(days, 10) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 
@@ -45,6 +49,8 @@ export class StockController {
     @Query('isTemplate') isTemplate?: string,
     @Query('minRsRank') minRsRank?: string,
     @Query('sector') sector?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const filter: ScreeningFilter = {
       stage,
@@ -52,6 +58,8 @@ export class StockController {
       isTemplate: isTemplate !== undefined ? isTemplate === 'true' : undefined,
       minRsRank: minRsRank ? parseFloat(minRsRank) : undefined,
       sector,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     };
     return this.screeningService.screen(filter);
   }

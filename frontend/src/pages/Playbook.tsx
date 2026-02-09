@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Trophy, Filter, ChevronDown } from 'lucide-react'
+import { Trophy, Filter, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useLeaderStore } from '@/stores/useLeaderStore'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { LoadingSkeleton, SkeletonGroup } from '@/components/shared'
@@ -21,17 +21,23 @@ const PERIOD_OPTIONS = [
 
 export default function Playbook() {
   const leaders = useLeaderStore((s) => s.leaders)
+  const total = useLeaderStore((s) => s.total)
+  const page = useLeaderStore((s) => s.page)
+  const limit = useLeaderStore((s) => s.limit)
   const loading = useLeaderStore((s) => s.loading)
   const error = useLeaderStore((s) => s.error)
   const fetchLeaders = useLeaderStore((s) => s.fetchLeaders)
+  const setStorePage = useLeaderStore((s) => s.setPage)
   const openPanel = useSlidePanelStore((s) => s.openPanel)
 
   const [minGain, setMinGain] = useState(50)
   const [days, setDays] = useState(365)
   const [showFilters, setShowFilters] = useState(false)
 
+  const totalPages = Math.ceil(total / limit)
+
   useEffect(() => {
-    fetchLeaders({ minGain, days })
+    fetchLeaders({ minGain, days, page: 1 })
   }, [fetchLeaders, minGain, days])
 
   const handleTickerClick = useCallback(
@@ -47,9 +53,9 @@ export default function Playbook() {
           <h1 className="font-heading text-xl font-bold tracking-tight text-text-primary sm:text-2xl lg:text-3xl">
             Playbook
           </h1>
-          {leaders.length > 0 ? (
+          {total > 0 ? (
             <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent sm:text-xs">
-              {leaders.length}
+              {total}
             </span>
           ) : null}
         </div>
@@ -168,6 +174,67 @@ export default function Playbook() {
               </div>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-xl border border-border-default bg-bg-surface px-4 py-3 sm:px-5">
+          <span className="text-xs text-text-muted sm:text-sm">
+            Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
+          </span>
+          <div className="flex items-center gap-1 sm:gap-2">
+            <button
+              onClick={() => setStorePage(page - 1)}
+              disabled={page <= 1}
+              className={cn(
+                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors sm:h-9 sm:w-9',
+                page <= 1
+                  ? 'cursor-not-allowed text-text-muted/40'
+                  : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary',
+              )}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              let pageNum: number
+              if (totalPages <= 5) {
+                pageNum = i + 1
+              } else if (page <= 3) {
+                pageNum = i + 1
+              } else if (page >= totalPages - 2) {
+                pageNum = totalPages - 4 + i
+              } else {
+                pageNum = page - 2 + i
+              }
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setStorePage(pageNum)}
+                  className={cn(
+                    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-xs font-medium transition-colors sm:h-9 sm:w-9 sm:text-sm',
+                    pageNum === page
+                      ? 'bg-accent/15 text-accent'
+                      : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary',
+                  )}
+                >
+                  {pageNum}
+                </button>
+              )
+            })}
+            <button
+              onClick={() => setStorePage(page + 1)}
+              disabled={page >= totalPages}
+              className={cn(
+                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors sm:h-9 sm:w-9',
+                page >= totalPages
+                  ? 'cursor-not-allowed text-text-muted/40'
+                  : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary',
+              )}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

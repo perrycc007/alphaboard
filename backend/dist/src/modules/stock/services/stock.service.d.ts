@@ -94,16 +94,23 @@ export declare class StockService {
         minGain?: number;
         theme?: string;
         days?: number;
-    }): Promise<{
-        ticker: string;
-        name: string;
-        peakGain: number;
-        duration: number;
-        theme: string;
-        entryDate: string;
-        peakDate: string;
-        entryPrice: number;
-        peakPrice: number;
-        stage: import("@prisma/client").$Enums.StageEnum;
-    }[]>;
+        page?: number;
+        limit?: number;
+    }): Promise<never[] | {
+        items: {
+            ticker: string;
+            name: string;
+            peakGain: number;
+            duration: number;
+            theme: string;
+            entryDate: string;
+            peakDate: string;
+            entryPrice: number;
+            peakPrice: number;
+            stage: import("@prisma/client").$Enums.StageEnum;
+        }[];
+        total: number;
+        page: number;
+        limit: number;
+    }>;
 }

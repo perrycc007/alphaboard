@@ -18,8 +18,8 @@ let ScreeningService = class ScreeningService {
         this.prisma = prisma;
     }
     async screen(filter) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const page = filter.page ?? 1;
+        const limit = filter.limit ?? 50;
         const stages = await this.prisma.stockStage.findMany({
             where: {
                 ...(filter.stage && { stage: filter.stage }),
@@ -57,7 +57,10 @@ let ScreeningService = class ScreeningService {
         if (filter.sector) {
             results = results.filter((r) => r.stock.sector === filter.sector);
         }
-        return results;
+        const total = results.length;
+        const skip = (page - 1) * limit;
+        const items = results.slice(skip, skip + limit);
+        return { items, total, page, limit };
     }
 };
 exports.ScreeningService = ScreeningService;

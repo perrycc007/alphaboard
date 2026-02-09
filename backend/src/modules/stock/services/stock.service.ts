@@ -70,13 +70,14 @@ export class StockService {
 
   /**
    * Find past market leaders - stocks that entered Stage 2 and had significant
-   * price appreciation. Queries stage transitions paired with daily price data
-   * to compute peak gain from Stage 2 entry.
+   * price appreciation. Uses batched queries to avoid N+1 performance issue.
    */
   async findLeaders(params: {
     minGain?: number;
     theme?: string;
     days?: number;
+    page?: number;
+    limit?: number;
   }) {
     const minGain = params.minGain ?? 50;
     const daysBack = params.days ?? 365;
@@ -106,28 +107,62 @@ export class StockService {
       distinct: ['stockId'],
     });
 
+    if (stage2Entries.length === 0) return [];
+
+    // Batch: fetch all daily bars for all candidate stocks in one query
+    const stockIds = stage2Entries.map((e) => e.stockId);
+    const allDailyBars = await this.prisma.stockDaily.findMany({
+      where: {
+        stockId: { in: stockIds },
+        date: { gte: cutoffDate },
+      },
+      orderBy: { date: 'asc' },
+      select: {
+        stockId: true,
+        date: true,
+        open: true,
+        high: true,
+        low: true,
+        close: true,
+      },
+    });
+
+    // Group bars by stockId for efficient lookup
+    const barsByStock = new Map<
+      string,
+      typeof allDailyBars
+    >();
+    for (const bar of allDailyBars) {
+      const existing = barsByStock.get(bar.stockId);
+      if (existing) {
+        existing.push(bar);
+      } else {
+        barsByStock.set(bar.stockId, [bar]);
+      }
+    }
+
     const leaders = [];
 
     for (const entry of stage2Entries) {
-      // Get the price at stage 2 entry and the peak price after
-      const [entryBar, peakBar] = await Promise.all([
-        this.prisma.stockDaily.findFirst({
-          where: {
-            stockId: entry.stockId,
-            date: { gte: entry.date },
-          },
-          orderBy: { date: 'asc' },
-        }),
-        this.prisma.stockDaily.findFirst({
-          where: {
-            stockId: entry.stockId,
-            date: { gte: entry.date },
-          },
-          orderBy: { high: 'desc' },
-        }),
-      ]);
+      const bars = barsByStock.get(entry.stockId);
+      if (!bars || bars.length === 0) continue;
 
-      if (!entryBar || !peakBar) continue;
+      // Find entry bar (first bar on or after stage 2 entry date)
+      const entryBar = bars.find(
+        (b) => b.date.getTime() >= entry.date.getTime(),
+      );
+      if (!entryBar) continue;
+
+      // Find peak bar (highest high after entry)
+      let peakBar = entryBar;
+      for (const bar of bars) {
+        if (
+          bar.date.getTime() >= entryBar.date.getTime() &&
+          Number(bar.high) > Number(peakBar.high)
+        ) {
+          peakBar = bar;
+        }
+      }
 
       const entryPrice = Number(entryBar.close);
       const peakPrice = Number(peakBar.high);
@@ -135,10 +170,9 @@ export class StockService {
 
       if (peakGain < minGain) continue;
 
-      const entryDate = entryBar.date;
-      const peakDate = peakBar.date;
       const duration = Math.round(
-        (peakDate.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24),
+        (peakBar.date.getTime() - entryBar.date.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
 
       const themeName =
@@ -150,8 +184,8 @@ export class StockService {
         peakGain: Math.round(peakGain * 10) / 10,
         duration,
         theme: themeName,
-        entryDate: entryDate.toISOString(),
-        peakDate: peakDate.toISOString(),
+        entryDate: entryBar.date.toISOString(),
+        peakDate: peakBar.date.toISOString(),
         entryPrice,
         peakPrice,
         stage: entry.stage,
@@ -161,6 +195,12 @@ export class StockService {
     // Sort by peak gain descending
     leaders.sort((a, b) => b.peakGain - a.peakGain);
 
-    return leaders;
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 25;
+    const total = leaders.length;
+    const skip = (page - 1) * limit;
+    const items = leaders.slice(skip, skip + limit);
+
+    return { items, total, page, limit };
   }
 }

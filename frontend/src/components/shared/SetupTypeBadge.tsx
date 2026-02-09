@@ -7,7 +7,7 @@ const SETUP_CONFIG: Record<SetupType, { label: string; color: string }> = {
   BREAKOUT_VCB: { label: 'BO VCB', color: 'bg-setup-breakout/15 text-setup-breakout border-setup-breakout/25' },
   BREAKOUT_WEDGE: { label: 'BO Wedge', color: 'bg-setup-breakout/15 text-setup-breakout border-setup-breakout/25' },
   PULLBACK_BUY: { label: 'Pullback', color: 'bg-setup-pullback/15 text-setup-pullback border-setup-pullback/25' },
-  MOMENTUM_CONTINUATION: { label: 'Momentum', color: 'bg-setup-momentum/15 text-setup-momentum border-setup-momentum/25' },
+  HIGH_TIGHT_FLAG: { label: 'HTF', color: 'bg-setup-htf/15 text-setup-htf border-setup-htf/25' },
   UNDERCUT_RALLY: { label: 'U&R', color: 'bg-setup-undercut/15 text-setup-undercut border-setup-undercut/25' },
   DOUBLE_TOP: { label: 'Dbl Top', color: 'bg-setup-double-top/15 text-setup-double-top border-setup-double-top/25' },
   FAIL_BREAKOUT: { label: 'Fail BO', color: 'bg-setup-fail/15 text-setup-fail border-setup-fail/25' },

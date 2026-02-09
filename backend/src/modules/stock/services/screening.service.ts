@@ -8,6 +8,8 @@ export interface ScreeningFilter {
   isTemplate?: boolean;
   minRsRank?: number;
   sector?: string;
+  page?: number;
+  limit?: number;
 }
 
 @Injectable()
@@ -19,8 +21,8 @@ export class ScreeningService {
    * Queries the latest StockStage row per stock.
    */
   async screen(filter: ScreeningFilter) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const page = filter.page ?? 1;
+    const limit = filter.limit ?? 50;
 
     const stages = await this.prisma.stockStage.findMany({
       where: {
@@ -63,6 +65,10 @@ export class ScreeningService {
       results = results.filter((r) => r.stock.sector === filter.sector);
     }
 
-    return results;
+    const total = results.length;
+    const skip = (page - 1) * limit;
+    const items = results.slice(skip, skip + limit);
+
+    return { items, total, page, limit };
   }
 }
