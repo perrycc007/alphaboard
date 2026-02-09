@@ -181,7 +181,7 @@ export function StockChart({
               position: setup.direction === 'LONG' ? 'belowBar' : 'aboveBar',
               color: '#22c55e',
               shape: setup.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
-              text: `${setup.type}`,
+              text: '',
             })
           }
           // Exit marker
@@ -192,7 +192,7 @@ export function StockChart({
               position: setup.direction === 'LONG' ? 'aboveBar' : 'belowBar',
               color: finalR != null && finalR >= 0 ? '#3b82f6' : '#ef4444',
               shape: setup.direction === 'LONG' ? 'arrowDown' : 'arrowUp',
-              text: finalR != null ? `${finalR.toFixed(1)}R` : 'Exit',
+              text: '',
             })
           }
         }

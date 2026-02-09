@@ -27,6 +27,9 @@ let YFinanceProvider = YFinanceProvider_1 = class YFinanceProvider {
     });
     async fetchDailyBars(ticker, from, to) {
         try {
+            if (from >= to) {
+                return [];
+            }
             const result = await withTimeout(this.yf.historical(ticker, {
                 period1: from,
                 period2: to,

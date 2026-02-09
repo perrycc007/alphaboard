@@ -1,6 +1,6 @@
 import { SetupType } from '@prisma/client';
 import { Bar } from '../../../../common/types';
-import { averageBarSize, detectSwingPoints } from '../../primitives';
+import { averageBarSize, detectFractalPivots } from '../../primitives';
 import {
   IntradayDetector,
   DailyDetectorContext,
@@ -25,7 +25,7 @@ export class IntradayBaseDetector implements IntradayDetector {
     if (bars.length < 15) return null;
 
     const abs = averageBarSize(bars);
-    const swings = detectSwingPoints(bars, 5);
+    const swings = detectFractalPivots(bars, 5);
 
     if (swings.length === 0) return null;
 

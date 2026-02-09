@@ -1,6 +1,6 @@
 import { SetupType } from '@prisma/client';
 import { Bar } from '../../../../common/types';
-import { SwingPointResult, averageBarSize } from '../../primitives';
+import { SwingPointResult } from '../../primitives';
 import {
   DailyDetector,
   DailyDetectorContext,
@@ -8,21 +8,24 @@ import {
 } from '../detector.interface';
 
 /**
- * Undercut & Rally Detector (mirror of Double Top)
+ * Undercut & Rally Detector (Daily)
  *
- * Detects when price approaches a significant swing low support level
- * after a sudden drop, but holds above it (support holds).
+ * Pattern: price drops to a significant swing low (PriorLow),
+ * undercuts below it, then reclaims back above -- triggering a long
+ * entry on the intrabar reclaim.
  *
- * Criteria:
- *  1. NO Stage 2 requirement
- *  2. At least 2 swing lows
- *  3. Swing low must be "significant" — price departed above
- *     (swingLow + 2.5*ATR) within 10 bars after the low was set
- *  4. Current approach must be "sudden" — price was above
- *     (swingLow + 2.5*ATR) and dropped to within 1*ATR in the last 7 bars
- *  5. Latest bar low within 1 ABS of swing low (proximity test)
- *  6. Close above swing low (support held)
- *  7. Direction = LONG, pivot = swing low level
+ * BUILDING:
+ *   1. PriorLow = significant swing low (H-L-H sequence)
+ *   2. Price approaching PriorLow (within nearAtr * ATR)
+ *
+ * READY:
+ *   Low < PriorLow - undercutTol (undercut). pivotPrice = PriorLow
+ *
+ * TRIGGERED:
+ *   High > PriorLow after undercut (intrabar reclaim = LONG entry)
+ *
+ * VIOLATED:
+ *   Close < PriorLow - 2*ATR (keeps breaking lower)
  */
 export class UndercutRallyDetector implements DailyDetector {
   type = SetupType.UNDERCUT_RALLY;
@@ -34,72 +37,126 @@ export class UndercutRallyDetector implements DailyDetector {
   ): DetectedSetup | null {
     if (bars.length < 20) return null;
 
-    const swingLows = swingPoints.filter((p) => p.type === 'LOW');
-    if (swingLows.length < 2) return null;
+    const atr = context.atr14 ?? 0;
+    if (atr <= 0) return null;
 
-    const abs = averageBarSize(bars);
-    const atr = context.atr14 ?? abs; // fall back to ABS if no ATR
     const latestBar = bars[bars.length - 1];
+    const swingLows = swingPoints.filter((p) => p.type === 'LOW');
+    if (swingLows.length === 0) return null;
 
-    // Use the most recent swing low
-    const targetLow = swingLows[swingLows.length - 1];
+    // Parameters
+    const undercutTol = 0.2 * atr;
+    const nearAtr = 0.5;
 
-    // --- SIGNIFICANCE CHECK ---
-    // In the 10 bars after the swing low, at least one bar's low must be
-    // above (swingLow + 2.5 * ATR), proving the low was meaningful support
-    const sigLookEnd = Math.min(targetLow.index + 11, bars.length);
-    let isSignificant = false;
-    for (let j = targetLow.index + 1; j < sigLookEnd; j++) {
-      if (bars[j].low > targetLow.price + 2.5 * atr) {
-        isSignificant = true;
-        break;
+    // Try each significant swing low as PriorLow, starting from most recent
+    for (let k = swingLows.length - 1; k >= 0; k--) {
+      const priorLow = swingLows[k];
+
+      // Must have H-L-H structure: a swing high before AND after the low
+      const hasHighBefore = swingPoints.some(
+        (p) => p.type === 'HIGH' && p.index < priorLow.index,
+      );
+      const hasHighAfter = swingPoints.some(
+        (p) => p.type === 'HIGH' && p.index > priorLow.index,
+      );
+      if (!hasHighBefore || !hasHighAfter) continue;
+
+      // Must have at least a few bars since the low was set
+      const barsAfter = bars.length - 1 - priorLow.index;
+      if (barsAfter < 5) continue;
+
+      // Check undercut and reclaim on the latest bar
+      const hasUndercut = latestBar.low < priorLow.price - undercutTol;
+      const nearDistance = Math.abs(latestBar.low - priorLow.price);
+      const isNear = nearDistance <= nearAtr * atr;
+
+      if (!hasUndercut && !isNear) continue;
+
+      // --- State determination ---
+
+      // TRIGGERED: Low undercut AND High reclaimed above PriorLow
+      //            (intrabar reclaim on the same bar)
+      if (hasUndercut && latestBar.high > priorLow.price) {
+        const undercutLow = latestBar.low;
+        const stopPrice = undercutLow - 0.5 * atr;
+        const riskPerShare = priorLow.price - stopPrice;
+
+        return {
+          type: SetupType.UNDERCUT_RALLY,
+          direction: 'LONG',
+          timeframe: 'DAILY',
+          pivotPrice: priorLow.price,
+          stopPrice,
+          targetPrice:
+            riskPerShare > 0 ? priorLow.price + riskPerShare * 3 : undefined,
+          riskReward: 3,
+          evidence: [
+            'significant_swing_low',
+            'undercut_below_prior_low',
+            'intrabar_reclaim',
+          ],
+          metadata: {
+            priorLowPrice: priorLow.price,
+            priorLowIndex: priorLow.index,
+            undercutLow,
+            reclaimHigh: latestBar.high,
+            atrUsed: atr,
+            state: 'TRIGGERED',
+          },
+        };
       }
-    }
-    if (!isSignificant) return null;
 
-    // --- SUDDEN DROP CHECK ---
-    // Within the last 7 bars, at least one bar had its low above
-    // (swingLow + 2.5*ATR), AND the latest bar's low is within 1*ATR
-    // of the swing low — i.e. a fast drop to support
-    const recentStart = Math.max(0, bars.length - 7);
-    let wasFarAbove = false;
-    for (let j = recentStart; j < bars.length - 1; j++) {
-      if (bars[j].low > targetLow.price + 2.5 * atr) {
-        wasFarAbove = true;
-        break;
+      // READY: undercut happened but no reclaim yet
+      if (hasUndercut) {
+        const stopPrice = latestBar.low - 0.5 * atr;
+        const riskPerShare = priorLow.price - stopPrice;
+
+        return {
+          type: SetupType.UNDERCUT_RALLY,
+          direction: 'LONG',
+          timeframe: 'DAILY',
+          pivotPrice: priorLow.price,
+          stopPrice,
+          targetPrice:
+            riskPerShare > 0 ? priorLow.price + riskPerShare * 3 : undefined,
+          riskReward: 3,
+          evidence: [
+            'significant_swing_low',
+            'undercut_below_prior_low',
+          ],
+          waitingFor: 'intrabar_reclaim_above_prior_low',
+          metadata: {
+            priorLowPrice: priorLow.price,
+            priorLowIndex: priorLow.index,
+            undercutLow: latestBar.low,
+            atrUsed: atr,
+            state: 'READY',
+          },
+        };
       }
+
+      // BUILDING: approaching PriorLow but hasn't undercut yet
+      return {
+        type: SetupType.UNDERCUT_RALLY,
+        direction: 'LONG',
+        timeframe: 'DAILY',
+        pivotPrice: priorLow.price,
+        stopPrice: priorLow.price - 0.5 * atr,
+        evidence: [
+          'significant_swing_low',
+          'approaching_prior_low',
+        ],
+        waitingFor: 'undercut_below_prior_low',
+        metadata: {
+          priorLowPrice: priorLow.price,
+          priorLowIndex: priorLow.index,
+          nearCrossDistance: nearDistance,
+          atrUsed: atr,
+          state: 'BUILDING',
+        },
+      };
     }
-    if (!wasFarAbove) return null;
 
-    const nowNearLow = latestBar.low <= targetLow.price + 1 * atr;
-    if (!nowNearLow) return null;
-
-    // --- PROXIMITY: latest bar low within 1 ABS of swing low ---
-    const distFromLow = Math.abs(latestBar.low - targetLow.price);
-    if (distFromLow > abs) return null;
-
-    // --- HELD SUPPORT: close must be above the swing low ---
-    if (latestBar.close <= targetLow.price) return null;
-
-    const stopPrice = targetLow.price - abs;
-    const riskPerShare = latestBar.close - stopPrice;
-
-    return {
-      type: SetupType.UNDERCUT_RALLY,
-      direction: 'LONG',
-      timeframe: 'DAILY',
-      pivotPrice: targetLow.price,
-      stopPrice,
-      targetPrice:
-        riskPerShare > 0 ? latestBar.close + riskPerShare * 3 : undefined,
-      riskReward: 3,
-      evidence: ['significant_swing_low', 'sudden_drop', 'support_held'],
-      metadata: {
-        swingLowPrice: targetLow.price,
-        testLow: latestBar.low,
-        holdClose: latestBar.close,
-        atrUsed: atr,
-      },
-    };
+    return null;
   }
 }

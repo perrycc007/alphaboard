@@ -26,12 +26,12 @@ function chunk(arr, size) {
 }
 function getLastTradingDay() {
     const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const day = now.getDay();
+    now.setUTCHours(0, 0, 0, 0);
+    const day = now.getUTCDay();
     if (day === 0)
-        now.setDate(now.getDate() - 2);
+        now.setUTCDate(now.getUTCDate() - 2);
     else if (day === 6)
-        now.setDate(now.getDate() - 1);
+        now.setUTCDate(now.getUTCDate() - 1);
     return now;
 }
 let BackfillService = BackfillService_1 = class BackfillService {
@@ -45,7 +45,7 @@ let BackfillService = BackfillService_1 = class BackfillService {
     async getStocksNeedingSync() {
         const twoYearsAgo = new Date();
         twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-        twoYearsAgo.setHours(0, 0, 0, 0);
+        twoYearsAgo.setUTCHours(0, 0, 0, 0);
         const stocks = await this.prisma.stock.findMany({
             where: { isActive: true },
             select: {
@@ -74,7 +74,7 @@ let BackfillService = BackfillService_1 = class BackfillService {
             return { synced: 0, failed: 0 };
         }
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        today.setUTCHours(0, 0, 0, 0);
         const ordered = [
             ...tasks.filter((s) => s.isCurated),
             ...tasks.filter((s) => !s.isCurated),
@@ -109,9 +109,9 @@ let BackfillService = BackfillService_1 = class BackfillService {
         const indices = await this.prisma.indexEntity.findMany();
         const twoYearsAgo = new Date();
         twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-        twoYearsAgo.setHours(0, 0, 0, 0);
+        twoYearsAgo.setUTCHours(0, 0, 0, 0);
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        today.setUTCHours(0, 0, 0, 0);
         for (const index of indices) {
             try {
                 const latestBar = await this.prisma.indexDaily.findFirst({
@@ -190,7 +190,7 @@ exports.BackfillService = BackfillService = BackfillService_1 = __decorate([
 ], BackfillService);
 function addDays(date, days) {
     const result = new Date(date);
-    result.setDate(result.getDate() + days);
+    result.setUTCDate(result.getUTCDate() + days);
     return result;
 }
 //# sourceMappingURL=backfill.service.js.map

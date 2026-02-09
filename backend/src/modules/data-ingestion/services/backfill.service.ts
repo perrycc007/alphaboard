@@ -26,11 +26,11 @@ function chunk<T>(arr: T[], size: number): T[][] {
  */
 function getLastTradingDay(): Date {
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const day = now.getDay();
+  now.setUTCHours(0, 0, 0, 0);
+  const day = now.getUTCDay();
   // If Sunday (0), go back to Friday; if Saturday (6), go back to Friday
-  if (day === 0) now.setDate(now.getDate() - 2);
-  else if (day === 6) now.setDate(now.getDate() - 1);
+  if (day === 0) now.setUTCDate(now.getUTCDate() - 2);
+  else if (day === 6) now.setUTCDate(now.getUTCDate() - 1);
   return now;
 }
 
@@ -53,7 +53,7 @@ export class BackfillService {
   async getStocksNeedingSync(): Promise<StockSyncTask[]> {
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-    twoYearsAgo.setHours(0, 0, 0, 0);
+    twoYearsAgo.setUTCHours(0, 0, 0, 0);
 
     const stocks = await this.prisma.stock.findMany({
       where: { isActive: true },
@@ -93,7 +93,7 @@ export class BackfillService {
     }
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     // Priority: curated stocks first (so frontend has data ASAP)
     const ordered = [
@@ -149,9 +149,9 @@ export class BackfillService {
     const indices = await this.prisma.indexEntity.findMany();
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-    twoYearsAgo.setHours(0, 0, 0, 0);
+    twoYearsAgo.setUTCHours(0, 0, 0, 0);
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     for (const index of indices) {
       try {
@@ -253,6 +253,6 @@ export class BackfillService {
 
 function addDays(date: Date, days: number): Date {
   const result = new Date(date);
-  result.setDate(result.getDate() + days);
+  result.setUTCDate(result.getUTCDate() + days);
   return result;
 }

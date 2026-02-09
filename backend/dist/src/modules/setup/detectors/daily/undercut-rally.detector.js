@@ -15,6 +15,12 @@ class UndercutRallyDetector {
         const atr = context.atr14 ?? abs;
         const latestBar = bars[bars.length - 1];
         const targetLow = swingLows[swingLows.length - 1];
+        const hasHighBefore = swingPoints.some((p) => p.type === 'HIGH' && p.index < targetLow.index);
+        if (!hasHighBefore)
+            return null;
+        const hasHighAfter = swingPoints.some((p) => p.type === 'HIGH' && p.index > targetLow.index);
+        if (!hasHighAfter)
+            return null;
         const sigLookEnd = Math.min(targetLow.index + 11, bars.length);
         let isSignificant = false;
         for (let j = targetLow.index + 1; j < sigLookEnd; j++) {

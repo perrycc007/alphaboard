@@ -17,6 +17,12 @@ class DoubleTopDetector {
         const atr = context.atr14 ?? abs;
         const latestBar = bars[bars.length - 1];
         const targetHigh = swingHighs[swingHighs.length - 1];
+        const prevHigh = swingHighs[swingHighs.length - 2];
+        const hasLowBetween = swingPoints.some((p) => p.type === 'LOW' &&
+            p.index > prevHigh.index &&
+            p.index < targetHigh.index);
+        if (!hasLowBetween)
+            return null;
         const sigLookEnd = Math.min(targetHigh.index + 11, bars.length);
         let isSignificant = false;
         for (let j = targetHigh.index + 1; j < sigLookEnd; j++) {

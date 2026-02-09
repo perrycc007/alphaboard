@@ -1,6 +1,6 @@
 import { SetupType, Direction, Timeframe } from '@prisma/client';
 import { Bar } from '../../../common/types';
-import { SwingPointResult } from '../primitives';
+import { SwingPointResult, MarketRegime } from '../primitives';
 
 export interface DetectedSetup {
   type: SetupType;
@@ -30,6 +30,7 @@ export interface DailyDetectorContext {
   isStage2: boolean;
   sma50?: number;
   sma200?: number;
+  ema20?: number;
   atr14?: number;
   avgVolume?: number;
   dailyBaseId?: string;
@@ -46,6 +47,7 @@ export interface DailyDetectorContext {
     state: string;
     pivotPrice?: number;
   }>;
+  regime?: MarketRegime;
 }
 
 export interface IntradayDetector {

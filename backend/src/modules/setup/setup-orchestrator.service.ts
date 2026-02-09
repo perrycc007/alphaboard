@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SetupState, SetupType, Timeframe } from '@prisma/client';
 import { Bar } from '../../common/types';
-import { detectSwingPoints, averageBarSize } from './primitives';
+import {
+  detectSignificantSwingPoints,
+  averageBarSize,
+  detectMarketRegime,
+} from './primitives';
 import {
   DailyDetector,
   DailyDetectorContext,
@@ -17,14 +21,50 @@ import { HighTightFlagDetector } from './detectors/daily/high-tight-flag.detecto
 import { PullbackDetector } from './detectors/daily/pullback.detector';
 import { UndercutRallyDetector } from './detectors/daily/undercut-rally.detector';
 import { DoubleTopDetector } from './detectors/daily/double-top.detector';
+import { Ema20PullbackDetector } from './detectors/daily/ema20-pullback.detector';
+import { MaRallyFailureDetector } from './detectors/daily/ma-rally-failure.detector';
+import { Sma200KeyLevelDetector } from './detectors/daily/sma200-key-level.detector';
 import { IntradayBaseDetector } from './detectors/intraday/intraday-base.detector';
 import { Cross620Detector } from './detectors/intraday/cross620.detector';
 import { GapDetector } from './detectors/intraday/gap.detector';
 import { TiringDownDetector } from './detectors/intraday/tiring-down.detector';
+import { IntradayDoubleTopDetector } from './detectors/intraday/intraday-double-top.detector';
+import { IntradayUndercutRallyDetector } from './detectors/intraday/intraday-undercut-rally.detector';
 import {
   evaluateBar as evaluateConfirmation,
   BarContext,
 } from './confirmation/confirmation-engine';
+
+// ---------------------------------------------------------------------------
+// Scanner ranking scores
+// ---------------------------------------------------------------------------
+
+const TYPE_SCORES: Record<string, number> = {
+  EMA200_KEY_LEVEL: 100,
+  MA_RALLY_FAILURE: 80,
+  DOUBLE_TOP: 75,
+  UNDERCUT_RALLY: 75,
+  EMA20_PULLBACK: 60,
+  VCP: 55,
+  BREAKOUT_PIVOT: 50,
+  HIGH_TIGHT_FLAG: 50,
+  FAIL_BASE: 45,
+  FAIL_BREAKOUT: 45,
+  PULLBACK_BUY: 40,
+  INTRADAY_BASE: 30,
+  CROSS_620: 25,
+  GAP_UP: 20,
+  GAP_DOWN: 20,
+  TIRING_DOWN: 15,
+};
+
+function scoreSetup(setup: { type: string | SetupType }): number {
+  return TYPE_SCORES[setup.type] ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator
+// ---------------------------------------------------------------------------
 
 @Injectable()
 export class SetupOrchestratorService {
@@ -40,6 +80,9 @@ export class SetupOrchestratorService {
     new PullbackDetector(),
     new UndercutRallyDetector(),
     new DoubleTopDetector(),
+    new Ema20PullbackDetector(),
+    new MaRallyFailureDetector(),
+    new Sma200KeyLevelDetector(),
   ];
 
   private readonly intradayDetectors = [
@@ -47,12 +90,14 @@ export class SetupOrchestratorService {
     new Cross620Detector(),
     new GapDetector(),
     new TiringDownDetector(),
+    new IntradayDoubleTopDetector(),
+    new IntradayUndercutRallyDetector(),
   ];
 
   constructor(private readonly prisma: PrismaService) {}
 
   async runDailyDetection(stockId: string, bars: Bar[]): Promise<void> {
-    const swingPoints = detectSwingPoints(bars);
+    const swingPoints = detectSignificantSwingPoints(bars);
     const context = await this.buildDailyContext(stockId, bars);
 
     for (const detector of this.dailyDetectors) {
@@ -142,12 +187,38 @@ export class SetupOrchestratorService {
         ? bars.reduce((sum, b) => sum + b.volume, 0) / bars.length
         : 0;
 
+    const sma50 = latestDaily?.sma50 ? Number(latestDaily.sma50) : undefined;
+    const sma200 = latestDaily?.sma200 ? Number(latestDaily.sma200) : undefined;
+    const ema20 = latestDaily?.ema20 ? Number(latestDaily.ema20) : undefined;
+    const atr14 = latestDaily?.atr14 ? Number(latestDaily.atr14) : undefined;
+
+    const activeSetupsMapped = activeSetups.map((s) => ({
+      id: s.id,
+      type: s.type,
+      state: s.state,
+      pivotPrice: s.pivotPrice ? Number(s.pivotPrice) : undefined,
+    }));
+
+    // Compute market regime
+    const regime = detectMarketRegime({
+      bars,
+      ema20,
+      sma50,
+      sma200,
+      atr14,
+      activeSetups: activeSetupsMapped.map((s) => ({
+        type: s.type,
+        state: s.state,
+      })),
+    });
+
     return {
       stockId,
       isStage2: latestStage?.stage === 'STAGE_2',
-      sma50: latestDaily?.sma50 ? Number(latestDaily.sma50) : undefined,
-      sma200: latestDaily?.sma200 ? Number(latestDaily.sma200) : undefined,
-      atr14: latestDaily?.atr14 ? Number(latestDaily.atr14) : undefined,
+      sma50,
+      sma200,
+      ema20,
+      atr14,
       avgVolume,
       activeBases: activeBases.map((b) => ({
         id: b.id,
@@ -156,12 +227,8 @@ export class SetupOrchestratorService {
         pivotPrice: b.pivotPrice ? Number(b.pivotPrice) : undefined,
         status: b.status,
       })),
-      activeSetups: activeSetups.map((s) => ({
-        id: s.id,
-        type: s.type,
-        state: s.state,
-        pivotPrice: s.pivotPrice ? Number(s.pivotPrice) : undefined,
-      })),
+      activeSetups: activeSetupsMapped,
+      regime,
     };
   }
 
@@ -200,6 +267,8 @@ export class SetupOrchestratorService {
     if (bars.length === 0) return;
     const latestBar = bars[bars.length - 1];
     const abs = averageBarSize(bars);
+    const atr14 = bars.length > 0 ? (bars[bars.length - 1] as any).atr14 : undefined;
+    const atr = atr14 ?? abs;
     const proximityThreshold = 1.5 * abs;
 
     // Process BUILDING and READY setups
@@ -214,26 +283,89 @@ export class SetupOrchestratorService {
       let newState: SetupState | null = null;
       let stateReason: string | undefined;
 
-      // BUILDING -> READY: pivot price has been identified
-      if (setup.state === SetupState.BUILDING && setup.pivotPrice) {
-        newState = SetupState.READY;
-        stateReason = 'pivot_identified';
+      // --- Per-type state transitions for DOUBLE_TOP ---
+      if (
+        setup.type === SetupType.DOUBLE_TOP &&
+        setup.state === SetupState.BUILDING &&
+        setup.pivotPrice
+      ) {
+        const pivot = Number(setup.pivotPrice);
+        const breakTol = 0.1 * atr;
+        // BUILDING -> READY: High exceeds Top1 + breakTol
+        if (latestBar.high > pivot + breakTol) {
+          newState = SetupState.READY;
+          stateReason = 'top2_exceeded_top1';
+        }
       }
 
-      // READY -> TRIGGERED: price closed above pivot (LONG) or below pivot (SHORT)
-      if (setup.state === SetupState.READY && setup.pivotPrice) {
+      if (
+        setup.type === SetupType.DOUBLE_TOP &&
+        setup.state === SetupState.READY &&
+        setup.pivotPrice
+      ) {
         const pivot = Number(setup.pivotPrice);
-        if (setup.direction === 'LONG' && latestBar.close > pivot) {
+        // READY -> TRIGGERED: Low < Top1 (intrabar failure)
+        if (latestBar.low < pivot) {
           newState = SetupState.TRIGGERED;
-          stateReason = 'breakout_above_pivot';
-        } else if (setup.direction === 'SHORT' && latestBar.close < pivot) {
+          stateReason = 'intrabar_failure_below_top1';
+        }
+      }
+
+      // --- Per-type state transitions for UNDERCUT_RALLY ---
+      if (
+        setup.type === SetupType.UNDERCUT_RALLY &&
+        setup.state === SetupState.BUILDING &&
+        setup.pivotPrice
+      ) {
+        const pivot = Number(setup.pivotPrice);
+        const undercutTol = 0.2 * atr;
+        // BUILDING -> READY: Low undercuts PriorLow
+        if (latestBar.low < pivot - undercutTol) {
+          newState = SetupState.READY;
+          stateReason = 'undercut_below_prior_low';
+        }
+      }
+
+      if (
+        setup.type === SetupType.UNDERCUT_RALLY &&
+        setup.state === SetupState.READY &&
+        setup.pivotPrice
+      ) {
+        const pivot = Number(setup.pivotPrice);
+        // READY -> TRIGGERED: High > PriorLow (intrabar reclaim)
+        if (latestBar.high > pivot) {
           newState = SetupState.TRIGGERED;
-          stateReason = 'breakdown_below_pivot';
+          stateReason = 'intrabar_reclaim_above_prior_low';
+        }
+      }
+
+      // --- Generic transitions (non-DT/U&R types) ---
+      if (
+        !newState &&
+        setup.type !== SetupType.DOUBLE_TOP &&
+        setup.type !== SetupType.UNDERCUT_RALLY
+      ) {
+        // BUILDING -> READY: pivot price has been identified
+        if (setup.state === SetupState.BUILDING && setup.pivotPrice) {
+          newState = SetupState.READY;
+          stateReason = 'pivot_identified';
+        }
+
+        // READY -> TRIGGERED: price closed above pivot (LONG) or below pivot (SHORT)
+        if (setup.state === SetupState.READY && setup.pivotPrice) {
+          const pivot = Number(setup.pivotPrice);
+          if (setup.direction === 'LONG' && latestBar.close > pivot) {
+            newState = SetupState.TRIGGERED;
+            stateReason = 'breakout_above_pivot';
+          } else if (setup.direction === 'SHORT' && latestBar.close < pivot) {
+            newState = SetupState.TRIGGERED;
+            stateReason = 'breakdown_below_pivot';
+          }
         }
       }
 
       // VIOLATED: price closed beyond stop price with ABS buffer
-      if (setup.stopPrice) {
+      if (!newState && setup.stopPrice) {
         const stop = Number(setup.stopPrice);
         if (setup.direction === 'LONG' && latestBar.close < stop - abs) {
           newState = SetupState.VIOLATED;
@@ -255,17 +387,12 @@ export class SetupOrchestratorService {
           setup.state === SetupState.READY)
       ) {
         const pivot = Number(setup.pivotPrice);
-        const distFromPivot = Math.abs(latestBar.close - pivot);
-        if (distFromPivot > proximityThreshold) {
-          // For LONG setups that dropped far below pivot, expire
-          // For SHORT setups that rallied far above pivot, expire
-          const priceMovedAway =
-            (setup.direction === 'LONG' && latestBar.close < pivot - proximityThreshold) ||
-            (setup.direction === 'SHORT' && latestBar.close > pivot + proximityThreshold);
-          if (priceMovedAway) {
-            newState = SetupState.EXPIRED;
-            stateReason = 'expired_distance';
-          }
+        const priceMovedAway =
+          (setup.direction === 'LONG' && latestBar.close < pivot - proximityThreshold) ||
+          (setup.direction === 'SHORT' && latestBar.close > pivot + proximityThreshold);
+        if (priceMovedAway) {
+          newState = SetupState.EXPIRED;
+          stateReason = 'expired_distance';
         }
       }
 
@@ -366,7 +493,7 @@ export class SetupOrchestratorService {
     direction?: string;
     timeframe?: Timeframe;
   }) {
-    return this.prisma.setup.findMany({
+    const setups = await this.prisma.setup.findMany({
       where: {
         state: {
           in: [
@@ -383,6 +510,13 @@ export class SetupOrchestratorService {
       },
       include: { stock: true },
       orderBy: { detectedAt: 'desc' },
+    });
+
+    // Sort by scanner ranking score (descending), then by detectedAt (descending)
+    return setups.sort((a, b) => {
+      const scoreDiff = scoreSetup(b) - scoreSetup(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      return b.detectedAt.getTime() - a.detectedAt.getTime();
     });
   }
 
@@ -441,7 +575,7 @@ export class SetupOrchestratorService {
       const latestBar = windowBars[windowBars.length - 1];
       const abs = averageBarSize(windowBars);
 
-      const swingPoints = detectSwingPoints(windowBars);
+      const swingPoints = detectSignificantSwingPoints(windowBars);
 
       // Compute isStage2 from real SMA data
       const sma50 = dailyBars[i - 1]?.sma50
@@ -460,24 +594,45 @@ export class SetupOrchestratorService {
         ? Number(dailyBars[i - 1].atr14)
         : undefined;
 
+      const ema20 = dailyBars[i - 1]?.ema20
+        ? Number(dailyBars[i - 1].ema20)
+        : undefined;
+
+      const activeSetupsMapped = activeSimSetups
+        .filter((s) => s.state === 'BUILDING' || s.state === 'READY' || s.state === 'TRIGGERED')
+        .map((s) => ({
+          id: s.id,
+          type: s.type as SetupType,
+          state: s.state,
+          pivotPrice: s.pivotPrice ?? undefined,
+        }));
+
+      // Compute regime for simulation
+      const regime = detectMarketRegime({
+        bars: windowBars,
+        ema20,
+        sma50,
+        sma200,
+        atr14,
+        activeSetups: activeSetupsMapped.map((s) => ({
+          type: s.type,
+          state: s.state,
+        })),
+      });
+
       const simContext: DailyDetectorContext = {
         stockId: stock.id,
         isStage2,
         sma50,
         sma200,
+        ema20,
         atr14,
         avgVolume:
           windowBars.reduce((sum, b) => sum + b.volume, 0) /
           windowBars.length,
         activeBases: [],
-        activeSetups: activeSimSetups
-          .filter((s) => s.state === 'BUILDING' || s.state === 'READY')
-          .map((s) => ({
-            id: s.id,
-            type: s.type as SetupType,
-            state: s.state,
-            pivotPrice: s.pivotPrice ?? undefined,
-          })),
+        activeSetups: activeSetupsMapped,
+        regime,
       };
 
       // Run detectors
@@ -536,13 +691,69 @@ export class SetupOrchestratorService {
       }
 
       // Update states of active simulated setups
+      const atrSim = atr14 ?? abs;
       for (const setup of activeSimSetups) {
         if (setup.state === 'EXPIRED' || setup.state === 'VIOLATED') continue;
 
         const dateStr = latestBar.date?.toISOString() ?? '';
 
-        // READY -> TRIGGERED with entry/stop calculation
-        if (setup.state === 'READY' && setup.pivotPrice) {
+        // --- Per-type transitions for DOUBLE_TOP in simulation ---
+        if (setup.type === ('DOUBLE_TOP' as SetupType) && setup.state === 'BUILDING' && setup.pivotPrice) {
+          const breakTol = 0.1 * atrSim;
+          if (latestBar.high > setup.pivotPrice + breakTol) {
+            setup.state = 'READY';
+            setup.stateHistory.push({ state: 'READY', date: dateStr });
+            continue;
+          }
+        }
+
+        if (setup.type === ('DOUBLE_TOP' as SetupType) && setup.state === 'READY' && setup.pivotPrice) {
+          if (latestBar.low < setup.pivotPrice) {
+            setup.state = 'TRIGGERED';
+            setup.entryPrice = setup.pivotPrice;
+            setup.entryDate = dateStr;
+            setup.actualStopPrice = setup.stopPrice;
+            setup.riskAmount =
+              setup.entryPrice != null && setup.actualStopPrice != null
+                ? Math.abs(setup.entryPrice - setup.actualStopPrice)
+                : null;
+            setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+            continue;
+          }
+        }
+
+        // --- Per-type transitions for UNDERCUT_RALLY in simulation ---
+        if (setup.type === ('UNDERCUT_RALLY' as SetupType) && setup.state === 'BUILDING' && setup.pivotPrice) {
+          const undercutTol = 0.2 * atrSim;
+          if (latestBar.low < setup.pivotPrice - undercutTol) {
+            setup.state = 'READY';
+            setup.stateHistory.push({ state: 'READY', date: dateStr });
+            continue;
+          }
+        }
+
+        if (setup.type === ('UNDERCUT_RALLY' as SetupType) && setup.state === 'READY' && setup.pivotPrice) {
+          if (latestBar.high > setup.pivotPrice) {
+            setup.state = 'TRIGGERED';
+            setup.entryPrice = setup.pivotPrice;
+            setup.entryDate = dateStr;
+            setup.actualStopPrice = setup.stopPrice;
+            setup.riskAmount =
+              setup.entryPrice != null && setup.actualStopPrice != null
+                ? Math.abs(setup.entryPrice - setup.actualStopPrice)
+                : null;
+            setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+            continue;
+          }
+        }
+
+        // --- Generic READY -> TRIGGERED ---
+        if (
+          setup.state === 'READY' &&
+          setup.pivotPrice &&
+          setup.type !== ('DOUBLE_TOP' as SetupType) &&
+          setup.type !== ('UNDERCUT_RALLY' as SetupType)
+        ) {
           const triggered =
             (setup.direction === 'LONG' &&
               latestBar.close > setup.pivotPrice) ||
@@ -703,12 +914,15 @@ const BREAKOUT_TYPES: SetupType[] = [
   'BREAKOUT_PIVOT' as SetupType,
   'HIGH_TIGHT_FLAG' as SetupType,
   'PULLBACK_BUY' as SetupType,
+  'EMA20_PULLBACK' as SetupType,
 ];
 const REVERSAL_TYPES: SetupType[] = [
   'UNDERCUT_RALLY' as SetupType,
   'DOUBLE_TOP' as SetupType,
   'FAIL_BASE' as SetupType,
   'FAIL_BREAKOUT' as SetupType,
+  'MA_RALLY_FAILURE' as SetupType,
+  'EMA200_KEY_LEVEL' as SetupType,
 ];
 
 export interface SimulatedSetup {

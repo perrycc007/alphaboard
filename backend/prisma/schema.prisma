@@ -296,6 +296,10 @@ enum SetupType {
   PULLBACK_BUY
   UNDERCUT_RALLY
   DOUBLE_TOP
+  MA_TOUCH // kept for backward compat (existing DB rows)
+  EMA20_PULLBACK
+  MA_RALLY_FAILURE
+  EMA200_KEY_LEVEL
   // Intraday setups
   INTRADAY_BASE
   CROSS_620

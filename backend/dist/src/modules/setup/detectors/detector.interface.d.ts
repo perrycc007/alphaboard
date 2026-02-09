@@ -23,6 +23,7 @@ export interface DailyDetectorContext {
     isStage2: boolean;
     sma50?: number;
     sma200?: number;
+    ema20?: number;
     atr14?: number;
     avgVolume?: number;
     dailyBaseId?: string;

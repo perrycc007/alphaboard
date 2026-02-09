@@ -10,6 +10,7 @@ const SETUP_CONFIG: Record<SetupType, { label: string; color: string }> = {
   HIGH_TIGHT_FLAG: { label: 'HTF', color: 'bg-setup-htf/15 text-setup-htf border-setup-htf/25' },
   UNDERCUT_RALLY: { label: 'U&R', color: 'bg-setup-undercut/15 text-setup-undercut border-setup-undercut/25' },
   DOUBLE_TOP: { label: 'Dbl Top', color: 'bg-setup-double-top/15 text-setup-double-top border-setup-double-top/25' },
+  MA_TOUCH: { label: 'MA Touch', color: 'bg-setup-pullback/15 text-setup-pullback border-setup-pullback/25' },
   FAIL_BREAKOUT: { label: 'Fail BO', color: 'bg-setup-fail/15 text-setup-fail border-setup-fail/25' },
   FAIL_BASE: { label: 'Fail Base', color: 'bg-setup-fail/15 text-setup-fail border-setup-fail/25' },
   INTRADAY_BASE: { label: 'ID Base', color: 'bg-setup-intraday-base/15 text-setup-intraday-base border-setup-intraday-base/25' },

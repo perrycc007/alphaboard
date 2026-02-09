@@ -1,11 +1,11 @@
-import { useState, useCallback } from 'react'
-import { Search, Play, Loader2, BarChart3, AlertTriangle } from 'lucide-react'
+import { useState, useCallback, useMemo } from 'react'
+import { Search, Play, Loader2, BarChart3, AlertTriangle, Filter } from 'lucide-react'
 import { fetchSimulatedSetups, type SimulatedSetup } from '@/lib/api/setups'
 import { fetchStockDaily } from '@/lib/api/stocks'
 import { StockChart } from '@/components/StockChart'
 import { SetupTypeBadge, DirectionBadge, LoadingSkeleton, SkeletonGroup } from '@/components/shared'
 import { cn, formatPrice } from '@/lib/utils'
-import type { ApiStockDaily, ApiSetup } from '@/types'
+import type { ApiStockDaily, ApiSetup, SetupType } from '@/types'
 
 /** Convert SimulatedSetup to ApiSetup shape for the chart component */
 function toChartSetup(s: SimulatedSetup): ApiSetup {
@@ -140,16 +140,100 @@ export default function Simulate() {
     [runSimulation],
   )
 
-  const stats = setups.length > 0 ? computeStats(setups) : null
+  // Setup type filter state
+  const [hiddenSetupTypes, setHiddenSetupTypes] = useState<Set<SetupType>>(new Set())
 
-  // All triggered setups for the chart (no arbitrary limit)
-  const chartSetups = setups
+  // Deduplicate setups: group by type+pivotPrice, keep best signal per group
+  const deduplicatedSetups = useMemo(() => {
+    if (setups.length === 0 || dailyBars.length === 0) return setups
+
+    const groups = new Map<string, SimulatedSetup[]>()
+    for (const setup of setups) {
+      if (setup.pivotPrice == null) {
+        // No pivot — keep as-is (unique group)
+        groups.set(`no-pivot-${setup.id}`, [setup])
+        continue
+      }
+      const key = `${setup.type}:${setup.pivotPrice}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(setup)
+    }
+
+    const result: SimulatedSetup[] = []
+    for (const [, group] of groups) {
+      if (group.length === 1) {
+        result.push(group[0])
+        continue
+      }
+
+      // Find bars for each setup's detectedAt date
+      const setupsWithBars = group
+        .map((s) => {
+          const detectedDate = s.detectedAt.slice(0, 10)
+          const bar = dailyBars.find((b) => b.date.slice(0, 10) === detectedDate)
+          return { setup: s, bar }
+        })
+        .filter((item) => item.bar != null)
+
+      if (setupsWithBars.length === 0) {
+        result.push(group[0])
+        continue
+      }
+
+      const firstSetup = setupsWithBars[0].setup
+      if (firstSetup.direction === 'SHORT') {
+        // SHORT: pick setup with lowest bar.low
+        const best = setupsWithBars.reduce((acc, cur) =>
+          cur.bar!.low < acc.bar!.low ? cur : acc,
+        )
+        result.push(best.setup)
+      } else {
+        // LONG: pick setup with highest bar.high
+        const best = setupsWithBars.reduce((acc, cur) =>
+          cur.bar!.high > acc.bar!.high ? cur : acc,
+        )
+        result.push(best.setup)
+      }
+    }
+    return result
+  }, [setups, dailyBars])
+
+  // Apply type filter
+  const filteredSetups = useMemo(() => {
+    return deduplicatedSetups.filter((s) => !hiddenSetupTypes.has(s.type as SetupType))
+  }, [deduplicatedSetups, hiddenSetupTypes])
+
+  // Get unique setup types for filter UI
+  const availableSetupTypes = useMemo(() => {
+    const types = new Set<SetupType>()
+    for (const s of deduplicatedSetups) {
+      types.add(s.type as SetupType)
+    }
+    return Array.from(types).sort()
+  }, [deduplicatedSetups])
+
+  const toggleSetupType = (type: SetupType) => {
+    setHiddenSetupTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(type)) {
+        next.delete(type)
+      } else {
+        next.add(type)
+      }
+      return next
+    })
+  }
+
+  const stats = filteredSetups.length > 0 ? computeStats(filteredSetups) : null
+
+  // All triggered setups for the chart
+  const chartSetups = filteredSetups
     .filter((s) => s.entryDate != null)
     .map(toChartSetup)
 
   // Triggered setups for the trade table
-  const triggeredSetups = setups.filter((s) => s.entryDate != null)
-  const neverTriggered = setups.length - triggeredSetups.length
+  const triggeredSetups = filteredSetups.filter((s) => s.entryDate != null)
+  const neverTriggered = filteredSetups.length - triggeredSetups.length
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -218,6 +302,27 @@ export default function Simulate() {
       {/* Results */}
       {!loading && hasRun && !error && (
         <>
+          {/* Setup type filter */}
+          {availableSetupTypes.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Filter className="h-3.5 w-3.5 text-text-muted" />
+              {availableSetupTypes.map((type) => (
+                <button
+                  key={type}
+                  onClick={() => toggleSetupType(type)}
+                  className={cn(
+                    'cursor-pointer rounded-full border border-border-default px-2 py-0.5 text-[10px] font-medium transition-opacity sm:text-xs',
+                    hiddenSetupTypes.has(type)
+                      ? 'opacity-40 line-through'
+                      : 'bg-bg-elevated text-text-primary',
+                  )}
+                >
+                  {type.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Chart */}
           {dailyBars.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-border-default bg-bg-surface p-3 sm:p-4">

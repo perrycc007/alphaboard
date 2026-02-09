@@ -1,10 +1,10 @@
-import { useEffect, useRef, useMemo } from 'react'
-import { X, TrendingUp, TrendingDown, AlertCircle, Clock, BarChart2 } from 'lucide-react'
+import { useEffect, useRef, useMemo, useState } from 'react'
+import { X, TrendingUp, TrendingDown, AlertCircle, Clock, BarChart2, Filter } from 'lucide-react'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { useStockDetailStore } from '@/stores/useStockDetailStore'
 import { useSetupStore } from '@/stores/useSetupStore'
 import { parseStageToNumber } from '@/types'
-import type { ApiBarEvidence, ApiSetup, ApiStageHistory } from '@/types'
+import type { ApiBarEvidence, ApiSetup, ApiStageHistory, SetupType } from '@/types'
 import { StageTag, SetupTypeBadge, DirectionBadge, LoadingSkeleton, SkeletonGroup } from '@/components/shared'
 import { StockChart } from '@/components/StockChart'
 import { cn, formatPrice, formatCompactNumber, formatPercent } from '@/lib/utils'
@@ -56,7 +56,92 @@ export function SlidePanel() {
 
   // Get setups for this ticker (client-side filter from global setup store)
   const getSetupsForTicker = useSetupStore((s) => s.getSetupsForTicker)
-  const tickerSetups = useMemo(() => (ticker ? getSetupsForTicker(ticker) : []), [ticker, getSetupsForTicker])
+  const rawTickerSetups = useMemo(() => (ticker ? getSetupsForTicker(ticker) : []), [ticker, getSetupsForTicker])
+
+  // Setup type filter state
+  const [hiddenSetupTypes, setHiddenSetupTypes] = useState<Set<SetupType>>(new Set())
+
+  // Deduplicate setups: group by type+pivotPrice, pick best one per group
+  const deduplicatedSetups = useMemo(() => {
+    if (rawTickerSetups.length === 0 || dailyBars.length === 0) return []
+
+    // Group setups by type and pivotPrice (within 0.1% tolerance)
+    const groups = new Map<string, ApiSetup[]>()
+    for (const setup of rawTickerSetups) {
+      if (setup.pivotPrice == null) continue
+      const key = `${setup.type}:${Math.round(setup.pivotPrice * 1000) / 1000}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(setup)
+    }
+
+    // For each group, pick the best setup
+    const result: ApiSetup[] = []
+    for (const [_, group] of groups) {
+      if (group.length === 1) {
+        result.push(group[0])
+        continue
+      }
+
+      // Find bars for each setup's detectedAt date
+      const setupsWithBars = group
+        .map((setup) => {
+          const detectedDate = setup.detectedAt.slice(0, 10)
+          const bar = dailyBars.find((b) => b.date.slice(0, 10) === detectedDate)
+          return { setup, bar }
+        })
+        .filter((item) => item.bar != null)
+
+      if (setupsWithBars.length === 0) {
+        // Fallback: pick first setup if no bars found
+        result.push(group[0])
+        continue
+      }
+
+      // Pick best setup based on direction
+      const firstSetup = setupsWithBars[0].setup
+      if (firstSetup.direction === 'SHORT') {
+        // SHORT: pick setup with lowest bar.low
+        const best = setupsWithBars.reduce((best, current) =>
+          current.bar!.low < best.bar!.low ? current : best,
+        )
+        result.push(best.setup)
+      } else {
+        // LONG: pick setup with highest bar.high (or first if tied)
+        const best = setupsWithBars.reduce((best, current) =>
+          current.bar!.high > best.bar!.high ? current : best,
+        )
+        result.push(best.setup)
+      }
+    }
+
+    return result
+  }, [rawTickerSetups, dailyBars])
+
+  // Apply type filter
+  const filteredSetups = useMemo(() => {
+    return deduplicatedSetups.filter((setup) => !hiddenSetupTypes.has(setup.type))
+  }, [deduplicatedSetups, hiddenSetupTypes])
+
+  // Get unique setup types for filter UI
+  const availableSetupTypes = useMemo(() => {
+    const types = new Set<SetupType>()
+    for (const setup of deduplicatedSetups) {
+      types.add(setup.type)
+    }
+    return Array.from(types).sort()
+  }, [deduplicatedSetups])
+
+  const toggleSetupType = (type: SetupType) => {
+    setHiddenSetupTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(type)) {
+        next.delete(type)
+      } else {
+        next.add(type)
+      }
+      return next
+    })
+  }
 
   const latestBar = dailyBars.length > 0 ? dailyBars[0] : null
   const latestStage = stock?.stages?.[0]
@@ -151,19 +236,40 @@ export function SlidePanel() {
                 </div>
               ) : null}
 
+              {/* Setup type filter */}
+              {availableSetupTypes.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Filter className="h-3.5 w-3.5 text-text-muted" />
+                  {availableSetupTypes.map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => toggleSetupType(type)}
+                      className={cn(
+                        'cursor-pointer rounded-full border border-border-default px-2 py-0.5 text-[10px] font-medium transition-opacity sm:text-xs',
+                        hiddenSetupTypes.has(type)
+                          ? 'opacity-40 line-through'
+                          : 'bg-bg-elevated text-text-primary',
+                      )}
+                    >
+                      {type.replace(/_/g, ' ')}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Chart */}
               <StockChart
                 dailyBars={dailyBars}
                 spyBars={spyBars}
-                setups={tickerSetups}
+                setups={filteredSetups}
                 height={300}
               />
 
               {/* Active Setups */}
-              {tickerSetups.length > 0 ? (
+              {filteredSetups.length > 0 ? (
                 <Section title="Active Setups" icon={<TrendingUp className="h-3.5 w-3.5" />}>
                   <div className="space-y-2">
-                    {tickerSetups.map((setup) => (
+                    {filteredSetups.map((setup) => (
                       <SetupCard key={setup.id} setup={setup} />
                     ))}
                   </div>
@@ -193,9 +299,9 @@ export function SlidePanel() {
               ) : null}
 
               {/* Key Levels */}
-              {(tickerSetups.length > 0 || latestBar) ? (
+              {(filteredSetups.length > 0 || latestBar) ? (
                 <Section title="Key Levels" icon={<BarChart2 className="h-3.5 w-3.5" />}>
-                  <KeyLevels setups={tickerSetups} latestBar={latestBar} />
+                  <KeyLevels setups={filteredSetups} latestBar={latestBar} />
                 </Section>
               ) : null}
 

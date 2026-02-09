@@ -35,6 +35,11 @@ export class YFinanceProvider implements MarketDataProvider {
     to: Date,
   ): Promise<DailyBarData[]> {
     try {
+      // Guard: skip if from >= to (can happen due to timezone edge cases)
+      if (from >= to) {
+        return [];
+      }
+
       const result = await withTimeout(
         this.yf.historical(ticker, {
           period1: from,

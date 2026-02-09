@@ -1,6 +1,6 @@
 import { SetupType } from '@prisma/client';
 import { Bar } from '../../../../common/types';
-import { SwingPointResult, detectSwingPoints } from '../../primitives';
+import { SwingPointResult, detectFractalPivots } from '../../primitives';
 import {
   DailyDetector,
   DailyDetectorContext,
@@ -44,7 +44,7 @@ export class VcpDetector implements DailyDetector {
     if (baseBars.length < 20) return null;
 
     // Detect swing points within the base
-    const baseSwings = detectSwingPoints(baseBars, 5);
+    const baseSwings = detectFractalPivots(baseBars, 5);
     const highs = baseSwings.filter((s) => s.type === 'HIGH');
     const lows = baseSwings.filter((s) => s.type === 'LOW');
 

@@ -24,6 +24,7 @@ const high_tight_flag_detector_1 = require("./detectors/daily/high-tight-flag.de
 const pullback_detector_1 = require("./detectors/daily/pullback.detector");
 const undercut_rally_detector_1 = require("./detectors/daily/undercut-rally.detector");
 const double_top_detector_1 = require("./detectors/daily/double-top.detector");
+const ma_touch_detector_1 = require("./detectors/daily/ma-touch.detector");
 const intraday_base_detector_1 = require("./detectors/intraday/intraday-base.detector");
 const cross620_detector_1 = require("./detectors/intraday/cross620.detector");
 const gap_detector_1 = require("./detectors/intraday/gap.detector");
@@ -42,6 +43,7 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         new pullback_detector_1.PullbackDetector(),
         new undercut_rally_detector_1.UndercutRallyDetector(),
         new double_top_detector_1.DoubleTopDetector(),
+        new ma_touch_detector_1.MaTouchDetector(),
     ];
     intradayDetectors = [
         new intraday_base_detector_1.IntradayBaseDetector(),
@@ -124,6 +126,7 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
             isStage2: latestStage?.stage === 'STAGE_2',
             sma50: latestDaily?.sma50 ? Number(latestDaily.sma50) : undefined,
             sma200: latestDaily?.sma200 ? Number(latestDaily.sma200) : undefined,
+            ema20: latestDaily?.ema20 ? Number(latestDaily.ema20) : undefined,
             atr14: latestDaily?.atr14 ? Number(latestDaily.atr14) : undefined,
             avgVolume,
             activeBases: activeBases.map((b) => ({
@@ -373,11 +376,15 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
             const atr14 = dailyBars[i - 1]?.atr14
                 ? Number(dailyBars[i - 1].atr14)
                 : undefined;
+            const ema20 = dailyBars[i - 1]?.ema20
+                ? Number(dailyBars[i - 1].ema20)
+                : undefined;
             const simContext = {
                 stockId: stock.id,
                 isStage2,
                 sma50,
                 sma200,
+                ema20,
                 atr14,
                 avgVolume: windowBars.reduce((sum, b) => sum + b.volume, 0) /
                     windowBars.length,
