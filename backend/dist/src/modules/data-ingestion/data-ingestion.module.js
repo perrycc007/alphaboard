@@ -16,6 +16,12 @@ const stage_recalc_job_1 = require("./jobs/stage-recalc.job");
 const breadth_sync_job_1 = require("./jobs/breadth-sync.job");
 const setup_scan_job_1 = require("./jobs/setup-scan.job");
 const cleanup_job_1 = require("./jobs/cleanup.job");
+const ticker_discovery_service_1 = require("./services/ticker-discovery.service");
+const indicator_service_1 = require("./services/indicator.service");
+const rs_rank_service_1 = require("./services/rs-rank.service");
+const backfill_service_1 = require("./services/backfill.service");
+const pipeline_service_1 = require("./services/pipeline.service");
+const data_ingestion_controller_1 = require("./data-ingestion.controller");
 const setup_module_1 = require("../setup/setup.module");
 const alert_module_1 = require("../alert/alert.module");
 const stock_module_1 = require("../stock/stock.module");
@@ -25,9 +31,15 @@ exports.DataIngestionModule = DataIngestionModule;
 exports.DataIngestionModule = DataIngestionModule = __decorate([
     (0, common_1.Module)({
         imports: [setup_module_1.SetupModule, alert_module_1.AlertModule, stock_module_1.StockModule],
+        controllers: [data_ingestion_controller_1.DataIngestionController],
         providers: [
             yfinance_provider_1.YFinanceProvider,
             polygon_provider_1.PolygonProvider,
+            ticker_discovery_service_1.TickerDiscoveryService,
+            indicator_service_1.IndicatorService,
+            rs_rank_service_1.RsRankService,
+            backfill_service_1.BackfillService,
+            pipeline_service_1.PipelineService,
             daily_sync_job_1.DailySyncJob,
             intraday_sync_job_1.IntradaySyncJob,
             stage_recalc_job_1.StageRecalcJob,
@@ -35,7 +47,7 @@ exports.DataIngestionModule = DataIngestionModule = __decorate([
             setup_scan_job_1.SetupScanJob,
             cleanup_job_1.CleanupJob,
         ],
-        exports: [yfinance_provider_1.YFinanceProvider, polygon_provider_1.PolygonProvider],
+        exports: [yfinance_provider_1.YFinanceProvider, polygon_provider_1.PolygonProvider, pipeline_service_1.PipelineService],
     })
 ], DataIngestionModule);
 //# sourceMappingURL=data-ingestion.module.js.map

@@ -36,12 +36,14 @@ async function main() {
                 sector: stock.sector,
                 industry: stock.industry,
                 exchange: stock.exchange,
+                isCurated: true,
             },
             update: {
                 name: stock.name,
                 sector: stock.sector,
                 industry: stock.industry,
                 exchange: stock.exchange,
+                isCurated: true,
             },
         });
         stockMap.set(stock.ticker, created.id);

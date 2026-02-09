@@ -60,6 +60,8 @@ export declare class ThemeController {
                     exchange: string | null;
                     avgVolume: bigint | null;
                     marketCap: bigint | null;
+                    isCurated: boolean;
+                    lastSyncDate: Date | null;
                     isActive: boolean;
                     createdAt: Date;
                     updatedAt: Date;

@@ -1,10 +1,12 @@
 import { Controller, Post, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { PipelineService } from './services/pipeline.service';
 
 /**
  * Manual pipeline trigger and status endpoints.
  */
-@Controller('pipeline')
+@Controller('api/pipeline')
+@AllowAnonymous()
 export class DataIngestionController {
   constructor(private readonly pipelineService: PipelineService) {}
 

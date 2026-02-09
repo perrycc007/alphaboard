@@ -6,4 +6,5 @@ export declare class SetupScanJob {
     private readonly logger;
     constructor(prisma: PrismaService, orchestrator: SetupOrchestratorService);
     run(): Promise<void>;
+    private getSetupCandidates;
 }

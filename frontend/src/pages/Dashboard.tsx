@@ -14,10 +14,22 @@ import { cn, formatPrice, formatPercent, formatRMultiple, formatCompactNumber } 
 import { Link } from 'react-router-dom'
 
 export default function Dashboard() {
-  const { overview, loading: marketLoading, fetchOverview } = useMarketStore()
-  const { themes, loading: themesLoading, fetchThemes } = useThemeStore()
-  const { positions, loading: positionsLoading, fetchPositions } = useTradeStore()
-  const { dailySetups, loading: setupsLoading, fetchDailySetups } = useSetupStore()
+  const overview = useMarketStore((s) => s.overview)
+  const marketLoading = useMarketStore((s) => s.loading)
+  const fetchOverview = useMarketStore((s) => s.fetchOverview)
+
+  const themes = useThemeStore((s) => s.themes)
+  const themesLoading = useThemeStore((s) => s.loading)
+  const fetchThemes = useThemeStore((s) => s.fetchThemes)
+
+  const positions = useTradeStore((s) => s.positions)
+  const positionsLoading = useTradeStore((s) => s.loading)
+  const fetchPositions = useTradeStore((s) => s.fetchPositions)
+
+  const dailySetups = useSetupStore((s) => s.dailySetups)
+  const setupsLoading = useSetupStore((s) => s.loading)
+  const fetchDailySetups = useSetupStore((s) => s.fetchDailySetups)
+
   const openPanel = useSlidePanelStore((s) => s.openPanel)
 
   // Fetch all dashboard data in parallel on mount

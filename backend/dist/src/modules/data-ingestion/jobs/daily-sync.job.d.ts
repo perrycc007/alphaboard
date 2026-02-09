@@ -1,9 +1,7 @@
-import { PrismaService } from '../../../prisma/prisma.service';
-import { YFinanceProvider } from '../providers/yfinance.provider';
+import { PipelineService } from '../services/pipeline.service';
 export declare class DailySyncJob {
-    private readonly prisma;
-    private readonly yfinance;
+    private readonly pipelineService;
     private readonly logger;
-    constructor(prisma: PrismaService, yfinance: YFinanceProvider);
+    constructor(pipelineService: PipelineService);
     run(): Promise<void>;
 }

@@ -26,6 +26,9 @@ export class IntradaySyncJob {
 
   @Cron('*/5 9-16 * * 1-5') // Every 5 min, 9 AM - 4 PM, weekdays
   async run(): Promise<void> {
+    // Skip entirely if Polygon is not configured (no API key)
+    if (!this.polygon.isConfigured()) return;
+
     const stocks = await this.prisma.stock.findMany({
       where: { isActive: true },
       select: { id: true, ticker: true },

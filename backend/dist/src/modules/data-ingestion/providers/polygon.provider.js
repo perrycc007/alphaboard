@@ -23,6 +23,9 @@ let PolygonProvider = PolygonProvider_1 = class PolygonProvider {
         this.apiKey = this.configService.get('polygon.apiKey', '');
         this.restUrl = this.configService.get('polygon.restUrl', 'https://api.polygon.io');
     }
+    isConfigured() {
+        return !!this.apiKey;
+    }
     async fetchIntradayBars(ticker, date) {
         this.logger.log(`Fetching intraday bars for ${ticker} on ${date.toISOString().slice(0, 10)}`);
         if (!this.apiKey) {

@@ -6,5 +6,6 @@ export declare class PolygonProvider implements IntradayDataProvider {
     private readonly apiKey;
     private readonly restUrl;
     constructor(configService: ConfigService);
+    isConfigured(): boolean;
     fetchIntradayBars(ticker: string, date: Date): Promise<IntradayBarData[]>;
 }

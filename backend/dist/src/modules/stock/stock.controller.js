@@ -32,6 +32,13 @@ let StockController = class StockController {
             search,
         });
     }
+    findLeaders(minGain, theme, days) {
+        return this.stockService.findLeaders({
+            minGain: minGain ? parseFloat(minGain) : undefined,
+            theme,
+            days: days ? parseInt(days, 10) : undefined,
+        });
+    }
     screen(stage, category, isTemplate, minRsRank, sector) {
         const filter = {
             stage,
@@ -65,6 +72,15 @@ __decorate([
     __metadata("design:paramtypes", [String, String, String]),
     __metadata("design:returntype", void 0)
 ], StockController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('leaders'),
+    __param(0, (0, common_1.Query)('minGain')),
+    __param(1, (0, common_1.Query)('theme')),
+    __param(2, (0, common_1.Query)('days')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String]),
+    __metadata("design:returntype", void 0)
+], StockController.prototype, "findLeaders", null);
 __decorate([
     (0, common_1.Get)('screen'),
     __param(0, (0, common_1.Query)('stage')),

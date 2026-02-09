@@ -8,94 +8,33 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var DailySyncJob_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DailySyncJob = void 0;
 const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
-const prisma_service_1 = require("../../../prisma/prisma.service");
-const yfinance_provider_1 = require("../providers/yfinance.provider");
+const pipeline_service_1 = require("../services/pipeline.service");
 let DailySyncJob = DailySyncJob_1 = class DailySyncJob {
-    prisma;
-    yfinance;
+    pipelineService;
     logger = new common_1.Logger(DailySyncJob_1.name);
-    constructor(prisma, yfinance) {
-        this.prisma = prisma;
-        this.yfinance = yfinance;
+    constructor(pipelineService) {
+        this.pipelineService = pipelineService;
     }
     async run() {
-        this.logger.log('Starting daily sync...');
-        const stocks = await this.prisma.stock.findMany({
-            where: { isActive: true },
-            select: { id: true, ticker: true },
-        });
-        const today = new Date();
-        const from = new Date(today);
-        from.setDate(from.getDate() - 5);
-        for (const stock of stocks) {
-            try {
-                const bars = await this.yfinance.fetchDailyBars(stock.ticker, from, today);
-                for (const bar of bars) {
-                    await this.prisma.stockDaily.upsert({
-                        where: {
-                            stockId_date: { stockId: stock.id, date: bar.date },
-                        },
-                        create: {
-                            stockId: stock.id,
-                            date: bar.date,
-                            open: bar.open,
-                            high: bar.high,
-                            low: bar.low,
-                            close: bar.close,
-                            volume: BigInt(Math.round(bar.volume)),
-                        },
-                        update: {
-                            open: bar.open,
-                            high: bar.high,
-                            low: bar.low,
-                            close: bar.close,
-                            volume: BigInt(Math.round(bar.volume)),
-                        },
-                    });
-                }
-            }
-            catch (err) {
-                this.logger.error(`Failed to sync ${stock.ticker}`, err);
-            }
+        if (this.pipelineService.isRunning()) {
+            this.logger.log('Pipeline already running, skipping daily sync cron');
+            return;
         }
-        const indices = await this.prisma.indexEntity.findMany();
-        for (const index of indices) {
-            try {
-                const bars = await this.yfinance.fetchDailyBars(index.ticker, from, today);
-                for (const bar of bars) {
-                    await this.prisma.indexDaily.upsert({
-                        where: {
-                            indexId_date: { indexId: index.id, date: bar.date },
-                        },
-                        create: {
-                            indexId: index.id,
-                            date: bar.date,
-                            open: bar.open,
-                            high: bar.high,
-                            low: bar.low,
-                            close: bar.close,
-                            volume: BigInt(Math.round(bar.volume)),
-                        },
-                        update: {
-                            open: bar.open,
-                            high: bar.high,
-                            low: bar.low,
-                            close: bar.close,
-                            volume: BigInt(Math.round(bar.volume)),
-                        },
-                    });
-                }
-            }
-            catch (err) {
-                this.logger.error(`Failed to sync index ${index.ticker}`, err);
-            }
+        this.logger.log('Daily sync cron triggered, delegating to pipeline...');
+        try {
+            await this.pipelineService.checkAndSync();
         }
-        this.logger.log('Daily sync complete');
+        catch (err) {
+            this.logger.error('Daily sync pipeline failed', err);
+        }
     }
 };
 exports.DailySyncJob = DailySyncJob;
@@ -107,7 +46,7 @@ __decorate([
 ], DailySyncJob.prototype, "run", null);
 exports.DailySyncJob = DailySyncJob = DailySyncJob_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        yfinance_provider_1.YFinanceProvider])
+    __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => pipeline_service_1.PipelineService))),
+    __metadata("design:paramtypes", [pipeline_service_1.PipelineService])
 ], DailySyncJob);
 //# sourceMappingURL=daily-sync.job.js.map

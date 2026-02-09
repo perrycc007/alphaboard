@@ -13,19 +13,25 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.YFinanceProvider = void 0;
 const common_1 = require("@nestjs/common");
 const yahoo_finance2_1 = __importDefault(require("yahoo-finance2"));
+const FETCH_TIMEOUT_MS = 15_000;
+function withTimeout(promise, ms, label) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`Timeout after ${ms}ms for ${label}`)), ms);
+        promise.then((val) => { clearTimeout(timer); resolve(val); }, (err) => { clearTimeout(timer); reject(err); });
+    });
+}
 let YFinanceProvider = YFinanceProvider_1 = class YFinanceProvider {
     logger = new common_1.Logger(YFinanceProvider_1.name);
     yf = new yahoo_finance2_1.default({
         suppressNotices: ['ripHistorical'],
     });
     async fetchDailyBars(ticker, from, to) {
-        this.logger.log(`Fetching daily bars for ${ticker} from ${from.toISOString().slice(0, 10)} to ${to.toISOString().slice(0, 10)}`);
         try {
-            const result = await this.yf.historical(ticker, {
+            const result = await withTimeout(this.yf.historical(ticker, {
                 period1: from,
                 period2: to,
                 interval: '1d',
-            });
+            }), FETCH_TIMEOUT_MS, ticker);
             const bars = result.map((row) => ({
                 date: row.date,
                 open: row.open,
@@ -34,11 +40,10 @@ let YFinanceProvider = YFinanceProvider_1 = class YFinanceProvider {
                 close: row.close,
                 volume: row.volume,
             }));
-            this.logger.log(`Fetched ${bars.length} daily bars for ${ticker}`);
             return bars;
         }
         catch (error) {
-            this.logger.error(`Failed to fetch daily bars for ${ticker}: ${error.message}`);
+            this.logger.warn(`Failed ${ticker}: ${error.message}`);
             return [];
         }
     }

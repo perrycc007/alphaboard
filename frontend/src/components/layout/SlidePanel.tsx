@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { X, TrendingUp, TrendingDown, AlertCircle, Clock, BarChart2 } from 'lucide-react'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { useStockDetailStore } from '@/stores/useStockDetailStore'
@@ -14,8 +14,15 @@ export function SlidePanel() {
   const ticker = useSlidePanelStore((s) => s.ticker)
   const closePanel = useSlidePanelStore((s) => s.closePanel)
 
-  const { stock, dailyBars, spyBars, evidence, stageHistory, loading, error, fetchStockDetail, clear } =
-    useStockDetailStore()
+  const stock = useStockDetailStore((s) => s.stock)
+  const dailyBars = useStockDetailStore((s) => s.dailyBars)
+  const spyBars = useStockDetailStore((s) => s.spyBars)
+  const evidence = useStockDetailStore((s) => s.evidence)
+  const stageHistory = useStockDetailStore((s) => s.stageHistory)
+  const loading = useStockDetailStore((s) => s.loading)
+  const error = useStockDetailStore((s) => s.error)
+  const fetchStockDetail = useStockDetailStore((s) => s.fetchStockDetail)
+  const clear = useStockDetailStore((s) => s.clear)
 
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -48,7 +55,8 @@ export function SlidePanel() {
   }, [open, closePanel])
 
   // Get setups for this ticker (client-side filter from global setup store)
-  const tickerSetups = useSetupStore((s) => (ticker ? s.getSetupsForTicker(ticker) : []))
+  const getSetupsForTicker = useSetupStore((s) => s.getSetupsForTicker)
+  const tickerSetups = useMemo(() => (ticker ? getSetupsForTicker(ticker) : []), [ticker, getSetupsForTicker])
 
   const latestBar = dailyBars.length > 0 ? dailyBars[0] : null
   const latestStage = stock?.stages?.[0]
@@ -278,7 +286,7 @@ function SetupCard({ setup }: { setup: ApiSetup }) {
         {setup.riskReward != null ? (
           <div>
             <div className="text-[10px] text-text-muted">R:R</div>
-            <div className="font-mono text-xs text-accent">{setup.riskReward.toFixed(1)}</div>
+            <div className="font-mono text-xs text-accent">{Number(setup.riskReward).toFixed(1)}</div>
           </div>
         ) : null}
       </div>

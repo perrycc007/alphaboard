@@ -23,6 +23,10 @@ export class PolygonProvider implements IntradayDataProvider {
     );
   }
 
+  isConfigured(): boolean {
+    return !!this.apiKey;
+  }
+
   async fetchIntradayBars(
     ticker: string,
     date: Date,

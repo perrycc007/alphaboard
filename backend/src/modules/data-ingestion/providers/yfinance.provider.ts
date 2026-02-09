@@ -2,9 +2,25 @@ import { Injectable, Logger } from '@nestjs/common';
 import { MarketDataProvider, DailyBarData } from './market-data.provider';
 import YahooFinance from 'yahoo-finance2';
 
+const FETCH_TIMEOUT_MS = 15_000; // 15 second timeout per request
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Timeout after ${ms}ms for ${label}`)),
+      ms,
+    );
+    promise.then(
+      (val) => { clearTimeout(timer); resolve(val); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
+
 /**
  * Yahoo Finance provider for historical daily OHLCV data.
  * Uses the yahoo-finance2 Node.js library to fetch bars directly.
+ * Includes a 15s timeout to prevent hanging on dead tickers.
  */
 @Injectable()
 export class YFinanceProvider implements MarketDataProvider {
@@ -18,16 +34,16 @@ export class YFinanceProvider implements MarketDataProvider {
     from: Date,
     to: Date,
   ): Promise<DailyBarData[]> {
-    this.logger.log(
-      `Fetching daily bars for ${ticker} from ${from.toISOString().slice(0, 10)} to ${to.toISOString().slice(0, 10)}`,
-    );
-
     try {
-      const result = await this.yf.historical(ticker, {
-        period1: from,
-        period2: to,
-        interval: '1d',
-      });
+      const result = await withTimeout(
+        this.yf.historical(ticker, {
+          period1: from,
+          period2: to,
+          interval: '1d',
+        }),
+        FETCH_TIMEOUT_MS,
+        ticker,
+      );
 
       const bars: DailyBarData[] = result.map((row) => ({
         date: row.date,
@@ -38,11 +54,10 @@ export class YFinanceProvider implements MarketDataProvider {
         volume: row.volume,
       }));
 
-      this.logger.log(`Fetched ${bars.length} daily bars for ${ticker}`);
       return bars;
     } catch (error) {
-      this.logger.error(
-        `Failed to fetch daily bars for ${ticker}: ${(error as Error).message}`,
+      this.logger.warn(
+        `Failed ${ticker}: ${(error as Error).message}`,
       );
       return [];
     }

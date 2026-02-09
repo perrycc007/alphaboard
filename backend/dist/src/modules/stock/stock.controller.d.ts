@@ -15,6 +15,8 @@ export declare class StockController {
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isCurated: boolean;
+            lastSyncDate: Date | null;
             isActive: boolean;
             createdAt: Date;
             updatedAt: Date;
@@ -23,6 +25,18 @@ export declare class StockController {
         page: number;
         limit: number;
     }>;
+    findLeaders(minGain?: string, theme?: string, days?: string): Promise<{
+        ticker: string;
+        name: string;
+        peakGain: number;
+        duration: number;
+        theme: string;
+        entryDate: string;
+        peakDate: string;
+        entryPrice: number;
+        peakPrice: number;
+        stage: import("@prisma/client").$Enums.StageEnum;
+    }[]>;
     screen(stage?: StageEnum, category?: StockCategory, isTemplate?: string, minRsRank?: string, sector?: string): Promise<{
         stock: {
             dailyBars: {
@@ -52,6 +66,8 @@ export declare class StockController {
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isCurated: boolean;
+            lastSyncDate: Date | null;
             isActive: boolean;
             createdAt: Date;
             updatedAt: Date;
@@ -97,6 +113,8 @@ export declare class StockController {
         exchange: string | null;
         avgVolume: bigint | null;
         marketCap: bigint | null;
+        isCurated: boolean;
+        lastSyncDate: Date | null;
         isActive: boolean;
         createdAt: Date;
         updatedAt: Date;

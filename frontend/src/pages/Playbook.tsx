@@ -20,7 +20,10 @@ const PERIOD_OPTIONS = [
 ]
 
 export default function Playbook() {
-  const { leaders, loading, error, fetchLeaders } = useLeaderStore()
+  const leaders = useLeaderStore((s) => s.leaders)
+  const loading = useLeaderStore((s) => s.loading)
+  const error = useLeaderStore((s) => s.error)
+  const fetchLeaders = useLeaderStore((s) => s.fetchLeaders)
   const openPanel = useSlidePanelStore((s) => s.openPanel)
 
   const [minGain, setMinGain] = useState(50)

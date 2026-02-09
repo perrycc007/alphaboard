@@ -15,6 +15,8 @@ export declare class AlertService {
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isCurated: boolean;
+            lastSyncDate: Date | null;
             isActive: boolean;
             createdAt: Date;
             updatedAt: Date;
@@ -64,6 +66,8 @@ export declare class AlertService {
             exchange: string | null;
             avgVolume: bigint | null;
             marketCap: bigint | null;
+            isCurated: boolean;
+            lastSyncDate: Date | null;
             isActive: boolean;
             createdAt: Date;
             updatedAt: Date;

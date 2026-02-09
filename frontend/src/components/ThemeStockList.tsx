@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { ApiThemeDetail, ApiThemeStock } from '@/types'
 import { parseStageToNumber } from '@/types'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
@@ -40,7 +41,8 @@ function StockRow({
   const { stock } = themeStock
   const latestBar = stock.dailyBars?.[0]
   const latestStage = stock.stages?.[0]
-  const tickerSetups = useSetupStore((s) => s.getSetupsForTicker(stock.ticker))
+  const getSetupsForTicker = useSetupStore((s) => s.getSetupsForTicker)
+  const tickerSetups = useMemo(() => getSetupsForTicker(stock.ticker), [stock.ticker, getSetupsForTicker])
 
   const price = latestBar?.close
   const changePercent = latestBar

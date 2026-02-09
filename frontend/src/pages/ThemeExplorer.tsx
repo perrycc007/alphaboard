@@ -18,8 +18,13 @@ const DIRECTION_FILTERS: { value: DirectionFilter; label: string }[] = [
 ]
 
 export default function ThemeExplorer() {
-  const { themes, themeDetails, detailLoading, loading, error, fetchThemes, fetchThemeDetail } =
-    useThemeStore()
+  const themes = useThemeStore((s) => s.themes)
+  const themeDetails = useThemeStore((s) => s.themeDetails)
+  const detailLoading = useThemeStore((s) => s.detailLoading)
+  const loading = useThemeStore((s) => s.loading)
+  const error = useThemeStore((s) => s.error)
+  const fetchThemes = useThemeStore((s) => s.fetchThemes)
+  const fetchThemeDetail = useThemeStore((s) => s.fetchThemeDetail)
   const fetchDailySetups = useSetupStore((s) => s.fetchDailySetups)
 
   const [expandedId, setExpandedId] = useState<string | null>(null)

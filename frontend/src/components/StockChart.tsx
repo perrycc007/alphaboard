@@ -1,5 +1,14 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { createChart, type IChartApi, type ISeriesApi, ColorType, LineStyle } from 'lightweight-charts'
+import {
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  ColorType,
+  LineStyle,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+} from 'lightweight-charts'
 import type { ApiStockDaily, ApiSetup } from '@/types'
 
 interface StockChartProps {
@@ -37,8 +46,8 @@ export function StockChart({
 }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const candlestickRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
-  const maSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
+  const candlestickRef = useRef<ISeriesApi<typeof CandlestickSeries> | null>(null)
+  const maSeriesRef = useRef<Map<string, ISeriesApi<typeof LineSeries>>>(new Map())
 
   // Sort bars by date ascending (backend sends desc)
   const sortedBars = dailyBars.toSorted((a, b) => a.date.localeCompare(b.date))
@@ -83,8 +92,8 @@ export function StockChart({
 
     chartRef.current = chart
 
-    // Candlestick series
-    const candleSeries = chart.addCandlestickSeries({
+    // Candlestick series (v5 API)
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderUpColor: '#22c55e',
@@ -96,17 +105,17 @@ export function StockChart({
     candleSeries.setData(
       sortedBars.map((bar) => ({
         time: toChartDate(bar.date),
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
+        open: Number(bar.open),
+        high: Number(bar.high),
+        low: Number(bar.low),
+        close: Number(bar.close),
       })),
     )
 
     candlestickRef.current = candleSeries
 
-    // Volume histogram
-    const volumeSeries = chart.addHistogramSeries({
+    // Volume histogram (v5 API)
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     })
@@ -118,8 +127,8 @@ export function StockChart({
     volumeSeries.setData(
       sortedBars.map((bar) => ({
         time: toChartDate(bar.date),
-        value: bar.volume,
-        color: bar.close >= bar.open ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+        value: Number(bar.volume),
+        color: Number(bar.close) >= Number(bar.open) ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
       })),
     )
 
@@ -130,11 +139,11 @@ export function StockChart({
           .filter((bar) => bar[ma.key] != null)
           .map((bar) => ({
             time: toChartDate(bar.date),
-            value: bar[ma.key] as number,
+            value: Number(bar[ma.key]),
           }))
 
         if (maData.length > 0) {
-          const lineSeries = chart.addLineSeries({
+          const lineSeries = chart.addSeries(LineSeries, {
             color: ma.color,
             lineWidth: ma.width as 1 | 2 | 3 | 4,
             priceLineVisible: false,
@@ -152,7 +161,7 @@ export function StockChart({
       for (const setup of setups) {
         if (setup.pivotPrice != null) {
           candleSeries.createPriceLine({
-            price: setup.pivotPrice,
+            price: Number(setup.pivotPrice),
             color: '#8b5cf6',
             lineWidth: 1,
             lineStyle: LineStyle.Dashed,
@@ -162,7 +171,7 @@ export function StockChart({
         }
         if (setup.stopPrice != null) {
           candleSeries.createPriceLine({
-            price: setup.stopPrice,
+            price: Number(setup.stopPrice),
             color: '#ef4444',
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,
@@ -172,7 +181,7 @@ export function StockChart({
         }
         if (setup.targetPrice != null) {
           candleSeries.createPriceLine({
-            price: setup.targetPrice,
+            price: Number(setup.targetPrice),
             color: '#22c55e',
             lineWidth: 1,
             lineStyle: LineStyle.Dotted,

@@ -25,11 +25,9 @@ let SetupScanJob = SetupScanJob_1 = class SetupScanJob {
     }
     async run() {
         this.logger.log('Starting setup scan...');
-        const stocks = await this.prisma.stock.findMany({
-            where: { isActive: true },
-            select: { id: true, ticker: true },
-        });
-        for (const stock of stocks) {
+        const candidates = await this.getSetupCandidates();
+        this.logger.log(`Found ${candidates.length} setup candidates after filtering`);
+        for (const stock of candidates) {
             try {
                 const dailyBars = await this.prisma.stockDaily.findMany({
                     where: { stockId: stock.id },
@@ -53,6 +51,48 @@ let SetupScanJob = SetupScanJob_1 = class SetupScanJob {
             }
         }
         this.logger.log('Setup scan complete');
+    }
+    async getSetupCandidates() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const candidates = await this.prisma.stock.findMany({
+            where: {
+                isActive: true,
+                avgVolume: { gte: 200_000 },
+                OR: [
+                    {
+                        stages: {
+                            some: {
+                                stage: 'STAGE_2',
+                            },
+                        },
+                    },
+                    {
+                        stages: {
+                            some: {
+                                category: 'FORMER_HOT',
+                            },
+                        },
+                    },
+                    { sector: { in: ['Energy', 'Materials'] } },
+                    { industry: { contains: 'Biotech' } },
+                    { industry: { contains: 'Pharma' } },
+                ],
+            },
+            select: { id: true, ticker: true },
+        });
+        const filtered = [];
+        for (const stock of candidates) {
+            const latestBar = await this.prisma.stockDaily.findFirst({
+                where: { stockId: stock.id },
+                orderBy: { date: 'desc' },
+                select: { close: true },
+            });
+            if (latestBar && Number(latestBar.close) >= 5.0) {
+                filtered.push(stock);
+            }
+        }
+        return filtered;
     }
 };
 exports.SetupScanJob = SetupScanJob;

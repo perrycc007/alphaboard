@@ -30,6 +30,8 @@ let IntradaySyncJob = IntradaySyncJob_1 = class IntradaySyncJob {
         this.alertGateway = alertGateway;
     }
     async run() {
+        if (!this.polygon.isConfigured())
+            return;
         const stocks = await this.prisma.stock.findMany({
             where: { isActive: true },
             select: { id: true, ticker: true },

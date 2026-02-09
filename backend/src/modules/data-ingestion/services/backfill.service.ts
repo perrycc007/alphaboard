@@ -123,7 +123,7 @@ export class BackfillService {
         }
       }
 
-      if ((batchIdx + 1) % 20 === 0) {
+      if ((batchIdx + 1) % 50 === 0) {
         this.logger.log(
           `Backfill progress: ${synced + failed}/${ordered.length} (${synced} synced, ${failed} failed)`,
         );
