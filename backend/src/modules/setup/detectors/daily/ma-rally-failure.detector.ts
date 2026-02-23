@@ -21,6 +21,7 @@ import {
  *
  * Gating:
  *   - regime === 'FAILURE'
+ *   - First rally-back only (if an active/triggered MA_RALLY_FAILURE exists, skip)
  *
  * Weak rally filter (at least 1):
  *   - priceEfficiency(last 10) < 0.35
@@ -48,6 +49,18 @@ export class MaRallyFailureDetector implements DailyDetector {
   ): DetectedSetup | null {
     if (bars.length < 15) return null;
     if (context.regime !== 'FAILURE') return null;
+
+    // First-rally-only gating: once a failure rally setup is active/triggered,
+    // do not emit another one from the same failure phase.
+    const hasExistingFailureRally = context.activeSetups?.some(
+      (s) =>
+        s.type === ('MA_RALLY_FAILURE' as SetupType) &&
+        (s.state === 'TRIGGERED' ||
+          s.state === 'ACTIVE' ||
+          s.state === 'READY' ||
+          s.state === 'BUILDING'),
+    );
+    if (hasExistingFailureRally) return null;
 
     const atr = context.atr14 ?? 0;
     if (atr <= 0) return null;
@@ -103,6 +116,7 @@ export class MaRallyFailureDetector implements DailyDetector {
           riskReward: 3,
           evidence: [
             'regime_failure',
+            'first_rally_back',
             'weak_rally',
             'sma50_resistance',
           ],
@@ -145,6 +159,7 @@ export class MaRallyFailureDetector implements DailyDetector {
           riskReward: 3,
           evidence: [
             'regime_failure',
+            'first_rally_back',
             'weak_rally',
             'ema20_resistance',
             'ema20_slope_negative',

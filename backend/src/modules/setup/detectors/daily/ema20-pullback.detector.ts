@@ -8,22 +8,27 @@ import {
 } from '../detector.interface';
 
 /**
- * Type A: EMA20 Pullback LONG (post-breakout / HTF)
+ * Type A: Trend-Following EMA20 Pullback LONG (post-breakout / HTF)
  *
  * Structure-gated MA setup: EMA20 acts as an execution zone
- * only when there is an active breakout or high-tight-flag context.
+ * in either:
+ *   1) post-breakout context, or
+ *   2) base-pivot context with range contraction.
  *
  * Gating (all must be true):
  *   - regime === 'TREND'
- *   - Active TRIGGERED setup of type BREAKOUT_PIVOT / VCP / HIGH_TIGHT_FLAG
+ *   - Context is either:
+ *       a) active TRIGGERED breakout setup (BREAKOUT_PIVOT / VCP / HIGH_TIGHT_FLAG), or
+ *       b) active VCP base in BUILDING/READY with recent range contraction
  *
  * Structure conditions:
  *   - EMA20 > SMA50 (ordered)
- *   - Meaningful departure: max(Close since breakout) >= EMA20 + 2.5*ATR
+ *   - Meaningful departure: max(Close since breakout) >= EMA20 + 2.0*ATR
  *   - Volume on recent pullback bars is CONTRACTION or NORMAL
  *
- * Entry:
- *   - Price near EMA20: abs(close - ema20) <= 1 * ATR
+ * Entry (touch-based):
+ *   - Latest bar touches EMA20 (low <= ema20 <= high)
+ *   - Optional proximity guard: abs(close - ema20) <= 1 * ATR
  */
 export class Ema20PullbackDetector implements DailyDetector {
   type = 'EMA20_PULLBACK' as SetupType;
@@ -45,7 +50,7 @@ export class Ema20PullbackDetector implements DailyDetector {
     // EMA20 must be above SMA50 (ordered trend)
     if (ema20 <= sma50) return null;
 
-    // Gating: active triggered breakout/VCP/HTF
+    // Context A: active triggered breakout/VCP/HTF
     const breakoutTypes: string[] = [
       'BREAKOUT_PIVOT',
       'VCP',
@@ -54,18 +59,46 @@ export class Ema20PullbackDetector implements DailyDetector {
     const hasActiveBreakout = context.activeSetups?.some(
       (s) => breakoutTypes.includes(s.type) && s.state === 'TRIGGERED',
     );
-    if (!hasActiveBreakout) return null;
+
+    // Context B: active base pivot + contraction
+    const hasActiveBase = context.activeSetups?.some(
+      (s) =>
+        s.type === ('VCP' as SetupType) &&
+        (s.state === 'BUILDING' || s.state === 'READY'),
+    );
+    const ranges = bars.map((b) => b.high - b.low);
+    const recentRanges = ranges.slice(-3);
+    const priorRanges = ranges.slice(-8, -3);
+    const avgRecentRange =
+      recentRanges.length > 0
+        ? recentRanges.reduce((acc, v) => acc + v, 0) / recentRanges.length
+        : Infinity;
+    const avgPriorRange =
+      priorRanges.length > 0
+        ? priorRanges.reduce((acc, v) => acc + v, 0) / priorRanges.length
+        : Infinity;
+    const hasContraction =
+      Number.isFinite(avgRecentRange) &&
+      Number.isFinite(avgPriorRange) &&
+      avgRecentRange <= 0.8 * avgPriorRange;
+
+    const hasBasePivotPullbackContext = Boolean(hasActiveBase && hasContraction);
+    if (!hasActiveBreakout && !hasBasePivotPullbackContext) return null;
 
     const latestBar = bars[bars.length - 1];
 
-    // Meaningful departure: max close in the window must be >= ema20 + 2.5*ATR
+    // Meaningful departure: max close in the window must be >= ema20 + 2.0*ATR
     let maxClose = -Infinity;
     for (const b of bars) {
       if (b.close > maxClose) maxClose = b.close;
     }
-    if (maxClose < ema20 + 2.5 * atr) return null;
+    if (maxClose < ema20 + 2.0 * atr) return null;
 
-    // Price near EMA20
+    // Touch-based entry: candle must interact with EMA20
+    const touchedEma20 = latestBar.low <= ema20 && latestBar.high >= ema20;
+    if (!touchedEma20) return null;
+
+    // Proximity guard (keeps noisy far-close touches out)
     const distFromEma20 = Math.abs(latestBar.close - ema20);
     if (distFromEma20 > 1 * atr) return null;
 
@@ -93,15 +126,24 @@ export class Ema20PullbackDetector implements DailyDetector {
       riskReward: 3,
       evidence: [
         'regime_trend',
-        'active_breakout',
-        'ema20_pullback',
+        hasActiveBreakout ? 'active_breakout' : 'base_pivot_contraction',
+        'ema20_pullback_touch',
         'meaningful_departure',
       ],
       metadata: {
-        context: 'POST_BREAKOUT',
+        context: hasActiveBreakout ? 'POST_BREAKOUT' : 'BASE_PIVOT_CONTRACTION',
+        setupClass: 'TREND_FOLLOWING_20EMA_PULLBACK',
         regime: 'TREND',
         ema20,
         sma50,
+        touchedEma20,
+        hasContraction,
+        avgRecentRange: Number.isFinite(avgRecentRange)
+          ? Math.round(avgRecentRange * 100) / 100
+          : undefined,
+        avgPriorRange: Number.isFinite(avgPriorRange)
+          ? Math.round(avgPriorRange * 100) / 100
+          : undefined,
         departureClose: maxClose,
         departureAtr:
           Math.round(((maxClose - ema20) / atr) * 100) / 100,
