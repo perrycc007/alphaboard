@@ -1,10 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.classifyVolume = exports.isEngulfing = exports.isWickAbsorption = exports.isDryUp = exports.isHistogramContracting = exports.macdHistogram = exports.isConverging = exports.emaGapSeries = exports.priceEfficiency = exports.detectSwingPoints = exports.averageBarSize = void 0;
+exports.detectMarketRegime = exports.classifyVolume = exports.isEngulfing = exports.isWickAbsorption = exports.isDryUp = exports.isHistogramContracting = exports.macdHistogram = exports.isConverging = exports.emaGapSeries = exports.priceEfficiency = exports.trueRange = exports.atrSeries = exports.detectSignificantSwingPoints = exports.detectFractalPivots = exports.averageBarSize = void 0;
 var average_bar_size_1 = require("./average-bar-size");
 Object.defineProperty(exports, "averageBarSize", { enumerable: true, get: function () { return average_bar_size_1.averageBarSize; } });
 var swing_points_1 = require("./swing-points");
-Object.defineProperty(exports, "detectSwingPoints", { enumerable: true, get: function () { return swing_points_1.detectSwingPoints; } });
+Object.defineProperty(exports, "detectFractalPivots", { enumerable: true, get: function () { return swing_points_1.detectFractalPivots; } });
+Object.defineProperty(exports, "detectSignificantSwingPoints", { enumerable: true, get: function () { return swing_points_1.detectSignificantSwingPoints; } });
+var atr_1 = require("./atr");
+Object.defineProperty(exports, "atrSeries", { enumerable: true, get: function () { return atr_1.atrSeries; } });
+Object.defineProperty(exports, "trueRange", { enumerable: true, get: function () { return atr_1.trueRange; } });
 var price_efficiency_1 = require("./price-efficiency");
 Object.defineProperty(exports, "priceEfficiency", { enumerable: true, get: function () { return price_efficiency_1.priceEfficiency; } });
 var ema_gap_1 = require("./ema-gap");
@@ -19,4 +23,6 @@ Object.defineProperty(exports, "isWickAbsorption", { enumerable: true, get: func
 Object.defineProperty(exports, "isEngulfing", { enumerable: true, get: function () { return candlestick_patterns_1.isEngulfing; } });
 var volume_classifier_1 = require("./volume-classifier");
 Object.defineProperty(exports, "classifyVolume", { enumerable: true, get: function () { return volume_classifier_1.classifyVolume; } });
+var market_regime_1 = require("./market-regime");
+Object.defineProperty(exports, "detectMarketRegime", { enumerable: true, get: function () { return market_regime_1.detectMarketRegime; } });
 //# sourceMappingURL=index.js.map

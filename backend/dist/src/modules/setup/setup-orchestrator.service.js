@@ -24,12 +24,38 @@ const high_tight_flag_detector_1 = require("./detectors/daily/high-tight-flag.de
 const pullback_detector_1 = require("./detectors/daily/pullback.detector");
 const undercut_rally_detector_1 = require("./detectors/daily/undercut-rally.detector");
 const double_top_detector_1 = require("./detectors/daily/double-top.detector");
-const ma_touch_detector_1 = require("./detectors/daily/ma-touch.detector");
+const ema20_pullback_detector_1 = require("./detectors/daily/ema20-pullback.detector");
+const ma_rally_failure_detector_1 = require("./detectors/daily/ma-rally-failure.detector");
+const sma200_key_level_detector_1 = require("./detectors/daily/sma200-key-level.detector");
 const intraday_base_detector_1 = require("./detectors/intraday/intraday-base.detector");
 const cross620_detector_1 = require("./detectors/intraday/cross620.detector");
 const gap_detector_1 = require("./detectors/intraday/gap.detector");
 const tiring_down_detector_1 = require("./detectors/intraday/tiring-down.detector");
+const intraday_double_top_detector_1 = require("./detectors/intraday/intraday-double-top.detector");
+const intraday_undercut_rally_detector_1 = require("./detectors/intraday/intraday-undercut-rally.detector");
 const confirmation_engine_1 = require("./confirmation/confirmation-engine");
+const file_log_util_1 = require("../../common/utils/file-log.util");
+const TYPE_SCORES = {
+    EMA200_KEY_LEVEL: 100,
+    MA_RALLY_FAILURE: 80,
+    DOUBLE_TOP: 75,
+    UNDERCUT_RALLY: 75,
+    EMA20_PULLBACK: 60,
+    VCP: 55,
+    BREAKOUT_PIVOT: 50,
+    HIGH_TIGHT_FLAG: 50,
+    FAIL_BASE: 45,
+    FAIL_BREAKOUT: 45,
+    PULLBACK_BUY: 40,
+    INTRADAY_BASE: 30,
+    CROSS_620: 25,
+    GAP_UP: 20,
+    GAP_DOWN: 20,
+    TIRING_DOWN: 15,
+};
+function scoreSetup(setup) {
+    return TYPE_SCORES[setup.type] ?? 0;
+}
 let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestratorService {
     prisma;
     logger = new common_1.Logger(SetupOrchestratorService_1.name);
@@ -43,19 +69,23 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         new pullback_detector_1.PullbackDetector(),
         new undercut_rally_detector_1.UndercutRallyDetector(),
         new double_top_detector_1.DoubleTopDetector(),
-        new ma_touch_detector_1.MaTouchDetector(),
+        new ema20_pullback_detector_1.Ema20PullbackDetector(),
+        new ma_rally_failure_detector_1.MaRallyFailureDetector(),
+        new sma200_key_level_detector_1.Sma200KeyLevelDetector(),
     ];
     intradayDetectors = [
         new intraday_base_detector_1.IntradayBaseDetector(),
         new cross620_detector_1.Cross620Detector(),
         new gap_detector_1.GapDetector(),
         new tiring_down_detector_1.TiringDownDetector(),
+        new intraday_double_top_detector_1.IntradayDoubleTopDetector(),
+        new intraday_undercut_rally_detector_1.IntradayUndercutRallyDetector(),
     ];
     constructor(prisma) {
         this.prisma = prisma;
     }
     async runDailyDetection(stockId, bars) {
-        const swingPoints = (0, primitives_1.detectSwingPoints)(bars);
+        const swingPoints = (0, primitives_1.detectSignificantSwingPoints)(bars);
         const context = await this.buildDailyContext(stockId, bars);
         for (const detector of this.dailyDetectors) {
             const result = detector.detect(bars, swingPoints, context);
@@ -121,13 +151,34 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         const avgVolume = bars.length > 0
             ? bars.reduce((sum, b) => sum + b.volume, 0) / bars.length
             : 0;
+        const sma50 = latestDaily?.sma50 ? Number(latestDaily.sma50) : undefined;
+        const sma200 = latestDaily?.sma200 ? Number(latestDaily.sma200) : undefined;
+        const ema20 = latestDaily?.ema20 ? Number(latestDaily.ema20) : undefined;
+        const atr14 = latestDaily?.atr14 ? Number(latestDaily.atr14) : undefined;
+        const activeSetupsMapped = activeSetups.map((s) => ({
+            id: s.id,
+            type: s.type,
+            state: s.state,
+            pivotPrice: s.pivotPrice ? Number(s.pivotPrice) : undefined,
+        }));
+        const regime = (0, primitives_1.detectMarketRegime)({
+            bars,
+            ema20,
+            sma50,
+            sma200,
+            atr14,
+            activeSetups: activeSetupsMapped.map((s) => ({
+                type: s.type,
+                state: s.state,
+            })),
+        });
         return {
             stockId,
             isStage2: latestStage?.stage === 'STAGE_2',
-            sma50: latestDaily?.sma50 ? Number(latestDaily.sma50) : undefined,
-            sma200: latestDaily?.sma200 ? Number(latestDaily.sma200) : undefined,
-            ema20: latestDaily?.ema20 ? Number(latestDaily.ema20) : undefined,
-            atr14: latestDaily?.atr14 ? Number(latestDaily.atr14) : undefined,
+            sma50,
+            sma200,
+            ema20,
+            atr14,
             avgVolume,
             activeBases: activeBases.map((b) => ({
                 id: b.id,
@@ -136,18 +187,18 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                 pivotPrice: b.pivotPrice ? Number(b.pivotPrice) : undefined,
                 status: b.status,
             })),
-            activeSetups: activeSetups.map((s) => ({
-                id: s.id,
-                type: s.type,
-                state: s.state,
-                pivotPrice: s.pivotPrice ? Number(s.pivotPrice) : undefined,
-            })),
+            activeSetups: activeSetupsMapped,
+            regime,
         };
     }
     async persistSetup(stockId, detected) {
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 42);
-        await this.prisma.setup.create({
+        const stock = await this.prisma.stock.findUnique({
+            where: { id: stockId },
+            select: { ticker: true },
+        });
+        const setup = await this.prisma.setup.create({
             data: {
                 stockId,
                 type: detected.type,
@@ -165,12 +216,24 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                 expiresAt,
             },
         });
+        await this.logEvent('setup_orchestrator', 'setup_detected', stock?.ticker, detected.type, {
+            setupId: setup.id,
+            direction: detected.direction,
+            timeframe: detected.timeframe,
+            pivotPrice: detected.pivotPrice,
+            stopPrice: detected.stopPrice,
+            targetPrice: detected.targetPrice,
+            riskReward: detected.riskReward,
+            evidence: detected.evidence,
+        });
     }
     async updateDailySetupStates(stockId, bars) {
         if (bars.length === 0)
             return;
         const latestBar = bars[bars.length - 1];
         const abs = (0, primitives_1.averageBarSize)(bars);
+        const atr14 = bars.length > 0 ? bars[bars.length - 1].atr14 : undefined;
+        const atr = atr14 ?? abs;
         const proximityThreshold = 1.5 * abs;
         const pendingSetups = await this.prisma.setup.findMany({
             where: {
@@ -181,22 +244,64 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         for (const setup of pendingSetups) {
             let newState = null;
             let stateReason;
-            if (setup.state === client_1.SetupState.BUILDING && setup.pivotPrice) {
-                newState = client_1.SetupState.READY;
-                stateReason = 'pivot_identified';
-            }
-            if (setup.state === client_1.SetupState.READY && setup.pivotPrice) {
+            if (setup.type === client_1.SetupType.DOUBLE_TOP &&
+                setup.state === client_1.SetupState.BUILDING &&
+                setup.pivotPrice) {
                 const pivot = Number(setup.pivotPrice);
-                if (setup.direction === 'LONG' && latestBar.close > pivot) {
-                    newState = client_1.SetupState.TRIGGERED;
-                    stateReason = 'breakout_above_pivot';
-                }
-                else if (setup.direction === 'SHORT' && latestBar.close < pivot) {
-                    newState = client_1.SetupState.TRIGGERED;
-                    stateReason = 'breakdown_below_pivot';
+                const breakTol = 0.1 * atr;
+                if (latestBar.high > pivot + breakTol) {
+                    newState = client_1.SetupState.READY;
+                    stateReason = 'top2_exceeded_top1';
                 }
             }
-            if (setup.stopPrice) {
+            if (setup.type === client_1.SetupType.DOUBLE_TOP &&
+                setup.state === client_1.SetupState.READY &&
+                setup.pivotPrice) {
+                const pivot = Number(setup.pivotPrice);
+                if (latestBar.low < pivot) {
+                    newState = client_1.SetupState.TRIGGERED;
+                    stateReason = 'intrabar_failure_below_top1';
+                }
+            }
+            if (setup.type === client_1.SetupType.UNDERCUT_RALLY &&
+                setup.state === client_1.SetupState.BUILDING &&
+                setup.pivotPrice) {
+                const pivot = Number(setup.pivotPrice);
+                const undercutTol = 0.2 * atr;
+                if (latestBar.low < pivot - undercutTol) {
+                    newState = client_1.SetupState.READY;
+                    stateReason = 'undercut_below_prior_low';
+                }
+            }
+            if (setup.type === client_1.SetupType.UNDERCUT_RALLY &&
+                setup.state === client_1.SetupState.READY &&
+                setup.pivotPrice) {
+                const pivot = Number(setup.pivotPrice);
+                if (latestBar.high > pivot) {
+                    newState = client_1.SetupState.TRIGGERED;
+                    stateReason = 'intrabar_reclaim_above_prior_low';
+                }
+            }
+            if (!newState &&
+                setup.type !== client_1.SetupType.DOUBLE_TOP &&
+                setup.type !== client_1.SetupType.UNDERCUT_RALLY) {
+                if (setup.state === client_1.SetupState.BUILDING && setup.pivotPrice) {
+                    newState = client_1.SetupState.READY;
+                    stateReason = 'pivot_identified';
+                }
+                if (setup.state === client_1.SetupState.READY && setup.pivotPrice) {
+                    const pivot = Number(setup.pivotPrice);
+                    if (setup.direction === 'LONG' && latestBar.close > pivot) {
+                        newState = client_1.SetupState.TRIGGERED;
+                        stateReason = 'breakout_above_pivot';
+                    }
+                    else if (setup.direction === 'SHORT' && latestBar.close < pivot) {
+                        newState = client_1.SetupState.TRIGGERED;
+                        stateReason = 'breakdown_below_pivot';
+                    }
+                }
+            }
+            if (!newState && setup.stopPrice) {
                 const stop = Number(setup.stopPrice);
                 if (setup.direction === 'LONG' && latestBar.close < stop - abs) {
                     newState = client_1.SetupState.VIOLATED;
@@ -213,14 +318,11 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                 (setup.state === client_1.SetupState.BUILDING ||
                     setup.state === client_1.SetupState.READY)) {
                 const pivot = Number(setup.pivotPrice);
-                const distFromPivot = Math.abs(latestBar.close - pivot);
-                if (distFromPivot > proximityThreshold) {
-                    const priceMovedAway = (setup.direction === 'LONG' && latestBar.close < pivot - proximityThreshold) ||
-                        (setup.direction === 'SHORT' && latestBar.close > pivot + proximityThreshold);
-                    if (priceMovedAway) {
-                        newState = client_1.SetupState.EXPIRED;
-                        stateReason = 'expired_distance';
-                    }
+                const priceMovedAway = (setup.direction === 'LONG' && latestBar.close < pivot - proximityThreshold) ||
+                    (setup.direction === 'SHORT' && latestBar.close > pivot + proximityThreshold);
+                if (priceMovedAway) {
+                    newState = client_1.SetupState.EXPIRED;
+                    stateReason = 'expired_distance';
                 }
             }
             if (newState) {
@@ -232,6 +334,16 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                         lastStateAt: new Date(),
                         metadata: { ...existingMeta, stateReason },
                     },
+                });
+                const stock = await this.prisma.stock.findUnique({
+                    where: { id: stockId },
+                    select: { ticker: true },
+                });
+                await this.logEvent('setup_orchestrator', 'state_transition', stock?.ticker, setup.type, {
+                    setupId: setup.id,
+                    from: setup.state,
+                    to: newState,
+                    reason: stateReason,
                 });
             }
         }
@@ -289,6 +401,16 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                         metadata: { ...existingMeta, stateReason },
                     },
                 });
+                const stock = await this.prisma.stock.findUnique({
+                    where: { id: stockId },
+                    select: { ticker: true },
+                });
+                await this.logEvent('setup_orchestrator', 'triggered_outcome', stock?.ticker, setup.type, {
+                    setupId: setup.id,
+                    from: 'TRIGGERED',
+                    to: newState,
+                    reason: stateReason,
+                });
             }
         }
     }
@@ -303,7 +425,7 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         });
     }
     async getActiveSetups(filters) {
-        return this.prisma.setup.findMany({
+        const setups = await this.prisma.setup.findMany({
             where: {
                 state: {
                     in: [
@@ -321,6 +443,12 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
             include: { stock: true },
             orderBy: { detectedAt: 'desc' },
         });
+        return setups.sort((a, b) => {
+            const scoreDiff = scoreSetup(b) - scoreSetup(a);
+            if (scoreDiff !== 0)
+                return scoreDiff;
+            return b.detectedAt.getTime() - a.detectedAt.getTime();
+        });
     }
     async getSetupById(id) {
         return this.prisma.setup.findUniqueOrThrow({
@@ -330,6 +458,20 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                 barEvidence: { orderBy: { barDate: 'desc' } },
             },
         });
+    }
+    async logEvent(source, event, ticker, setupType, payload) {
+        try {
+            await (0, file_log_util_1.appendJsonLog)('detector-events.json', {
+                source,
+                event,
+                ticker: ticker ?? null,
+                setupType: setupType ?? null,
+                payload,
+            });
+        }
+        catch (err) {
+            this.logger.warn(`Failed to write event log: ${err}`);
+        }
     }
     async simulateDetection(ticker, fromDate) {
         const stock = await this.prisma.stock.findUniqueOrThrow({
@@ -362,7 +504,7 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
             const windowBars = bars.slice(windowStart, i);
             const latestBar = windowBars[windowBars.length - 1];
             const abs = (0, primitives_1.averageBarSize)(windowBars);
-            const swingPoints = (0, primitives_1.detectSwingPoints)(windowBars);
+            const swingPoints = (0, primitives_1.detectSignificantSwingPoints)(windowBars);
             const sma50 = dailyBars[i - 1]?.sma50
                 ? Number(dailyBars[i - 1].sma50)
                 : undefined;
@@ -379,6 +521,25 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
             const ema20 = dailyBars[i - 1]?.ema20
                 ? Number(dailyBars[i - 1].ema20)
                 : undefined;
+            const activeSetupsMapped = activeSimSetups
+                .filter((s) => s.state === 'BUILDING' || s.state === 'READY' || s.state === 'TRIGGERED')
+                .map((s) => ({
+                id: s.id,
+                type: s.type,
+                state: s.state,
+                pivotPrice: s.pivotPrice ?? undefined,
+            }));
+            const regime = (0, primitives_1.detectMarketRegime)({
+                bars: windowBars,
+                ema20,
+                sma50,
+                sma200,
+                atr14,
+                activeSetups: activeSetupsMapped.map((s) => ({
+                    type: s.type,
+                    state: s.state,
+                })),
+            });
             const simContext = {
                 stockId: stock.id,
                 isStage2,
@@ -389,14 +550,8 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                 avgVolume: windowBars.reduce((sum, b) => sum + b.volume, 0) /
                     windowBars.length,
                 activeBases: [],
-                activeSetups: activeSimSetups
-                    .filter((s) => s.state === 'BUILDING' || s.state === 'READY')
-                    .map((s) => ({
-                    id: s.id,
-                    type: s.type,
-                    state: s.state,
-                    pivotPrice: s.pivotPrice ?? undefined,
-                })),
+                activeSetups: activeSetupsMapped,
+                regime,
             };
             for (const detector of this.dailyDetectors) {
                 const result = detector.detect(windowBars, swingPoints, simContext);
@@ -448,11 +603,59 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                     activeSimSetups.push(simSetup);
                 }
             }
+            const atrSim = atr14 ?? abs;
             for (const setup of activeSimSetups) {
                 if (setup.state === 'EXPIRED' || setup.state === 'VIOLATED')
                     continue;
                 const dateStr = latestBar.date?.toISOString() ?? '';
-                if (setup.state === 'READY' && setup.pivotPrice) {
+                if (setup.type === 'DOUBLE_TOP' && setup.state === 'BUILDING' && setup.pivotPrice) {
+                    const breakTol = 0.1 * atrSim;
+                    if (latestBar.high > setup.pivotPrice + breakTol) {
+                        setup.state = 'READY';
+                        setup.stateHistory.push({ state: 'READY', date: dateStr });
+                        continue;
+                    }
+                }
+                if (setup.type === 'DOUBLE_TOP' && setup.state === 'READY' && setup.pivotPrice) {
+                    if (latestBar.low < setup.pivotPrice) {
+                        setup.state = 'TRIGGERED';
+                        setup.entryPrice = setup.pivotPrice;
+                        setup.entryDate = dateStr;
+                        setup.actualStopPrice = setup.stopPrice;
+                        setup.riskAmount =
+                            setup.entryPrice != null && setup.actualStopPrice != null
+                                ? Math.abs(setup.entryPrice - setup.actualStopPrice)
+                                : null;
+                        setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+                        continue;
+                    }
+                }
+                if (setup.type === 'UNDERCUT_RALLY' && setup.state === 'BUILDING' && setup.pivotPrice) {
+                    const undercutTol = 0.2 * atrSim;
+                    if (latestBar.low < setup.pivotPrice - undercutTol) {
+                        setup.state = 'READY';
+                        setup.stateHistory.push({ state: 'READY', date: dateStr });
+                        continue;
+                    }
+                }
+                if (setup.type === 'UNDERCUT_RALLY' && setup.state === 'READY' && setup.pivotPrice) {
+                    if (latestBar.high > setup.pivotPrice) {
+                        setup.state = 'TRIGGERED';
+                        setup.entryPrice = setup.pivotPrice;
+                        setup.entryDate = dateStr;
+                        setup.actualStopPrice = setup.stopPrice;
+                        setup.riskAmount =
+                            setup.entryPrice != null && setup.actualStopPrice != null
+                                ? Math.abs(setup.entryPrice - setup.actualStopPrice)
+                                : null;
+                        setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+                        continue;
+                    }
+                }
+                if (setup.state === 'READY' &&
+                    setup.pivotPrice &&
+                    setup.type !== 'DOUBLE_TOP' &&
+                    setup.type !== 'UNDERCUT_RALLY') {
                     const triggered = (setup.direction === 'LONG' &&
                         latestBar.close > setup.pivotPrice) ||
                         (setup.direction === 'SHORT' &&
@@ -581,11 +784,14 @@ const BREAKOUT_TYPES = [
     'BREAKOUT_PIVOT',
     'HIGH_TIGHT_FLAG',
     'PULLBACK_BUY',
+    'EMA20_PULLBACK',
 ];
 const REVERSAL_TYPES = [
     'UNDERCUT_RALLY',
     'DOUBLE_TOP',
     'FAIL_BASE',
     'FAIL_BREAKOUT',
+    'MA_RALLY_FAILURE',
+    'EMA200_KEY_LEVEL',
 ];
 //# sourceMappingURL=setup-orchestrator.service.js.map

@@ -21,8 +21,8 @@ export declare class SetupOrchestratorService {
     }): Promise<({
         stock: {
             id: string;
-            ticker: string;
             name: string;
+            ticker: string;
             sector: string | null;
             industry: string | null;
             exchange: string | null;
@@ -37,7 +37,6 @@ export declare class SetupOrchestratorService {
     } & {
         id: string;
         stockId: string;
-        metadata: import("@prisma/client/runtime/client").JsonValue | null;
         type: import("@prisma/client").$Enums.SetupType;
         timeframe: import("@prisma/client").$Enums.Timeframe;
         direction: import("@prisma/client").$Enums.Direction;
@@ -51,27 +50,14 @@ export declare class SetupOrchestratorService {
         riskReward: import("@prisma/client-runtime-utils").Decimal | null;
         evidence: import("@prisma/client/runtime/client").JsonValue | null;
         waitingFor: string | null;
+        metadata: import("@prisma/client/runtime/client").JsonValue | null;
         dailyBaseId: string | null;
     })[]>;
     getSetupById(id: string): Promise<{
-        barEvidence: {
-            id: string;
-            createdAt: Date;
-            stockId: string;
-            timeframe: import("@prisma/client").$Enums.Timeframe;
-            pattern: import("@prisma/client").$Enums.EvidencePattern;
-            bias: import("@prisma/client").$Enums.EvidenceBias;
-            keyLevelType: import("@prisma/client").$Enums.KeyLevelType;
-            keyLevelPrice: import("@prisma/client-runtime-utils").Decimal;
-            barDate: Date;
-            isViolation: boolean;
-            volumeState: import("@prisma/client").$Enums.VolumeState;
-            setupId: string | null;
-        }[];
         stock: {
             id: string;
-            ticker: string;
             name: string;
+            ticker: string;
             sector: string | null;
             industry: string | null;
             exchange: string | null;
@@ -83,10 +69,23 @@ export declare class SetupOrchestratorService {
             createdAt: Date;
             updatedAt: Date;
         };
+        barEvidence: {
+            id: string;
+            stockId: string;
+            timeframe: import("@prisma/client").$Enums.Timeframe;
+            createdAt: Date;
+            barDate: Date;
+            pattern: import("@prisma/client").$Enums.EvidencePattern;
+            bias: import("@prisma/client").$Enums.EvidenceBias;
+            isViolation: boolean;
+            keyLevelType: import("@prisma/client").$Enums.KeyLevelType;
+            keyLevelPrice: import("@prisma/client-runtime-utils").Decimal;
+            volumeState: import("@prisma/client").$Enums.VolumeState;
+            setupId: string | null;
+        }[];
     } & {
         id: string;
         stockId: string;
-        metadata: import("@prisma/client/runtime/client").JsonValue | null;
         type: import("@prisma/client").$Enums.SetupType;
         timeframe: import("@prisma/client").$Enums.Timeframe;
         direction: import("@prisma/client").$Enums.Direction;
@@ -100,8 +99,10 @@ export declare class SetupOrchestratorService {
         riskReward: import("@prisma/client-runtime-utils").Decimal | null;
         evidence: import("@prisma/client/runtime/client").JsonValue | null;
         waitingFor: string | null;
+        metadata: import("@prisma/client/runtime/client").JsonValue | null;
         dailyBaseId: string | null;
     }>;
+    private logEvent;
     simulateDetection(ticker: string, fromDate?: Date): Promise<SimulatedSetup[]>;
 }
 export interface SimulatedSetup {

@@ -17,9 +17,22 @@ exports.AlertGateway = void 0;
 const websockets_1 = require("@nestjs/websockets");
 const socket_io_1 = require("socket.io");
 const common_1 = require("@nestjs/common");
+const file_log_util_1 = require("../../common/utils/file-log.util");
 let AlertGateway = AlertGateway_1 = class AlertGateway {
     server;
     logger = new common_1.Logger(AlertGateway_1.name);
+    handleConnection(client) {
+        this.logger.log(`[WS DEBUG] Client connected: ${client.id}`);
+        client.onAny((event, ...args) => {
+            this.logger.log(`[WS DEBUG] inbound event="${event}" client=${client.id} payload=${JSON.stringify(args)}`);
+            this.logInboundMessage(client.id, event, args).catch((err) => {
+                this.logger.error(`[WS DEBUG] failed to persist inbound event="${event}" client=${client.id}: ${String(err)}`);
+            });
+        });
+    }
+    handleDisconnect(client) {
+        this.logger.log(`[WS DEBUG] Client disconnected: ${client.id}`);
+    }
     handleSubscribeAlerts(data, client) {
         client.join(`alerts:${data.userId}`);
         this.logger.log(`Client ${client.id} subscribed to alerts for ${data.userId}`);
@@ -33,6 +46,19 @@ let AlertGateway = AlertGateway_1 = class AlertGateway {
     }
     sendIntradayBar(ticker, bar) {
         this.server.to(`intraday:${ticker}`).emit('bar', { ticker, ...bar });
+    }
+    async logInboundMessage(clientId, event, args) {
+        const payload = args.length === 1 ? args[0] : args;
+        const data = typeof payload === 'object' && payload !== null
+            ? payload
+            : { raw: payload };
+        await (0, file_log_util_1.appendJsonLog)('inbound-messages.json', {
+            source: 'websocket',
+            event: `ws:${event}`,
+            ticker: data.ticker ?? null,
+            setupType: null,
+            payload: { clientId, ...data },
+        });
     }
 };
 exports.AlertGateway = AlertGateway;

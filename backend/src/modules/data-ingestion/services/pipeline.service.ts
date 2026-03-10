@@ -43,6 +43,12 @@ export class PipelineService implements OnModuleInit {
   private running = false;
   private lastResult: PipelineResult | null = null;
 
+  private isPipelineEnabled(): boolean {
+    const raw = process.env.ENABLE_PIPELINE_SYNC;
+    if (!raw) return false;
+    return raw.toLowerCase() === 'true';
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tickerDiscovery: TickerDiscoveryService,
@@ -55,6 +61,12 @@ export class PipelineService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    if (!this.isPipelineEnabled()) {
+      this.logger.log(
+        'Pipeline startup sync disabled (ENABLE_PIPELINE_SYNC != true)',
+      );
+      return;
+    }
     // Non-blocking: run in background so the app starts immediately
     this.checkAndSync().catch((err) =>
       this.logger.error('Startup sync failed', err),
@@ -65,6 +77,11 @@ export class PipelineService implements OnModuleInit {
    * Check if data is stale and run the full pipeline if needed.
    */
   async checkAndSync(): Promise<void> {
+    if (!this.isPipelineEnabled()) {
+      this.logger.log('Pipeline check skipped (ENABLE_PIPELINE_SYNC != true)');
+      return;
+    }
+
     const tasks = await this.backfillService.getStocksNeedingSync();
     if (tasks.length === 0) {
       this.logger.log('All data up to date -- skipping pipeline');

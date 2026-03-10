@@ -32,6 +32,12 @@ let PipelineService = PipelineService_1 = class PipelineService {
     logger = new common_1.Logger(PipelineService_1.name);
     running = false;
     lastResult = null;
+    isPipelineEnabled() {
+        const raw = process.env.ENABLE_PIPELINE_SYNC;
+        if (!raw)
+            return false;
+        return raw.toLowerCase() === 'true';
+    }
     constructor(prisma, tickerDiscovery, backfillService, indicatorService, rsRankService, stageRecalcJob, setupScanJob, breadthSyncJob) {
         this.prisma = prisma;
         this.tickerDiscovery = tickerDiscovery;
@@ -43,9 +49,17 @@ let PipelineService = PipelineService_1 = class PipelineService {
         this.breadthSyncJob = breadthSyncJob;
     }
     async onModuleInit() {
+        if (!this.isPipelineEnabled()) {
+            this.logger.log('Pipeline startup sync disabled (ENABLE_PIPELINE_SYNC != true)');
+            return;
+        }
         this.checkAndSync().catch((err) => this.logger.error('Startup sync failed', err));
     }
     async checkAndSync() {
+        if (!this.isPipelineEnabled()) {
+            this.logger.log('Pipeline check skipped (ENABLE_PIPELINE_SYNC != true)');
+            return;
+        }
         const tasks = await this.backfillService.getStocksNeedingSync();
         if (tasks.length === 0) {
             this.logger.log('All data up to date -- skipping pipeline');

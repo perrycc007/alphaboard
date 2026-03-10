@@ -18,6 +18,7 @@ const nestjs_better_auth_1 = require("@thallesp/nestjs-better-auth");
 const setup_orchestrator_service_1 = require("./setup-orchestrator.service");
 const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../../prisma/prisma.service");
+const file_log_util_1 = require("../../common/utils/file-log.util");
 let SetupController = class SetupController {
     orchestrator;
     prisma;
@@ -44,6 +45,20 @@ let SetupController = class SetupController {
             orderBy: { barDate: 'desc' },
         });
     }
+    async getSetupFeedback(id) {
+        const rows = await (0, file_log_util_1.readJsonLog)('setup-feedback.json');
+        return rows
+            .filter((row) => row.setupId === id)
+            .sort((a, b) => String(b.loggedAt ?? '').localeCompare(String(a.loggedAt ?? '')));
+    }
+    async addSetupFeedback(id, body) {
+        await (0, file_log_util_1.appendJsonLog)('setup-feedback.json', {
+            setupId: id,
+            rating: body.rating,
+            comment: body.comment ?? null,
+        });
+        return { saved: true };
+    }
     async getStockEvidence(ticker, timeframe) {
         const stock = await this.prisma.stock.findUniqueOrThrow({
             where: { ticker: ticker.toUpperCase() },
@@ -56,6 +71,16 @@ let SetupController = class SetupController {
             orderBy: { barDate: 'desc' },
             take: 100,
         });
+    }
+    async getEventLog(source, event, ticker, limit) {
+        const max = Math.min(Number(limit) || 100, 500);
+        const rows = await (0, file_log_util_1.readJsonLog)('detector-events.json');
+        return rows
+            .filter((row) => (source ? row.source === source : true))
+            .filter((row) => (event ? row.event === event : true))
+            .filter((row) => (ticker ? row.ticker === ticker : true))
+            .sort((a, b) => String(b.loggedAt ?? '').localeCompare(String(a.loggedAt ?? '')))
+            .slice(0, max);
     }
 };
 exports.SetupController = SetupController;
@@ -97,6 +122,21 @@ __decorate([
     __metadata("design:returntype", void 0)
 ], SetupController.prototype, "getSetupEvidence", null);
 __decorate([
+    (0, common_1.Get)('setups/:id/feedback'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], SetupController.prototype, "getSetupFeedback", null);
+__decorate([
+    (0, common_1.Post)('setups/:id/feedback'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], SetupController.prototype, "addSetupFeedback", null);
+__decorate([
     (0, common_1.Get)('stocks/:ticker/evidence'),
     __param(0, (0, common_1.Param)('ticker')),
     __param(1, (0, common_1.Query)('timeframe')),
@@ -104,6 +144,16 @@ __decorate([
     __metadata("design:paramtypes", [String, String]),
     __metadata("design:returntype", Promise)
 ], SetupController.prototype, "getStockEvidence", null);
+__decorate([
+    (0, common_1.Get)('event-log'),
+    __param(0, (0, common_1.Query)('source')),
+    __param(1, (0, common_1.Query)('event')),
+    __param(2, (0, common_1.Query)('ticker')),
+    __param(3, (0, common_1.Query)('limit')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], SetupController.prototype, "getEventLog", null);
 exports.SetupController = SetupController = __decorate([
     (0, common_1.Controller)('api'),
     (0, nestjs_better_auth_1.AllowAnonymous)(),

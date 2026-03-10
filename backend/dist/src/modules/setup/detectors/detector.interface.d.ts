@@ -1,6 +1,6 @@
 import { SetupType, Direction, Timeframe } from '@prisma/client';
 import { Bar } from '../../../common/types';
-import { SwingPointResult } from '../primitives';
+import { SwingPointResult, MarketRegime } from '../primitives';
 export interface DetectedSetup {
     type: SetupType;
     direction: Direction;
@@ -40,6 +40,7 @@ export interface DailyDetectorContext {
         state: string;
         pivotPrice?: number;
     }>;
+    regime?: MarketRegime;
 }
 export interface IntradayDetector {
     type: SetupType;

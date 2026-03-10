@@ -23,6 +23,7 @@ const alert_module_1 = require("./modules/alert/alert.module");
 const watchlist_module_1 = require("./modules/watchlist/watchlist.module");
 const data_ingestion_module_1 = require("./modules/data-ingestion/data-ingestion.module");
 const broker_module_1 = require("./modules/broker/broker.module");
+const label_module_1 = require("./modules/label/label.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -46,6 +47,7 @@ exports.AppModule = AppModule = __decorate([
             watchlist_module_1.WatchlistModule,
             data_ingestion_module_1.DataIngestionModule,
             broker_module_1.BrokerModule,
+            label_module_1.LabelModule,
         ],
     })
 ], AppModule);

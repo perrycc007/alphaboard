@@ -3,6 +3,17 @@ export interface SwingPointResult {
     index: number;
     price: number;
     type: 'HIGH' | 'LOW';
-    absValue: number;
+    atr: number;
+    prominence: number;
 }
-export declare function detectSwingPoints(bars: Bar[], lookahead?: number): SwingPointResult[];
+export declare function detectFractalPivots(bars: Bar[], lookahead?: number): SwingPointResult[];
+export interface SwingDetectOpts {
+    left?: number;
+    right?: number;
+    atrPeriod?: number;
+    promAtr?: number;
+    departAtr?: number;
+    departLookahead?: number;
+    minSwingSep?: number;
+}
+export declare function detectSignificantSwingPoints(bars: Bar[], opts?: SwingDetectOpts): SwingPointResult[];

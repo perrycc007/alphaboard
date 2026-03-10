@@ -1,0 +1,31 @@
+{
+  "version": "v1",
+  "description": "Baseline rule config extracted from setup_detectors.ipynb",
+  "created_at": "2026-02-24",
+  "parameters": {
+    "FRACTAL_LOOKAHEAD": 10,
+    "SIG_LEFT": 3,
+    "SIG_RIGHT": 3,
+    "SIG_PROM_ATR": 1.5,
+    "SIG_DEPART_ATR": 2.5,
+    "SIG_DEPART_LOOK": 10,
+    "SIG_MIN_SEP": 7,
+    "MERGE_PCT": 0.015,
+    "MIN_TOUCHES": 2,
+    "SMA50_DIST_ATR": 1.0,
+    "SMA50_VOL_BARS": 3,
+    "SMA50_STOP_LOOK": 5,
+    "SMA50_TARGET_RR": 5.0,
+    "EMA20_DIST_ATR": 1.0,
+    "EMA20_DEPART_ATR": 2.0,
+    "EMA20_DEPART_WIN": 30,
+    "EMA20_TARGET_RR": 3.0,
+    "DT_DB_APPROACH_ATR_MULT": 0.50,
+    "DT_DB_MIN_BAR_SPACING": 7,
+    "DT_DB_DEPARTURE_ATR_MULT": 1.0,
+    "BASE_MIN_DURATION": 20,
+    "BASE_MAX_RETRACE": 0.50,
+    "BASE_CONTRACTION_TAIL": 5,
+    "VCP_CONTRACTION_RATIO": 0.75
+  }
+}

@@ -18,7 +18,7 @@ class VcpDetector {
         const baseBars = bars.slice(baseStartIdx);
         if (baseBars.length < 20)
             return null;
-        const baseSwings = (0, primitives_1.detectSwingPoints)(baseBars, 5);
+        const baseSwings = (0, primitives_1.detectFractalPivots)(baseBars, 5);
         const highs = baseSwings.filter((s) => s.type === 'HIGH');
         const lows = baseSwings.filter((s) => s.type === 'LOW');
         if (highs.length < 2 || lows.length < 2)

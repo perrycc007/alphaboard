@@ -7,8 +7,9 @@ export declare class AlertService {
     constructor(prisma: PrismaService, alertGateway: AlertGateway);
     findByUser(userId: string): Promise<({
         stock: {
-            id: string;
             ticker: string;
+            id: string;
+            createdAt: Date;
             name: string;
             sector: string | null;
             industry: string | null;
@@ -18,18 +19,17 @@ export declare class AlertService {
             isCurated: boolean;
             lastSyncDate: Date | null;
             isActive: boolean;
-            createdAt: Date;
             updatedAt: Date;
         } | null;
     } & {
         id: string;
-        createdAt: Date;
-        stockId: string | null;
         userId: string;
+        stockId: string | null;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
         triggeredAt: Date | null;
+        createdAt: Date;
     })[]>;
     create(data: {
         userId: string;
@@ -38,28 +38,29 @@ export declare class AlertService {
         condition: Record<string, unknown>;
     }): Promise<{
         id: string;
-        createdAt: Date;
-        stockId: string | null;
         userId: string;
+        stockId: string | null;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
         triggeredAt: Date | null;
+        createdAt: Date;
     }>;
     remove(id: string): Promise<{
         id: string;
-        createdAt: Date;
-        stockId: string | null;
         userId: string;
+        stockId: string | null;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
         triggeredAt: Date | null;
+        createdAt: Date;
     }>;
     triggerAlert(alertId: string, payload: Record<string, unknown>): Promise<{
         stock: {
-            id: string;
             ticker: string;
+            id: string;
+            createdAt: Date;
             name: string;
             sector: string | null;
             industry: string | null;
@@ -69,17 +70,16 @@ export declare class AlertService {
             isCurated: boolean;
             lastSyncDate: Date | null;
             isActive: boolean;
-            createdAt: Date;
             updatedAt: Date;
         } | null;
     } & {
         id: string;
-        createdAt: Date;
-        stockId: string | null;
         userId: string;
+        stockId: string | null;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
         triggeredAt: Date | null;
+        createdAt: Date;
     }>;
 }

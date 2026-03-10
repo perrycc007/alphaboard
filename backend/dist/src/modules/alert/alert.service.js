@@ -13,6 +13,7 @@ exports.AlertService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../../prisma/prisma.service");
 const alert_gateway_1 = require("./alert.gateway");
+const file_log_util_1 = require("../../common/utils/file-log.util");
 let AlertService = class AlertService {
     prisma;
     alertGateway;
@@ -53,6 +54,23 @@ let AlertService = class AlertService {
             payload,
             triggeredAt: alert.triggeredAt,
         });
+        try {
+            await (0, file_log_util_1.appendJsonLog)('detector-events.json', {
+                source: 'alert_service',
+                event: 'alert_triggered',
+                ticker: alert.stock?.ticker ?? null,
+                setupType: null,
+                payload: {
+                    alertId: alert.id,
+                    alertType: alert.type,
+                    userId: alert.userId,
+                    condition: alert.condition,
+                    ...payload,
+                },
+            });
+        }
+        catch {
+        }
         return alert;
     }
 };

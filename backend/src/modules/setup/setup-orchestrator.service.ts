@@ -34,6 +34,7 @@ import {
   evaluateBar as evaluateConfirmation,
   BarContext,
 } from './confirmation/confirmation-engine';
+import { appendJsonLog } from '../../common/utils/file-log.util';
 
 // ---------------------------------------------------------------------------
 // Scanner ranking scores
@@ -236,11 +237,15 @@ export class SetupOrchestratorService {
     stockId: string,
     detected: DetectedSetup,
   ): Promise<void> {
-    // Set expiration: 30 trading days (~6 calendar weeks) from now
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 42);
 
-    await this.prisma.setup.create({
+    const stock = await this.prisma.stock.findUnique({
+      where: { id: stockId },
+      select: { ticker: true },
+    });
+
+    const setup = await this.prisma.setup.create({
       data: {
         stockId,
         type: detected.type,
@@ -257,6 +262,17 @@ export class SetupOrchestratorService {
         dailyBaseId: detected.dailyBaseId,
         expiresAt,
       },
+    });
+
+    await this.logEvent('setup_orchestrator', 'setup_detected', stock?.ticker, detected.type, {
+      setupId: setup.id,
+      direction: detected.direction,
+      timeframe: detected.timeframe,
+      pivotPrice: detected.pivotPrice,
+      stopPrice: detected.stopPrice,
+      targetPrice: detected.targetPrice,
+      riskReward: detected.riskReward,
+      evidence: detected.evidence,
     });
   }
 
@@ -407,6 +423,17 @@ export class SetupOrchestratorService {
             metadata: { ...existingMeta, stateReason },
           },
         });
+
+        const stock = await this.prisma.stock.findUnique({
+          where: { id: stockId },
+          select: { ticker: true },
+        });
+        await this.logEvent('setup_orchestrator', 'state_transition', stock?.ticker, setup.type, {
+          setupId: setup.id,
+          from: setup.state,
+          to: newState,
+          reason: stateReason,
+        });
       }
     }
 
@@ -473,6 +500,17 @@ export class SetupOrchestratorService {
             metadata: { ...existingMeta, stateReason },
           },
         });
+
+        const stock = await this.prisma.stock.findUnique({
+          where: { id: stockId },
+          select: { ticker: true },
+        });
+        await this.logEvent('setup_orchestrator', 'triggered_outcome', stock?.ticker, setup.type, {
+          setupId: setup.id,
+          from: 'TRIGGERED',
+          to: newState,
+          reason: stateReason,
+        });
       }
     }
   }
@@ -528,6 +566,26 @@ export class SetupOrchestratorService {
         barEvidence: { orderBy: { barDate: 'desc' } },
       },
     });
+  }
+
+  private async logEvent(
+    source: string,
+    event: string,
+    ticker: string | undefined | null,
+    setupType: string | undefined | null,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await appendJsonLog('detector-events.json', {
+        source,
+        event,
+        ticker: ticker ?? null,
+        setupType: setupType ?? null,
+        payload,
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to write event log: ${err}`);
+    }
   }
 
   /**

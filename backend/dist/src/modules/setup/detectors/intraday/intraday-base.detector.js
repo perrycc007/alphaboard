@@ -9,7 +9,7 @@ class IntradayBaseDetector {
         if (bars.length < 15)
             return null;
         const abs = (0, primitives_1.averageBarSize)(bars);
-        const swings = (0, primitives_1.detectSwingPoints)(bars, 5);
+        const swings = (0, primitives_1.detectFractalPivots)(bars, 5);
         if (swings.length === 0)
             return null;
         const lastSwing = swings[swings.length - 1];

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AlertType } from '@prisma/client';
 import { AlertGateway } from './alert.gateway';
+import { appendJsonLog } from '../../common/utils/file-log.util';
 
 @Injectable()
 export class AlertService {
@@ -55,6 +56,24 @@ export class AlertService {
       payload,
       triggeredAt: alert.triggeredAt,
     });
+
+    try {
+      await appendJsonLog('detector-events.json', {
+        source: 'alert_service',
+        event: 'alert_triggered',
+        ticker: alert.stock?.ticker ?? null,
+        setupType: null,
+        payload: {
+          alertId: alert.id,
+          alertType: alert.type,
+          userId: alert.userId,
+          condition: alert.condition,
+          ...payload,
+        },
+      });
+    } catch {
+      // non-critical: swallow log failures
+    }
 
     return alert;
   }

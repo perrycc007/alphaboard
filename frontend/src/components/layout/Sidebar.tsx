@@ -10,6 +10,7 @@ import {
   PanelLeft,
   Filter,
   BarChart3,
+  Tag,
 } from 'lucide-react'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { cn } from '@/lib/utils'
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/playbook', label: 'Playbook', icon: Trophy },
   { to: '/simulate', label: 'Simulator', icon: BarChart3 },
+  { to: '/label', label: 'Labeling', icon: Tag },
 ] as const
 
 const BOTTOM_ITEMS = [

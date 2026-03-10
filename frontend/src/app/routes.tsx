@@ -9,6 +9,7 @@ import Playbook from '@/pages/Playbook'
 import Screener from '@/pages/Screener'
 import Simulate from '@/pages/Simulate'
 import SettingsPage from '@/pages/Settings'
+import LabelPage from '@/pages/Label'
 
 export const router = createBrowserRouter([
   {
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { path: 'journal', element: <Journal /> },
       { path: 'playbook', element: <Playbook /> },
       { path: 'simulate', element: <Simulate /> },
+      { path: 'label', element: <LabelPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

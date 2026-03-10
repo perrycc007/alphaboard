@@ -33,6 +33,7 @@ export declare class PipelineService implements OnModuleInit {
     private readonly logger;
     private running;
     private lastResult;
+    private isPipelineEnabled;
     constructor(prisma: PrismaService, tickerDiscovery: TickerDiscoveryService, backfillService: BackfillService, indicatorService: IndicatorService, rsRankService: RsRankService, stageRecalcJob: StageRecalcJob, setupScanJob: SetupScanJob, breadthSyncJob: BreadthSyncJob);
     onModuleInit(): Promise<void>;
     checkAndSync(): Promise<void>;
