@@ -58,15 +58,12 @@ export type EvidencePattern =
   | 'DRY_UP'
   | 'LOWER_WICK_ABSORPTION'
   | 'BULLISH_ENGULFING'
+  | 'RESISTANCE_DRY_UP'
+  | 'UPPER_WICK_REJECTION'
   | 'BEARISH_ENGULFING'
-  | 'BREAKOUT_BAR'
-  | 'BREAKDOWN_BAR'
-  | 'INSIDE_BAR'
-  | 'OUTSIDE_BAR'
-  | 'SHAKEOUT'
-  | 'EXHAUSTION'
-  | 'RANGE_EXPANSION'
-  | 'TIGHTENING'
+  | 'SUPPORT_BROKEN'
+  | 'PIVOT_BROKEN'
+  | 'RESISTANCE_RECLAIMED'
 
 export type EvidenceBias = 'BULLISH' | 'BEARISH'
 
@@ -75,9 +72,27 @@ export type KeyLevelType =
   | 'SWING_LOW'
   | 'BASE_LOW'
   | 'BASE_HIGH'
-  | 'PIVOT'
-  | 'SUPPORT'
-  | 'RESISTANCE'
+  | 'VCP_PIVOT'
+  | 'MA_20'
+  | 'MA_50'
+  | 'MA_200'
+  | 'VWAP'
+
+export type LeaderPeriodActivity =
+  | 'ADVANCING'
+  | 'SETTING_UP'
+  | 'PULLBACK'
+  | 'REVERSAL'
+  | 'BASING'
+  | 'DECLINING'
+  | 'QUIET'
+
+export type TimingSignalType =
+  | 'CROSS_620'
+  | 'MACD_620_SHORT'
+  | 'VCP_EARLY_BUY'
+  | 'DOUBLE_TOP_REJECTION'
+  | 'DOUBLE_BOTTOM_REJECTION'
 
 export type VolumeState = 'EXPANSION' | 'CONTRACTION' | 'NORMAL'
 
@@ -304,6 +319,17 @@ export interface ApiPeriodLeaderSetup {
   type: SetupType
   state: SetupState
   direction: Direction
+  detectedAt?: string
+}
+
+export interface ApiPeriodTimingSignal {
+  type: TimingSignalType
+  direction: Direction
+  signalAt: string
+  levelType: KeyLevelType
+  referenceLevel: number
+  triggerPrice: number | null
+  stopPrice: number | null
 }
 
 export interface ApiPeriodLeaderSummary {
@@ -314,12 +340,13 @@ export interface ApiPeriodLeaderSummary {
   peakGainPct: number
   entryPrice: number
   peakPrice: number
-  activity?: string
+  activity?: LeaderPeriodActivity
   activityNote?: string
   identifiedSetupLabel?: string | null
   stageAtPeriodStart?: StageEnum | null
   stageAtPeriodEnd: StageEnum | null
   activeSetups: ApiPeriodLeaderSetup[]
+  timingSignals?: ApiPeriodTimingSignal[]
   shortingEnabled: boolean
 }
 
