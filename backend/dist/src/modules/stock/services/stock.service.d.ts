@@ -31,10 +31,10 @@ export declare class StockService {
             id: string;
             stockId: string;
             date: Date;
+            metadata: import("@prisma/client/runtime/client").JsonValue | null;
             stage: import("@prisma/client").$Enums.StageEnum;
             category: import("@prisma/client").$Enums.StockCategory;
             isTemplate: boolean;
-            metadata: import("@prisma/client/runtime/client").JsonValue | null;
         }[];
     } & {
         id: string;
@@ -85,10 +85,10 @@ export declare class StockService {
         id: string;
         stockId: string;
         date: Date;
+        metadata: import("@prisma/client/runtime/client").JsonValue | null;
         stage: import("@prisma/client").$Enums.StageEnum;
         category: import("@prisma/client").$Enums.StockCategory;
         isTemplate: boolean;
-        metadata: import("@prisma/client/runtime/client").JsonValue | null;
     }[]>;
     findLeaders(params: {
         minGain?: number;

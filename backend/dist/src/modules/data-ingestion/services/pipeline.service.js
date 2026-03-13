@@ -20,6 +20,7 @@ const rs_rank_service_1 = require("./rs-rank.service");
 const stage_recalc_job_1 = require("../jobs/stage-recalc.job");
 const setup_scan_job_1 = require("../jobs/setup-scan.job");
 const breadth_sync_job_1 = require("../jobs/breadth-sync.job");
+const market_regime_service_1 = require("../../market/market-regime.service");
 let PipelineService = PipelineService_1 = class PipelineService {
     prisma;
     tickerDiscovery;
@@ -29,6 +30,7 @@ let PipelineService = PipelineService_1 = class PipelineService {
     stageRecalcJob;
     setupScanJob;
     breadthSyncJob;
+    marketRegimeService;
     logger = new common_1.Logger(PipelineService_1.name);
     running = false;
     lastResult = null;
@@ -38,7 +40,7 @@ let PipelineService = PipelineService_1 = class PipelineService {
             return false;
         return raw.toLowerCase() === 'true';
     }
-    constructor(prisma, tickerDiscovery, backfillService, indicatorService, rsRankService, stageRecalcJob, setupScanJob, breadthSyncJob) {
+    constructor(prisma, tickerDiscovery, backfillService, indicatorService, rsRankService, stageRecalcJob, setupScanJob, breadthSyncJob, marketRegimeService) {
         this.prisma = prisma;
         this.tickerDiscovery = tickerDiscovery;
         this.backfillService = backfillService;
@@ -47,6 +49,7 @@ let PipelineService = PipelineService_1 = class PipelineService {
         this.stageRecalcJob = stageRecalcJob;
         this.setupScanJob = setupScanJob;
         this.breadthSyncJob = breadthSyncJob;
+        this.marketRegimeService = marketRegimeService;
     }
     async onModuleInit() {
         if (!this.isPipelineEnabled()) {
@@ -98,6 +101,8 @@ let PipelineService = PipelineService_1 = class PipelineService {
             await this.setupScanJob.run();
             this.logger.log('Step 8: Computing breadth...');
             await this.breadthSyncJob.run();
+            this.logger.log('Step 9: Rebuilding market context...');
+            await this.marketRegimeService.rebuildAll();
             const durationMs = Date.now() - startTime;
             this.lastResult = {
                 synced,
@@ -142,6 +147,7 @@ exports.PipelineService = PipelineService = PipelineService_1 = __decorate([
         rs_rank_service_1.RsRankService,
         stage_recalc_job_1.StageRecalcJob,
         setup_scan_job_1.SetupScanJob,
-        breadth_sync_job_1.BreadthSyncJob])
+        breadth_sync_job_1.BreadthSyncJob,
+        market_regime_service_1.MarketRegimeService])
 ], PipelineService);
 //# sourceMappingURL=pipeline.service.js.map

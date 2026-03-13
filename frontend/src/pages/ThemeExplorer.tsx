@@ -30,6 +30,11 @@ export default function ThemeExplorer() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>('ALL')
 
+  const themedRows: Array<(typeof themes)[number] & { direction: ThemeDirection }> = themes.map((theme) => ({
+    ...theme,
+    direction: computeThemeDirection(theme.stats.bullishPct, theme.stats.bearishPct),
+  }))
+
   useEffect(() => {
     fetchThemes()
     fetchDailySetups()
@@ -48,14 +53,10 @@ export default function ThemeExplorer() {
   )
 
   // Compute direction for each theme and filter
-  const filteredThemes = themes
-    .map((theme) => ({
-      ...theme,
-      direction: computeThemeDirection(theme.stats.bullishPct, theme.stats.bearishPct),
-    }))
+  const filteredThemes = themedRows
     .filter((t) => directionFilter === 'ALL' || t.direction === directionFilter)
     // Sort: one-sided first, then by setup count
-    .toSorted((a, b) => {
+    .sort((a, b) => {
       const aOneSided = a.direction !== 'NEUTRAL' ? 1 : 0
       const bOneSided = b.direction !== 'NEUTRAL' ? 1 : 0
       if (bOneSided !== aOneSided) return bOneSided - aOneSided

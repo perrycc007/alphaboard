@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SetupOrchestratorService } from '../../setup/setup-orchestrator.service';
 import { Bar } from '../../../common/types';
+import { MarketRegimeService } from '../../market/market-regime.service';
 
 /**
  * Setup scan job: runs after stage recalculation.
@@ -20,11 +21,13 @@ export class SetupScanJob {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orchestrator: SetupOrchestratorService,
+    private readonly marketRegimeService: MarketRegimeService,
   ) {}
 
   @Cron('0 18 * * 1-5') // 6:00 PM EST, after stage recalc
   async run(): Promise<void> {
     this.logger.log('Starting setup scan...');
+    await this.marketRegimeService.rebuildLeaderRuns();
 
     const candidates = await this.getSetupCandidates();
     this.logger.log(`Found ${candidates.length} setup candidates after filtering`);
@@ -82,11 +85,11 @@ export class SetupScanJob {
               },
             },
           },
-          // Past leaders
+          // Qualified past leaders
           {
-            stages: {
+            leaderRuns: {
               some: {
-                category: 'FORMER_HOT',
+                isQualified: true,
               },
             },
           },

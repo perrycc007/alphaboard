@@ -10,14 +10,15 @@ exports.SetupModule = void 0;
 const common_1 = require("@nestjs/common");
 const setup_controller_1 = require("./setup.controller");
 const setup_orchestrator_service_1 = require("./setup-orchestrator.service");
+const timing_signal_service_1 = require("./timing-signal.service");
 let SetupModule = class SetupModule {
 };
 exports.SetupModule = SetupModule;
 exports.SetupModule = SetupModule = __decorate([
     (0, common_1.Module)({
         controllers: [setup_controller_1.SetupController],
-        providers: [setup_orchestrator_service_1.SetupOrchestratorService],
-        exports: [setup_orchestrator_service_1.SetupOrchestratorService],
+        providers: [setup_orchestrator_service_1.SetupOrchestratorService, timing_signal_service_1.TimingSignalService],
+        exports: [setup_orchestrator_service_1.SetupOrchestratorService, timing_signal_service_1.TimingSignalService],
     })
 ], SetupModule);
 //# sourceMappingURL=setup.module.js.map

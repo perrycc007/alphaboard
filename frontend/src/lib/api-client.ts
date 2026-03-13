@@ -2,11 +2,14 @@ const API_BASE = '/api'
 const DEFAULT_TIMEOUT_MS = 30_000
 
 class ApiError extends Error {
+  status: number
+
   constructor(
-    public status: number,
+    status: number,
     message: string,
   ) {
     super(message)
+    this.status = status
     this.name = 'ApiError'
   }
 }

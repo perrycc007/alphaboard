@@ -1,29 +1,41 @@
+import { Suspense, lazy } from 'react'
+import type { ComponentType } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 
-import Dashboard from '@/pages/Dashboard'
-import ThemeExplorer from '@/pages/ThemeExplorer'
-import WatchlistPage from '@/pages/Watchlist'
-import Journal from '@/pages/Journal'
-import Playbook from '@/pages/Playbook'
-import Screener from '@/pages/Screener'
-import Simulate from '@/pages/Simulate'
-import SettingsPage from '@/pages/Settings'
-import LabelPage from '@/pages/Label'
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const ThemeExplorer = lazy(() => import('@/pages/ThemeExplorer'))
+const WatchlistPage = lazy(() => import('@/pages/Watchlist'))
+const Journal = lazy(() => import('@/pages/Journal'))
+const Playbook = lazy(() => import('@/pages/Playbook'))
+const Screener = lazy(() => import('@/pages/Screener'))
+const Simulate = lazy(() => import('@/pages/Simulate'))
+const SettingsPage = lazy(() => import('@/pages/Settings'))
+const LabelPage = lazy(() => import('@/pages/Label'))
+const MarketRegimes = lazy(() => import('@/pages/MarketRegimes'))
+
+function routeElement(Component: ComponentType) {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-text-secondary">Loading page...</div>}>
+      <Component />
+    </Suspense>
+  )
+}
 
 export const router = createBrowserRouter([
   {
     element: <AppShell />,
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: 'themes', element: <ThemeExplorer /> },
-      { path: 'watchlist', element: <WatchlistPage /> },
-      { path: 'screener', element: <Screener /> },
-      { path: 'journal', element: <Journal /> },
-      { path: 'playbook', element: <Playbook /> },
-      { path: 'simulate', element: <Simulate /> },
-      { path: 'label', element: <LabelPage /> },
-      { path: 'settings', element: <SettingsPage /> },
+      { index: true, element: routeElement(Dashboard) },
+      { path: 'themes', element: routeElement(ThemeExplorer) },
+      { path: 'watchlist', element: routeElement(WatchlistPage) },
+      { path: 'screener', element: routeElement(Screener) },
+      { path: 'journal', element: routeElement(Journal) },
+      { path: 'playbook', element: routeElement(Playbook) },
+      { path: 'simulate', element: routeElement(Simulate) },
+      { path: 'regimes', element: routeElement(MarketRegimes) },
+      { path: 'label', element: routeElement(LabelPage) },
+      { path: 'settings', element: routeElement(SettingsPage) },
     ],
   },
 ])

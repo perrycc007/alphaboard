@@ -18,6 +18,7 @@ export declare class TradeLifecycleService {
         id: string;
         createdAt: Date;
         stockId: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         stopPrice: import("@prisma/client-runtime-utils").Decimal;
         targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
@@ -28,32 +29,32 @@ export declare class TradeLifecycleService {
         entryPrice: import("@prisma/client-runtime-utils").Decimal | null;
         riskPercent: import("@prisma/client-runtime-utils").Decimal;
         notes: string | null;
-        userId: string | null;
     }>;
     listIdeas(userId?: string): Promise<({
         setup: {
             id: string;
             stockId: string;
-            metadata: import("@prisma/client/runtime/client").JsonValue | null;
             type: import("@prisma/client").$Enums.SetupType;
-            timeframe: import("@prisma/client").$Enums.Timeframe;
             direction: import("@prisma/client").$Enums.Direction;
-            state: import("@prisma/client").$Enums.SetupState;
-            detectedAt: Date;
-            expiresAt: Date | null;
-            lastStateAt: Date;
+            timeframe: import("@prisma/client").$Enums.Timeframe;
             pivotPrice: import("@prisma/client-runtime-utils").Decimal | null;
             stopPrice: import("@prisma/client-runtime-utils").Decimal | null;
             targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
             riskReward: import("@prisma/client-runtime-utils").Decimal | null;
-            evidence: import("@prisma/client/runtime/client").JsonValue | null;
-            waitingFor: string | null;
             dailyBaseId: string | null;
+            state: import("@prisma/client").$Enums.SetupState;
+            waitingFor: string | null;
+            evidence: import("@prisma/client/runtime/client").JsonValue | null;
+            metadata: import("@prisma/client/runtime/client").JsonValue | null;
+            detectedAt: Date;
+            expiresAt: Date | null;
+            lastStateAt: Date;
         } | null;
     } & {
         id: string;
         createdAt: Date;
         stockId: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         stopPrice: import("@prisma/client-runtime-utils").Decimal;
         targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
@@ -64,13 +65,13 @@ export declare class TradeLifecycleService {
         entryPrice: import("@prisma/client-runtime-utils").Decimal | null;
         riskPercent: import("@prisma/client-runtime-utils").Decimal;
         notes: string | null;
-        userId: string | null;
     })[]>;
     confirmIdea(ideaId: string): Promise<{
         idea: {
             id: string;
             createdAt: Date;
             stockId: string;
+            userId: string | null;
             direction: import("@prisma/client").$Enums.Direction;
             stopPrice: import("@prisma/client-runtime-utils").Decimal;
             targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
@@ -81,7 +82,6 @@ export declare class TradeLifecycleService {
             entryPrice: import("@prisma/client-runtime-utils").Decimal | null;
             riskPercent: import("@prisma/client-runtime-utils").Decimal;
             notes: string | null;
-            userId: string | null;
         };
         intent: {
             id: string;
@@ -93,6 +93,7 @@ export declare class TradeLifecycleService {
         id: string;
         createdAt: Date;
         stockId: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         stopPrice: import("@prisma/client-runtime-utils").Decimal;
         targetPrice: import("@prisma/client-runtime-utils").Decimal | null;
@@ -103,7 +104,6 @@ export declare class TradeLifecycleService {
         entryPrice: import("@prisma/client-runtime-utils").Decimal | null;
         riskPercent: import("@prisma/client-runtime-utils").Decimal;
         notes: string | null;
-        userId: string | null;
     }>;
     placeOrder(intentId: string, data: {
         type: 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_LIMIT';
@@ -137,9 +137,9 @@ export declare class TradeLifecycleService {
     } & {
         id: string;
         ticker: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         status: import("@prisma/client").$Enums.PositionStatus;
-        userId: string | null;
         quantity: import("@prisma/client-runtime-utils").Decimal;
         avgEntry: import("@prisma/client-runtime-utils").Decimal;
         currentStop: import("@prisma/client-runtime-utils").Decimal | null;
@@ -151,9 +151,9 @@ export declare class TradeLifecycleService {
     updateStop(positionId: string, newStop: number): Promise<{
         id: string;
         ticker: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         status: import("@prisma/client").$Enums.PositionStatus;
-        userId: string | null;
         quantity: import("@prisma/client-runtime-utils").Decimal;
         avgEntry: import("@prisma/client-runtime-utils").Decimal;
         currentStop: import("@prisma/client-runtime-utils").Decimal | null;
@@ -165,9 +165,9 @@ export declare class TradeLifecycleService {
     closePosition(positionId: string): Promise<{
         id: string;
         ticker: string;
+        userId: string | null;
         direction: import("@prisma/client").$Enums.Direction;
         status: import("@prisma/client").$Enums.PositionStatus;
-        userId: string | null;
         quantity: import("@prisma/client-runtime-utils").Decimal;
         avgEntry: import("@prisma/client-runtime-utils").Decimal;
         currentStop: import("@prisma/client-runtime-utils").Decimal | null;

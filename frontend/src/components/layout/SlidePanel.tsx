@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useState } from 'react'
-import { X, TrendingUp, TrendingDown, AlertCircle, Clock, BarChart2, Filter } from 'lucide-react'
+import { X, TrendingUp, AlertCircle, Clock, BarChart2, Filter } from 'lucide-react'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { useStockDetailStore } from '@/stores/useStockDetailStore'
 import { useSetupStore } from '@/stores/useSetupStore'

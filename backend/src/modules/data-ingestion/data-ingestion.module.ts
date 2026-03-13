@@ -16,9 +16,10 @@ import { DataIngestionController } from './data-ingestion.controller';
 import { SetupModule } from '../setup/setup.module';
 import { AlertModule } from '../alert/alert.module';
 import { StockModule } from '../stock/stock.module';
+import { MarketModule } from '../market/market.module';
 
 @Module({
-  imports: [SetupModule, AlertModule, StockModule],
+  imports: [SetupModule, AlertModule, StockModule, MarketModule],
   controllers: [DataIngestionController],
   providers: [
     // Providers

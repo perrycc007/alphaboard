@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import type { ApiThemeDetail, ApiThemeStock } from '@/types'
-import { parseStageToNumber } from '@/types'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { useSetupStore } from '@/stores/useSetupStore'
 import { StageTag, SetupTypeBadge } from '@/components/shared'

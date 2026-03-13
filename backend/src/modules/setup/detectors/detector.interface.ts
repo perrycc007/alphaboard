@@ -1,4 +1,4 @@
-import { SetupType, Direction, Timeframe } from '@prisma/client';
+import { SetupType, Direction, Timeframe, StageEnum, KeyLevelType } from '@prisma/client';
 import { Bar } from '../../../common/types';
 import { SwingPointResult, MarketRegime } from '../primitives';
 
@@ -28,6 +28,9 @@ export interface DailyDetector {
 export interface DailyDetectorContext {
   stockId: string;
   isStage2: boolean;
+  latestStage?: StageEnum;
+  hasQualifiedLeaderRun?: boolean;
+  canShortLeader?: boolean;
   sma50?: number;
   sma200?: number;
   ema20?: number;
@@ -45,7 +48,16 @@ export interface DailyDetectorContext {
     id: string;
     type: SetupType;
     state: string;
+    direction: Direction;
+    timeframe: Timeframe;
     pivotPrice?: number;
+    stopPrice?: number;
+    targetPrice?: number;
+  }>;
+  keyLevels?: Array<{
+    type: KeyLevelType;
+    price: number;
+    bias: Direction | 'BOTH';
   }>;
   regime?: MarketRegime;
 }

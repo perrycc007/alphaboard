@@ -1,16 +1,32 @@
-import type { Stock } from '@/types'
-import { StageTag, CategoryTag, DirectionBadge } from '@/components/shared'
+import { StageTag, CategoryTag } from '@/components/shared'
 import { formatPrice, formatPercent } from '@/lib/utils'
+import type { StockCategory, StageEnum } from '@/types'
+
+interface StockHeaderTheme {
+  id: string
+  name: string
+}
+
+interface StockHeaderStock {
+  name: string
+  stage: StageEnum
+  category: StockCategory
+  sector: string | null
+  industry: string | null
+  price: number
+  changePercent: number
+  themes: StockHeaderTheme[]
+}
 
 interface StockHeaderProps {
-  stock: Stock
+  stock: StockHeaderStock
 }
 
 export function StockHeader({ stock }: StockHeaderProps) {
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
+      <div className="flex min-w-0 items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 sm:gap-2.5">
             <h2 className="font-heading text-lg font-bold text-text-primary sm:text-xl lg:text-2xl">
               {stock.name}
@@ -19,7 +35,7 @@ export function StockHeader({ stock }: StockHeaderProps) {
             <CategoryTag category={stock.category} size="md" />
           </div>
           <p className="mt-1 text-xs text-text-secondary sm:text-sm">
-            {stock.sector} • {stock.industry}
+            {stock.sector ?? 'N/A'} · {stock.industry ?? 'N/A'}
           </p>
         </div>
         <div className="text-right">
@@ -36,7 +52,7 @@ export function StockHeader({ stock }: StockHeaderProps) {
         </div>
       </div>
 
-      {stock.themes.length > 0 && (
+      {stock.themes.length > 0 ? (
         <div className="flex flex-wrap gap-1.5 sm:gap-2">
           {stock.themes.map((theme) => (
             <span
@@ -47,7 +63,7 @@ export function StockHeader({ stock }: StockHeaderProps) {
             </span>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

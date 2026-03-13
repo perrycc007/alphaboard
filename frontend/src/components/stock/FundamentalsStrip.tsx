@@ -1,8 +1,8 @@
-import type { Stock } from '@/types'
+import type { ApiStock } from '@/types'
 import { formatCompactNumber } from '@/lib/utils'
 
 interface FundamentalsStripProps {
-  stock: Stock
+  stock: ApiStock
 }
 
 export function FundamentalsStrip({ stock }: FundamentalsStripProps) {
@@ -11,13 +11,13 @@ export function FundamentalsStrip({ stock }: FundamentalsStripProps) {
       <div>
         <div className="text-[10px] text-text-secondary sm:text-xs">Market Cap</div>
         <div className="mt-1 font-mono text-xs font-semibold text-text-primary sm:text-sm">
-          {formatCompactNumber(stock.marketCap)}
+          {stock.marketCap != null ? formatCompactNumber(stock.marketCap) : 'N/A'}
         </div>
       </div>
       <div>
         <div className="text-[10px] text-text-secondary sm:text-xs">Avg Volume</div>
         <div className="mt-1 font-mono text-xs font-semibold text-text-primary sm:text-sm">
-          {formatCompactNumber(stock.avgVolume)}
+          {stock.avgVolume != null ? formatCompactNumber(stock.avgVolume) : 'N/A'}
         </div>
       </div>
       <div>

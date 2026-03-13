@@ -5,9 +5,8 @@ export declare class AlertController {
     constructor(alertService: AlertService);
     findAll(userId: string): Promise<({
         stock: {
-            ticker: string;
             id: string;
-            createdAt: Date;
+            ticker: string;
             name: string;
             sector: string | null;
             industry: string | null;
@@ -17,17 +16,18 @@ export declare class AlertController {
             isCurated: boolean;
             lastSyncDate: Date | null;
             isActive: boolean;
+            createdAt: Date;
             updatedAt: Date;
         } | null;
     } & {
         id: string;
-        userId: string;
+        createdAt: Date;
         stockId: string | null;
+        userId: string;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
         triggeredAt: Date | null;
-        createdAt: Date;
     })[]>;
     create(body: {
         userId: string;
@@ -36,22 +36,22 @@ export declare class AlertController {
         condition: Record<string, unknown>;
     }): Promise<{
         id: string;
-        userId: string;
+        createdAt: Date;
         stockId: string | null;
+        userId: string;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
         triggeredAt: Date | null;
-        createdAt: Date;
     }>;
     remove(id: string): Promise<{
         id: string;
-        userId: string;
+        createdAt: Date;
         stockId: string | null;
+        userId: string;
         type: import("@prisma/client").$Enums.AlertType;
         condition: import("@prisma/client/runtime/client").JsonValue;
         isTriggered: boolean;
         triggeredAt: Date | null;
-        createdAt: Date;
     }>;
 }

@@ -109,10 +109,10 @@ export declare class StockController {
             id: string;
             stockId: string;
             date: Date;
+            metadata: import("@prisma/client/runtime/client").JsonValue | null;
             stage: import("@prisma/client").$Enums.StageEnum;
             category: import("@prisma/client").$Enums.StockCategory;
             isTemplate: boolean;
-            metadata: import("@prisma/client/runtime/client").JsonValue | null;
         }[];
     } & {
         id: string;
@@ -163,9 +163,9 @@ export declare class StockController {
         id: string;
         stockId: string;
         date: Date;
+        metadata: import("@prisma/client/runtime/client").JsonValue | null;
         stage: import("@prisma/client").$Enums.StageEnum;
         category: import("@prisma/client").$Enums.StockCategory;
         isTemplate: boolean;
-        metadata: import("@prisma/client/runtime/client").JsonValue | null;
     }[]>;
 }

@@ -7,6 +7,7 @@ import { RsRankService } from './rs-rank.service';
 import { StageRecalcJob } from '../jobs/stage-recalc.job';
 import { SetupScanJob } from '../jobs/setup-scan.job';
 import { BreadthSyncJob } from '../jobs/breadth-sync.job';
+import { MarketRegimeService } from '../../market/market-regime.service';
 
 export interface PipelineResult {
   synced: number;
@@ -58,6 +59,7 @@ export class PipelineService implements OnModuleInit {
     private readonly stageRecalcJob: StageRecalcJob,
     private readonly setupScanJob: SetupScanJob,
     private readonly breadthSyncJob: BreadthSyncJob,
+    private readonly marketRegimeService: MarketRegimeService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -142,6 +144,10 @@ export class PipelineService implements OnModuleInit {
       // 8. Compute breadth from universe
       this.logger.log('Step 8: Computing breadth...');
       await this.breadthSyncJob.run();
+
+      // 9. Rebuild market context artifacts
+      this.logger.log('Step 9: Rebuilding market context...');
+      await this.marketRegimeService.rebuildAll();
 
       const durationMs = Date.now() - startTime;
       this.lastResult = {

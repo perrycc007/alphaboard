@@ -4,6 +4,7 @@ import {
   createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
+  type Time,
   ColorType,
   LineStyle,
   CandlestickSeries,
@@ -23,6 +24,9 @@ interface StockChartProps {
   showMarkers?: boolean
 }
 
+type CandleSeriesApi = ISeriesApi<'Candlestick', Time>
+type LineSeriesApi = ISeriesApi<'Line', Time>
+
 // MA line configs
 const MA_LINES = [
   { key: 'ema6' as const, color: '#8b5cf6', width: 1, label: 'EMA 6' },
@@ -31,8 +35,6 @@ const MA_LINES = [
   { key: 'sma150' as const, color: '#14b8a6', width: 1, label: 'SMA 150' },
   { key: 'sma200' as const, color: '#ef4444', width: 1.5, label: 'SMA 200' },
 ] as const
-
-type MaKey = (typeof MA_LINES)[number]['key']
 
 function toChartDate(dateStr: string): string {
   // Convert ISO date to YYYY-MM-DD for lightweight-charts
@@ -50,11 +52,13 @@ export function StockChart({
 }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const candlestickRef = useRef<ISeriesApi<typeof CandlestickSeries> | null>(null)
-  const maSeriesRef = useRef<Map<string, ISeriesApi<typeof LineSeries>>>(new Map())
+  const candlestickRef = useRef<CandleSeriesApi | null>(null)
+  const maSeriesRef = useRef<Map<string, LineSeriesApi>>(new Map())
+  void spyBars
+  void showSpy
 
   // Sort bars by date ascending (backend sends desc)
-  const sortedBars = dailyBars.toSorted((a, b) => a.date.localeCompare(b.date))
+  const sortedBars = [...dailyBars].sort((a, b) => a.date.localeCompare(b.date))
 
   const initChart = useCallback(() => {
     if (!containerRef.current || sortedBars.length === 0) return

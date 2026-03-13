@@ -15,16 +15,20 @@ const common_1 = require("@nestjs/common");
 const schedule_1 = require("@nestjs/schedule");
 const prisma_service_1 = require("../../../prisma/prisma.service");
 const setup_orchestrator_service_1 = require("../../setup/setup-orchestrator.service");
+const market_regime_service_1 = require("../../market/market-regime.service");
 let SetupScanJob = SetupScanJob_1 = class SetupScanJob {
     prisma;
     orchestrator;
+    marketRegimeService;
     logger = new common_1.Logger(SetupScanJob_1.name);
-    constructor(prisma, orchestrator) {
+    constructor(prisma, orchestrator, marketRegimeService) {
         this.prisma = prisma;
         this.orchestrator = orchestrator;
+        this.marketRegimeService = marketRegimeService;
     }
     async run() {
         this.logger.log('Starting setup scan...');
+        await this.marketRegimeService.rebuildLeaderRuns();
         const candidates = await this.getSetupCandidates();
         this.logger.log(`Found ${candidates.length} setup candidates after filtering`);
         for (const stock of candidates) {
@@ -68,9 +72,9 @@ let SetupScanJob = SetupScanJob_1 = class SetupScanJob {
                         },
                     },
                     {
-                        stages: {
+                        leaderRuns: {
                             some: {
-                                category: 'FORMER_HOT',
+                                isQualified: true,
                             },
                         },
                     },
@@ -105,6 +109,7 @@ __decorate([
 exports.SetupScanJob = SetupScanJob = SetupScanJob_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        setup_orchestrator_service_1.SetupOrchestratorService])
+        setup_orchestrator_service_1.SetupOrchestratorService,
+        market_regime_service_1.MarketRegimeService])
 ], SetupScanJob);
 //# sourceMappingURL=setup-scan.job.js.map

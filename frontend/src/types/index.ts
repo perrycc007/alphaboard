@@ -37,6 +37,14 @@ export type Timeframe = 'DAILY' | 'INTRADAY'
 
 export type Direction = 'LONG' | 'SHORT'
 
+export type SetupFamily = 'REVERSAL' | 'TREND_LONG' | 'TREND_SHORT'
+
+export type MarketTrendLabel = 'UPTREND' | 'DOWNTREND' | 'RANGE' | 'TRANSITION'
+
+export type MarketRegimeLabel = 'TREND_UP' | 'TREND_DOWN' | 'RANGE' | 'TRANSITION'
+
+export type MarketPeriodGranularity = 'REGIME' | 'MONTH' | 'YEAR'
+
 export type StockCategory = 'HOT' | 'FORMER_HOT' | 'COMMODITY' | 'NONE'
 
 export type AlertType =
@@ -272,6 +280,65 @@ export interface ApiMarketOverview {
   indices: ApiMarketIndex[]
   breadth: ApiBreadthSnapshot | null
   timestamp: string
+}
+
+export interface ApiMarketScoreMetric {
+  count: number
+  winRate: number
+  avgFinalR: number
+  source: 'LIVE' | 'SIMULATED' | 'MIXED' | 'NONE'
+  liveCount: number
+  simulatedCount: number
+}
+
+export interface ApiMarketProxyState {
+  ticker: string
+  stage: StageEnum
+  trend: MarketTrendLabel
+  dominantFamily: SetupFamily | null
+  dominantSetup: SetupType | null
+  close: number
+}
+
+export interface ApiPeriodLeaderSetup {
+  type: SetupType
+  state: SetupState
+  direction: Direction
+}
+
+export interface ApiPeriodLeaderSummary {
+  ticker: string
+  name: string
+  stage2StartDate: string
+  stage2EndDate: string
+  peakGainPct: number
+  entryPrice: number
+  peakPrice: number
+  activity?: string
+  activityNote?: string
+  identifiedSetupLabel?: string | null
+  stageAtPeriodStart?: StageEnum | null
+  stageAtPeriodEnd: StageEnum | null
+  activeSetups: ApiPeriodLeaderSetup[]
+  shortingEnabled: boolean
+}
+
+export interface ApiMarketRegimePeriod {
+  id: string
+  granularity: MarketPeriodGranularity
+  periodKey: string
+  startDate: string
+  endDate: string
+  label: MarketRegimeLabel
+  liveSampleCount: number
+  simulatedSampleCount: number
+  sourcePeriodCount: number
+  scorecard: Record<SetupFamily, ApiMarketScoreMetric>
+  proxyStates: ApiMarketProxyState[]
+  leaderSummary: ApiPeriodLeaderSummary[]
+  markdown: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 // ---- Trade types ----

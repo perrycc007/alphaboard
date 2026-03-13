@@ -1,9 +1,9 @@
-import type { Setup } from '@/types'
+import type { ApiSetup } from '@/types'
 import { SetupTypeBadge, DirectionBadge } from '@/components/shared'
 import { formatPrice } from '@/lib/utils'
 
 interface SetupCardsProps {
-  setups: Setup[]
+  setups: ApiSetup[]
 }
 
 export function SetupCards({ setups }: SetupCardsProps) {
@@ -38,29 +38,29 @@ export function SetupCards({ setups }: SetupCardsProps) {
             </span>
           </div>
           <div className="space-y-1 text-[10px] sm:text-xs">
-            <div className="flex justify-between">
-              <span className="text-text-secondary">Pivot:</span>
-              <span className="font-mono text-text-primary">
-                {formatPrice(setup.pivotPrice)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-text-secondary">Stop:</span>
-              <span className="font-mono text-bearish">
-                {formatPrice(setup.stopPrice)}
-              </span>
-            </div>
-            {setup.targetPrices.length > 0 && (
-              <div className="flex justify-between">
-                <span className="text-text-secondary">Target:</span>
-                <span className="font-mono text-bullish">
-                  {formatPrice(setup.targetPrices[0])}
-                </span>
-              </div>
-            )}
+            <MetricRow label="Pivot" value={setup.pivotPrice} tone="text-text-primary" />
+            <MetricRow label="Stop" value={setup.stopPrice} tone="text-bearish" />
+            <MetricRow label="Target" value={setup.targetPrice} tone="text-bullish" />
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function MetricRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: number | null
+  tone: string
+}) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-text-secondary">{label}:</span>
+      <span className={`font-mono ${tone}`}>{value != null ? formatPrice(value) : 'N/A'}</span>
     </div>
   )
 }

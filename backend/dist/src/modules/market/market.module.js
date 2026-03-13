@@ -11,14 +11,19 @@ const common_1 = require("@nestjs/common");
 const market_controller_1 = require("./market.controller");
 const market_service_1 = require("./market.service");
 const breadth_service_1 = require("./breadth.service");
+const market_regime_service_1 = require("./market-regime.service");
+const stock_module_1 = require("../stock/stock.module");
+const setup_module_1 = require("../setup/setup.module");
+const indicator_service_1 = require("../data-ingestion/services/indicator.service");
 let MarketModule = class MarketModule {
 };
 exports.MarketModule = MarketModule;
 exports.MarketModule = MarketModule = __decorate([
     (0, common_1.Module)({
+        imports: [stock_module_1.StockModule, setup_module_1.SetupModule],
         controllers: [market_controller_1.MarketController],
-        providers: [market_service_1.MarketService, breadth_service_1.BreadthService],
-        exports: [market_service_1.MarketService, breadth_service_1.BreadthService],
+        providers: [market_service_1.MarketService, breadth_service_1.BreadthService, market_regime_service_1.MarketRegimeService, indicator_service_1.IndicatorService],
+        exports: [market_service_1.MarketService, breadth_service_1.BreadthService, market_regime_service_1.MarketRegimeService],
     })
 ], MarketModule);
 //# sourceMappingURL=market.module.js.map

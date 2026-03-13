@@ -1,16 +1,16 @@
 import { useEffect } from 'react'
-import { LayoutDashboard, Layers, TrendingUp, Eye, Zap, BarChart3, Activity, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Layers, TrendingUp, Zap, BarChart3, Activity, ChevronRight } from 'lucide-react'
 import { useMarketStore } from '@/stores/useMarketStore'
 import { useThemeStore } from '@/stores/useThemeStore'
 import { useTradeStore } from '@/stores/useTradeStore'
 import { useSetupStore } from '@/stores/useSetupStore'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { computeThemeDirection } from '@/types'
-import type { ApiTheme, ApiPosition, ApiSetup } from '@/types'
+import type { ApiPosition, ThemeDirection } from '@/types'
 import { IndexMiniCard } from '@/components/IndexMiniCard'
 import { BreadthSummaryBar } from '@/components/BreadthSummaryBar'
-import { SetupTypeBadge, DirectionBadge, StageTag, LoadingSkeleton, SkeletonGroup } from '@/components/shared'
-import { cn, formatPrice, formatPercent, formatRMultiple, formatCompactNumber } from '@/lib/utils'
+import { SetupTypeBadge, DirectionBadge, LoadingSkeleton, SkeletonGroup } from '@/components/shared'
+import { cn, formatPrice } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 
 export default function Dashboard() {
@@ -32,6 +32,11 @@ export default function Dashboard() {
 
   const openPanel = useSlidePanelStore((s) => s.openPanel)
 
+  const themeCards: Array<(typeof themes)[number] & { direction: ThemeDirection }> = themes.map((t) => ({
+    ...t,
+    direction: computeThemeDirection(t.stats.bullishPct, t.stats.bearishPct),
+  }))
+
   // Fetch all dashboard data in parallel on mount
   useEffect(() => {
     fetchOverview()
@@ -41,10 +46,9 @@ export default function Dashboard() {
   }, [fetchOverview, fetchThemes, fetchPositions, fetchDailySetups])
 
   // Filter to one-sided themes, take top 5
-  const suggestedThemes = themes
-    .map((t) => ({ ...t, direction: computeThemeDirection(t.stats.bullishPct, t.stats.bearishPct) }))
+  const suggestedThemes = themeCards
     .filter((t) => t.direction !== 'NEUTRAL')
-    .toSorted((a, b) => b.stats.setupCount - a.stats.setupCount)
+    .sort((a, b) => b.stats.setupCount - a.stats.setupCount)
     .slice(0, 5)
 
   return (

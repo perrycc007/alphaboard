@@ -17,6 +17,8 @@ async function main() {
         { ticker: 'QQQ', name: 'Nasdaq 100 ETF' },
         { ticker: 'DIA', name: 'Dow Jones ETF' },
         { ticker: 'IWM', name: 'Russell 2000 ETF' },
+        { ticker: 'GLD', name: 'SPDR Gold Shares' },
+        { ticker: 'UUP', name: 'Invesco DB US Dollar Index Bullish Fund' },
     ];
     for (const idx of indices) {
         await prisma.indexEntity.upsert({

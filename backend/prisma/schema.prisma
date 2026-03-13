@@ -14,50 +14,54 @@ datasource db {
 // ─────────────────────────────────────────────────────────
 
 model Stock {
-  id            String          @id @default(cuid())
-  ticker        String          @unique
-  name          String
-  sector        String?
-  industry      String?
-  exchange      String?
-  avgVolume     BigInt?
-  marketCap     BigInt?
-  isCurated     Boolean         @default(false)
-  lastSyncDate  DateTime?       @db.Date
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id           String    @id @default(cuid())
+  ticker       String    @unique
+  name         String
+  sector       String?
+  industry     String?
+  exchange     String?
+  avgVolume    BigInt?
+  marketCap    BigInt?
+  isCurated    Boolean   @default(false)
+  lastSyncDate DateTime? @db.Date
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  dailyBars      StockDaily[]
-  intradayBars   StockIntraday[]
-  stages         StockStage[]
-  themeStocks    ThemeStock[]
-  setups         Setup[]
-  swingPoints    SwingPoint[]
-  dailyBases     DailyBase[]
-  barEvidence    BarEvidence[]
-  alerts         Alert[]
-  watchlistItems WatchlistItem[]
+  dailyBars             StockDaily[]
+  intradayBars          StockIntraday[]
+  stages                StockStage[]
+  themeStocks           ThemeStock[]
+  setups                Setup[]
+  swingPoints           SwingPoint[]
+  dailyBases            DailyBase[]
+  barEvidence           BarEvidence[]
+  alerts                Alert[]
+  watchlistItems        WatchlistItem[]
+  leaderRuns            LeaderRun[]
+  setupOutcomes         SetupOutcome[]
+  timingSignals         IntradayTimingSignal[]
+  leaderPeriodSnapshots MarketLeaderPeriodSnapshot[]
 }
 
 model StockDaily {
-  id       String   @id @default(cuid())
-  stockId  String
-  date     DateTime @db.Date
-  open     Decimal  @db.Decimal(12, 4)
-  high     Decimal  @db.Decimal(12, 4)
-  low      Decimal  @db.Decimal(12, 4)
-  close    Decimal  @db.Decimal(12, 4)
-  volume   BigInt
+  id      String   @id @default(cuid())
+  stockId String
+  date    DateTime @db.Date
+  open    Decimal  @db.Decimal(12, 4)
+  high    Decimal  @db.Decimal(12, 4)
+  low     Decimal  @db.Decimal(12, 4)
+  close   Decimal  @db.Decimal(12, 4)
+  volume  BigInt
   // Pre-computed MAs for fast screening
-  sma20    Decimal? @db.Decimal(12, 4)
-  sma50    Decimal? @db.Decimal(12, 4)
-  sma150   Decimal? @db.Decimal(12, 4)
-  sma200   Decimal? @db.Decimal(12, 4)
-  ema6     Decimal? @db.Decimal(12, 4)
-  ema20    Decimal? @db.Decimal(12, 4)
-  rsRank   Decimal? @db.Decimal(6, 2)
-  atr14    Decimal? @db.Decimal(12, 4)
+  sma20   Decimal? @db.Decimal(12, 4)
+  sma50   Decimal? @db.Decimal(12, 4)
+  sma150  Decimal? @db.Decimal(12, 4)
+  sma200  Decimal? @db.Decimal(12, 4)
+  ema6    Decimal? @db.Decimal(12, 4)
+  ema20   Decimal? @db.Decimal(12, 4)
+  rsRank  Decimal? @db.Decimal(6, 2)
+  atr14   Decimal? @db.Decimal(12, 4)
 
   stock Stock @relation(fields: [stockId], references: [id])
 
@@ -124,16 +128,17 @@ model IndexEntity {
   name   String
 
   dailyBars IndexDaily[]
+  snapshots MarketProxySnapshot[]
 }
 
 model IndexDaily {
-  id      String      @id @default(cuid())
-  indexId  String
-  date    DateTime    @db.Date
-  open    Decimal     @db.Decimal(12, 4)
-  high    Decimal     @db.Decimal(12, 4)
-  low     Decimal     @db.Decimal(12, 4)
-  close   Decimal     @db.Decimal(12, 4)
+  id      String   @id @default(cuid())
+  indexId String
+  date    DateTime @db.Date
+  open    Decimal  @db.Decimal(12, 4)
+  high    Decimal  @db.Decimal(12, 4)
+  low     Decimal  @db.Decimal(12, 4)
+  close   Decimal  @db.Decimal(12, 4)
   volume  BigInt
 
   index IndexEntity @relation(fields: [indexId], references: [id])
@@ -157,21 +162,21 @@ model BreadthSnapshot {
 // ─────────────────────────────────────────────────────────
 
 model Theme {
-  id          String             @id @default(cuid())
-  name        String             @unique
+  id          String   @id @default(cuid())
+  name        String   @unique
   description String?
-  isActive    Boolean            @default(true)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   groups SupplyChainGroup[]
 }
 
 model SupplyChainGroup {
-  id        String       @id @default(cuid())
+  id        String @id @default(cuid())
   themeId   String
   name      String
-  sortOrder Int          @default(0)
+  sortOrder Int    @default(0)
 
   theme       Theme        @relation(fields: [themeId], references: [id])
   themeStocks ThemeStock[]
@@ -274,9 +279,11 @@ model Setup {
   metadata    Json?
   dailyBaseId String?
 
-  stock       Stock        @relation(fields: [stockId], references: [id])
-  tradeIdeas  TradeIdea[]
-  barEvidence BarEvidence[]
+  stock         Stock                  @relation(fields: [stockId], references: [id])
+  tradeIdeas    TradeIdea[]
+  barEvidence   BarEvidence[]
+  outcomes      SetupOutcome[]
+  timingSignals IntradayTimingSignal[]
 
   @@index([state, type])
   @@index([timeframe, state])
@@ -379,6 +386,55 @@ enum KeyLevelType {
   MA_50
   MA_200
   VWAP
+}
+
+enum SetupFamily {
+  REVERSAL
+  TREND_LONG
+  TREND_SHORT
+}
+
+enum SetupOutcomeSource {
+  LIVE
+  SIMULATED
+}
+
+enum MarketTrendLabel {
+  UPTREND
+  DOWNTREND
+  RANGE
+  TRANSITION
+}
+
+enum MarketRegimeLabel {
+  TREND_UP
+  TREND_DOWN
+  RANGE
+  TRANSITION
+}
+
+enum MarketPeriodGranularity {
+  REGIME
+  MONTH
+  YEAR
+}
+
+enum LeaderPeriodActivity {
+  ADVANCING
+  SETTING_UP
+  PULLBACK
+  REVERSAL
+  BASING
+  DECLINING
+  QUIET
+}
+
+enum TimingSignalType {
+  CROSS_620
+  MACD_620_SHORT
+  VCP_EARLY_BUY
+  DOUBLE_TOP_REJECTION
+  DOUBLE_BOTTOM_REJECTION
 }
 
 // ─────────────────────────────────────────────────────────
@@ -539,7 +595,7 @@ model Session {
 }
 
 model Account {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   userId                String
   accountId             String
   providerId            String
@@ -550,8 +606,8 @@ model Account {
   scope                 String?
   idToken               String?
   password              String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -623,4 +679,157 @@ enum AlertType {
   SETUP_DETECTED
   GROUP_CROSS
   STAGE_CHANGE
+}
+
+model LeaderRun {
+  id              String   @id @default(cuid())
+  stockId         String
+  stage2StartDate DateTime @db.Date
+  stage2EndDate   DateTime @db.Date
+  entryPrice      Decimal  @db.Decimal(12, 4)
+  peakPrice       Decimal  @db.Decimal(12, 4)
+  peakGainPct     Decimal  @db.Decimal(8, 2)
+  isQualified     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stock           Stock                        @relation(fields: [stockId], references: [id])
+  periodSnapshots MarketLeaderPeriodSnapshot[]
+
+  @@index([stockId, stage2StartDate])
+  @@index([isQualified, stage2StartDate])
+}
+
+model SetupOutcome {
+  id              String             @id @default(cuid())
+  setupId         String?
+  stockId         String?
+  source          SetupOutcomeSource
+  family          SetupFamily
+  setupType       SetupType
+  direction       Direction
+  effectiveDate   DateTime           @db.Date
+  detectedAt      DateTime
+  entryDate       DateTime?
+  exitDate        DateTime?
+  actualStopPrice Decimal?           @db.Decimal(12, 4)
+  entryPrice      Decimal?           @db.Decimal(12, 4)
+  exitPrice       Decimal?           @db.Decimal(12, 4)
+  maxR            Decimal?           @db.Decimal(8, 2)
+  finalR          Decimal?           @db.Decimal(8, 2)
+  isWin           Boolean?
+  sampleCount     Int                @default(1)
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  setup Setup? @relation(fields: [setupId], references: [id])
+  stock Stock? @relation(fields: [stockId], references: [id])
+
+  @@index([effectiveDate, source, family])
+  @@index([stockId, effectiveDate])
+  @@index([setupId])
+}
+
+model IntradayTimingSignal {
+  id             String           @id @default(cuid())
+  parentSetupId  String
+  stockId        String
+  type           TimingSignalType
+  direction      Direction
+  signalAt       DateTime
+  levelType      KeyLevelType
+  referenceLevel Decimal          @db.Decimal(12, 4)
+  triggerPrice   Decimal?         @db.Decimal(12, 4)
+  stopPrice      Decimal?         @db.Decimal(12, 4)
+  evidence       Json?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  parentSetup Setup @relation(fields: [parentSetupId], references: [id])
+  stock       Stock @relation(fields: [stockId], references: [id])
+
+  @@index([parentSetupId, signalAt])
+  @@index([stockId, signalAt])
+}
+
+model MarketProxySnapshot {
+  id             String           @id @default(cuid())
+  indexId        String
+  date           DateTime         @db.Date
+  close          Decimal          @db.Decimal(12, 4)
+  sma50          Decimal?         @db.Decimal(12, 4)
+  sma200         Decimal?         @db.Decimal(12, 4)
+  stage          StageEnum
+  trend          MarketTrendLabel
+  dominantFamily SetupFamily?
+  dominantSetup  SetupType?
+  setupScore     Decimal?         @db.Decimal(8, 2)
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  index IndexEntity @relation(fields: [indexId], references: [id])
+
+  @@unique([indexId, date])
+  @@index([date, trend])
+}
+
+model MarketRegimePeriod {
+  id                   String                       @id @default(cuid())
+  granularity          MarketPeriodGranularity      @default(REGIME)
+  periodKey            String
+  startDate            DateTime                     @db.Date
+  endDate              DateTime                     @db.Date
+  label                MarketRegimeLabel
+  liveSampleCount      Int                          @default(0)
+  simulatedSampleCount Int                          @default(0)
+  sourcePeriodCount    Int                          @default(1)
+  scorecard            Json
+  proxyStates          Json
+  leaderSummary        Json
+  markdown             String?
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
+  leaderSnapshots      MarketLeaderPeriodSnapshot[]
+
+  @@unique([granularity, periodKey])
+  @@index([startDate, endDate])
+  @@index([granularity, startDate])
+  @@index([label, startDate])
+}
+
+model MarketLeaderPeriodSnapshot {
+  id                    String               @id @default(cuid())
+  marketRegimePeriodId  String
+  leaderRunId           String
+  stockId               String
+  periodStartDate       DateTime             @db.Date
+  periodEndDate         DateTime             @db.Date
+  stageAtPeriodStart    StageEnum?
+  stageAtPeriodEnd      StageEnum?
+  activity              LeaderPeriodActivity
+  activityNote          String?
+  identifiedSetupLabel  String?
+  primarySetupType      SetupType?
+  primarySetupDirection Direction?
+  primarySetupState     SetupState?
+  setupCount            Int                  @default(0)
+  activeSetups          Json
+  timingSignalCount     Int                  @default(0)
+  timingSignals         Json
+  startClose            Decimal?             @db.Decimal(12, 4)
+  endClose              Decimal?             @db.Decimal(12, 4)
+  periodReturnPct       Decimal?             @db.Decimal(8, 2)
+  shortingEnabled       Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  period    MarketRegimePeriod @relation(fields: [marketRegimePeriodId], references: [id])
+  leaderRun LeaderRun          @relation(fields: [leaderRunId], references: [id])
+  stock     Stock              @relation(fields: [stockId], references: [id])
+
+  @@unique([marketRegimePeriodId, leaderRunId])
+  @@index([stockId, periodStartDate])
+  @@index([activity, periodStartDate])
 }

@@ -25,12 +25,13 @@ const data_ingestion_controller_1 = require("./data-ingestion.controller");
 const setup_module_1 = require("../setup/setup.module");
 const alert_module_1 = require("../alert/alert.module");
 const stock_module_1 = require("../stock/stock.module");
+const market_module_1 = require("../market/market.module");
 let DataIngestionModule = class DataIngestionModule {
 };
 exports.DataIngestionModule = DataIngestionModule;
 exports.DataIngestionModule = DataIngestionModule = __decorate([
     (0, common_1.Module)({
-        imports: [setup_module_1.SetupModule, alert_module_1.AlertModule, stock_module_1.StockModule],
+        imports: [setup_module_1.SetupModule, alert_module_1.AlertModule, stock_module_1.StockModule, market_module_1.MarketModule],
         controllers: [data_ingestion_controller_1.DataIngestionController],
         providers: [
             yfinance_provider_1.YFinanceProvider,

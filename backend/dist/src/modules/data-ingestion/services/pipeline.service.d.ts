@@ -7,6 +7,7 @@ import { RsRankService } from './rs-rank.service';
 import { StageRecalcJob } from '../jobs/stage-recalc.job';
 import { SetupScanJob } from '../jobs/setup-scan.job';
 import { BreadthSyncJob } from '../jobs/breadth-sync.job';
+import { MarketRegimeService } from '../../market/market-regime.service';
 export interface PipelineResult {
     synced: number;
     failed: number;
@@ -30,11 +31,12 @@ export declare class PipelineService implements OnModuleInit {
     private readonly stageRecalcJob;
     private readonly setupScanJob;
     private readonly breadthSyncJob;
+    private readonly marketRegimeService;
     private readonly logger;
     private running;
     private lastResult;
     private isPipelineEnabled;
-    constructor(prisma: PrismaService, tickerDiscovery: TickerDiscoveryService, backfillService: BackfillService, indicatorService: IndicatorService, rsRankService: RsRankService, stageRecalcJob: StageRecalcJob, setupScanJob: SetupScanJob, breadthSyncJob: BreadthSyncJob);
+    constructor(prisma: PrismaService, tickerDiscovery: TickerDiscoveryService, backfillService: BackfillService, indicatorService: IndicatorService, rsRankService: RsRankService, stageRecalcJob: StageRecalcJob, setupScanJob: SetupScanJob, breadthSyncJob: BreadthSyncJob, marketRegimeService: MarketRegimeService);
     onModuleInit(): Promise<void>;
     checkAndSync(): Promise<void>;
     runFullPipeline(): Promise<PipelineResult>;

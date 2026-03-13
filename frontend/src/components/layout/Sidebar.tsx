@@ -11,6 +11,7 @@ import {
   Filter,
   BarChart3,
   Tag,
+  Globe2,
 } from 'lucide-react'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { cn } from '@/lib/utils'
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/playbook', label: 'Playbook', icon: Trophy },
   { to: '/simulate', label: 'Simulator', icon: BarChart3 },
+  { to: '/regimes', label: 'Regimes', icon: Globe2 },
   { to: '/label', label: 'Labeling', icon: Tag },
 ] as const
 

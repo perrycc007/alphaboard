@@ -35,6 +35,7 @@ const intraday_double_top_detector_1 = require("./detectors/intraday/intraday-do
 const intraday_undercut_rally_detector_1 = require("./detectors/intraday/intraday-undercut-rally.detector");
 const confirmation_engine_1 = require("./confirmation/confirmation-engine");
 const file_log_util_1 = require("../../common/utils/file-log.util");
+const timing_signal_service_1 = require("./timing-signal.service");
 const TYPE_SCORES = {
     EMA200_KEY_LEVEL: 100,
     MA_RALLY_FAILURE: 80,
@@ -58,6 +59,7 @@ function scoreSetup(setup) {
 }
 let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestratorService {
     prisma;
+    timingSignalService;
     logger = new common_1.Logger(SetupOrchestratorService_1.name);
     dailyDetectors = [
         new daily_base_detector_1.DailyBaseDetector(),
@@ -81,15 +83,16 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         new intraday_double_top_detector_1.IntradayDoubleTopDetector(),
         new intraday_undercut_rally_detector_1.IntradayUndercutRallyDetector(),
     ];
-    constructor(prisma) {
+    constructor(prisma, timingSignalService) {
         this.prisma = prisma;
+        this.timingSignalService = timingSignalService;
     }
     async runDailyDetection(stockId, bars) {
         const swingPoints = (0, primitives_1.detectSignificantSwingPoints)(bars);
         const context = await this.buildDailyContext(stockId, bars);
         for (const detector of this.dailyDetectors) {
             const result = detector.detect(bars, swingPoints, context);
-            if (result) {
+            if (result && !(result.direction === 'SHORT' && !context.canShortLeader)) {
                 await this.persistSetup(stockId, result);
                 this.logger.log(`Detected ${result.type} for stock ${stockId}`);
             }
@@ -99,11 +102,8 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
     }
     async processIntradayBar(stockId, bars, confirmContext) {
         const context = await this.buildDailyContext(stockId, bars);
-        for (const detector of this.intradayDetectors) {
-            const result = detector.detect(bars, context);
-            if (result) {
-                await this.persistSetup(stockId, result);
-            }
+        if (context.activeSetups?.some((setup) => setup.timeframe === 'DAILY')) {
+            await this.timingSignalService.evaluateAndPersist(stockId, bars, context);
         }
         if (bars.length >= 2) {
             const evidenceResults = (0, confirmation_engine_1.evaluateBar)(bars[bars.length - 1], bars[bars.length - 2], confirmContext);
@@ -125,29 +125,35 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         }
     }
     async buildDailyContext(stockId, bars) {
-        const latestStage = await this.prisma.stockStage.findFirst({
-            where: { stockId },
-            orderBy: { date: 'desc' },
-        });
-        const activeBases = await this.prisma.dailyBase.findMany({
-            where: { stockId, status: { in: ['FORMING', 'COMPLETE'] } },
-        });
-        const activeSetups = await this.prisma.setup.findMany({
-            where: {
-                stockId,
-                state: {
-                    in: [
-                        client_1.SetupState.BUILDING,
-                        client_1.SetupState.READY,
-                        client_1.SetupState.TRIGGERED,
-                    ],
+        const [latestStage, activeBases, activeSetups, latestDaily, qualifiedLeaderRun] = await Promise.all([
+            this.prisma.stockStage.findFirst({
+                where: { stockId },
+                orderBy: { date: 'desc' },
+            }),
+            this.prisma.dailyBase.findMany({
+                where: { stockId, status: { in: ['FORMING', 'COMPLETE'] } },
+            }),
+            this.prisma.setup.findMany({
+                where: {
+                    stockId,
+                    state: {
+                        in: [
+                            client_1.SetupState.BUILDING,
+                            client_1.SetupState.READY,
+                            client_1.SetupState.TRIGGERED,
+                        ],
+                    },
                 },
-            },
-        });
-        const latestDaily = await this.prisma.stockDaily.findFirst({
-            where: { stockId },
-            orderBy: { date: 'desc' },
-        });
+            }),
+            this.prisma.stockDaily.findFirst({
+                where: { stockId },
+                orderBy: { date: 'desc' },
+            }),
+            this.prisma.leaderRun.findFirst({
+                where: { stockId, isQualified: true },
+                orderBy: { stage2EndDate: 'desc' },
+            }),
+        ]);
         const avgVolume = bars.length > 0
             ? bars.reduce((sum, b) => sum + b.volume, 0) / bars.length
             : 0;
@@ -155,11 +161,17 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         const sma200 = latestDaily?.sma200 ? Number(latestDaily.sma200) : undefined;
         const ema20 = latestDaily?.ema20 ? Number(latestDaily.ema20) : undefined;
         const atr14 = latestDaily?.atr14 ? Number(latestDaily.atr14) : undefined;
+        const canShortLeader = !!qualifiedLeaderRun &&
+            (latestStage?.stage === 'STAGE_3' || latestStage?.stage === 'STAGE_4');
         const activeSetupsMapped = activeSetups.map((s) => ({
             id: s.id,
             type: s.type,
             state: s.state,
+            direction: s.direction,
+            timeframe: s.timeframe,
             pivotPrice: s.pivotPrice ? Number(s.pivotPrice) : undefined,
+            stopPrice: s.stopPrice ? Number(s.stopPrice) : undefined,
+            targetPrice: s.targetPrice ? Number(s.targetPrice) : undefined,
         }));
         const regime = (0, primitives_1.detectMarketRegime)({
             bars,
@@ -188,6 +200,42 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                 status: b.status,
             })),
             activeSetups: activeSetupsMapped,
+            latestStage: latestStage?.stage,
+            hasQualifiedLeaderRun: !!qualifiedLeaderRun,
+            canShortLeader,
+            keyLevels: [
+                ...(activeSetupsMapped.flatMap((setup) => {
+                    const levels = [];
+                    if (setup.pivotPrice != null) {
+                        levels.push({
+                            type: 'VCP_PIVOT',
+                            price: setup.pivotPrice,
+                            bias: setup.direction,
+                        });
+                    }
+                    if (setup.stopPrice != null) {
+                        levels.push({
+                            type: setup.direction === 'LONG' ? 'BASE_LOW' : 'BASE_HIGH',
+                            price: setup.stopPrice,
+                            bias: setup.direction,
+                        });
+                    }
+                    if (setup.targetPrice != null) {
+                        levels.push({
+                            type: setup.direction === 'LONG' ? 'SWING_HIGH' : 'SWING_LOW',
+                            price: setup.targetPrice,
+                            bias: setup.direction,
+                        });
+                    }
+                    return levels;
+                })),
+                ...(sma50 != null
+                    ? [{ type: 'MA_50', price: sma50, bias: 'BOTH' }]
+                    : []),
+                ...(sma200 != null
+                    ? [{ type: 'MA_200', price: sma200, bias: 'BOTH' }]
+                    : []),
+            ],
             regime,
         };
     }
@@ -481,10 +529,20 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
         if (fromDate) {
             where.date = { gte: fromDate };
         }
-        const dailyBars = await this.prisma.stockDaily.findMany({
-            where,
-            orderBy: { date: 'asc' },
-        });
+        const [dailyBars, stageHistory, leaderRuns] = await Promise.all([
+            this.prisma.stockDaily.findMany({
+                where,
+                orderBy: { date: 'asc' },
+            }),
+            this.prisma.stockStage.findMany({
+                where: { stockId: stock.id },
+                orderBy: { date: 'asc' },
+            }),
+            this.prisma.leaderRun.findMany({
+                where: { stockId: stock.id, isQualified: true },
+                orderBy: { stage2EndDate: 'asc' },
+            }),
+        ]);
         if (dailyBars.length < 50)
             return [];
         const bars = dailyBars.map((b) => ({
@@ -527,8 +585,18 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                 id: s.id,
                 type: s.type,
                 state: s.state,
+                direction: s.direction,
+                timeframe: client_1.Timeframe.DAILY,
                 pivotPrice: s.pivotPrice ?? undefined,
+                stopPrice: s.stopPrice ?? undefined,
+                targetPrice: s.targetPrice ?? undefined,
             }));
+            const activeStage = [...stageHistory]
+                .reverse()
+                .find((stage) => stage.date.getTime() <= (latestBar.date?.getTime() ?? 0)) ?? null;
+            const hasQualifiedLeaderRun = leaderRuns.some((run) => run.stage2EndDate.getTime() < (latestBar.date?.getTime() ?? 0));
+            const canShortLeader = hasQualifiedLeaderRun &&
+                (activeStage?.stage === 'STAGE_3' || activeStage?.stage === 'STAGE_4');
             const regime = (0, primitives_1.detectMarketRegime)({
                 bars: windowBars,
                 ema20,
@@ -543,6 +611,9 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
             const simContext = {
                 stockId: stock.id,
                 isStage2,
+                latestStage: activeStage?.stage,
+                hasQualifiedLeaderRun,
+                canShortLeader,
                 sma50,
                 sma200,
                 ema20,
@@ -551,11 +622,12 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
                     windowBars.length,
                 activeBases: [],
                 activeSetups: activeSetupsMapped,
+                keyLevels: [],
                 regime,
             };
             for (const detector of this.dailyDetectors) {
                 const result = detector.detect(windowBars, swingPoints, simContext);
-                if (result) {
+                if (result && !(result.direction === 'SHORT' && !simContext.canShortLeader)) {
                     const tradeCategory = BREAKOUT_TYPES.includes(result.type)
                         ? 'BREAKOUT'
                         : REVERSAL_TYPES.includes(result.type)
@@ -777,7 +849,8 @@ let SetupOrchestratorService = SetupOrchestratorService_1 = class SetupOrchestra
 exports.SetupOrchestratorService = SetupOrchestratorService;
 exports.SetupOrchestratorService = SetupOrchestratorService = SetupOrchestratorService_1 = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        timing_signal_service_1.TimingSignalService])
 ], SetupOrchestratorService);
 const BREAKOUT_TYPES = [
     'VCP',
