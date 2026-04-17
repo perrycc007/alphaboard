@@ -20,6 +20,16 @@ export interface FeedbackRecord {
   updated_at?: string
 }
 
+export interface NoteRecord {
+  run_id: string
+  chart_id: string
+  ticker: string
+  setup_type: string
+  notes: string
+  saved_at?: string
+  updated_at?: string
+}
+
 export interface ReviewItem {
   run_id: string
   chart_id: string
@@ -34,6 +44,7 @@ export interface ReviewItem {
   chart_type: string
   direction: string
   feedback?: FeedbackRecord | null
+  note?: NoteRecord | null
 }
 
 export interface LogicSnapshot {
@@ -136,6 +147,17 @@ export async function saveFeedback(payload: {
   notes: string
 }): Promise<{ saved: boolean; feedback: FeedbackRecord }> {
   return request('/api/feedback', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function saveNote(payload: {
+  run_id: string
+  chart_id: string
+  notes: string
+}): Promise<{ saved: boolean; note: NoteRecord }> {
+  return request('/api/note', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

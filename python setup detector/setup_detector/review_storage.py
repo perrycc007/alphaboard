@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS_ROOT = REPO_ROOT / "artifacts" / "setup_review"
 STATE_ROOT = ARTIFACTS_ROOT / "review_studio"
 FEEDBACK_PATH = STATE_ROOT / "feedback.json"
+NOTES_PATH = STATE_ROOT / "notes.json"
 LOGIC_PATH = STATE_ROOT / "logic_snapshots.json"
 JOB_ROOT = STATE_ROOT / "jobs"
 
@@ -109,6 +110,24 @@ def save_feedback(entry: dict[str, object]) -> dict[str, object]:
     payload["updated_at"] = utc_now_iso()
     records[key] = payload
     _write_json(FEEDBACK_PATH, records)
+    return payload
+
+
+def load_notes_map() -> dict[str, dict[str, object]]:
+    ensure_state_dirs()
+    records = _read_json(NOTES_PATH, {})
+    if not isinstance(records, dict):
+        return {}
+    return {str(key): value for key, value in records.items() if isinstance(value, dict)}
+
+
+def save_note(entry: dict[str, object]) -> dict[str, object]:
+    records = load_notes_map()
+    key = f"{entry['run_id']}::{entry['chart_id']}"
+    payload = dict(entry)
+    payload["updated_at"] = utc_now_iso()
+    records[key] = payload
+    _write_json(NOTES_PATH, records)
     return payload
 
 

@@ -234,7 +234,24 @@ def build_prompt(
     run_id = ctx.get("run_id")
     chart_id = ctx.get("chart_id")
     notes = ctx.get("notes")
-    review_notes = ctx.get("recent_false_positive_notes", [])
+    review_examples = ctx.get("false_positive_examples", [])
+
+    formatted_examples: list[str] = []
+    if isinstance(review_examples, list):
+        for index, item in enumerate(review_examples, start=1):
+            if not isinstance(item, dict):
+                continue
+            formatted_examples.extend(
+                [
+                    f"{index}.",
+                    *(f"   - ticker: {item.get('ticker')}" for _ in [1] if item.get("ticker")),
+                    *(f"   - run id: {item.get('run_id')}" for _ in [1] if item.get("run_id")),
+                    *(f"   - chart id: {item.get('chart_id')}" for _ in [1] if item.get("chart_id")),
+                    *(f"   - image url: {item.get('asset_url')}" for _ in [1] if item.get("asset_url")),
+                    *(f"   - image path: {item.get('chart_path')}" for _ in [1] if item.get("chart_path")),
+                    f"   - reviewer comment: {item.get('notes') or '(no comment)'}",
+                ]
+            )
 
     prompt = {
         "explain": [
@@ -272,9 +289,11 @@ def build_prompt(
             *(f"- chart id: {chart_id}" for _ in [1] if chart_id),
             *(f"- reviewer notes: {notes}" for _ in [1] if notes),
             "",
-            *(["Recent false positive notes from review:"] + [f"- {item}" for item in review_notes] if review_notes else []),
+            *(["All reviewed false positive examples for this setup:"] + formatted_examples if formatted_examples else []),
             "",
             "Please:",
+            "- review the image examples together with the matching reviewer comments",
+            "- look for repeated failure patterns across the full set of false positives",
             "- explain why the current logic is likely creating these false positives",
             "- propose the smallest detector change that improves quality",
             "- update the Python detector code",

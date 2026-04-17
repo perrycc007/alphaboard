@@ -11,7 +11,7 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 if str(PACKAGE_ROOT) not in sys.path:
@@ -26,10 +26,12 @@ from setup_detector.review_storage import (
     get_logic_snapshot,
     load_feedback_map,
     load_job_record,
+    load_notes_map,
     load_run_manifest,
     save_feedback,
     save_job_record,
     save_logic_snapshot,
+    save_note,
     utc_now_iso,
 )
 
@@ -50,22 +52,57 @@ def newest_run_id() -> str | None:
     return str(runs[0]["run_id"]) if runs else None
 
 
-def latest_false_positive_notes(setup_type: str, limit: int = 5) -> list[str]:
-    notes: list[str] = []
-    for item in load_feedback_map().values():
-        if str(item.get("setup_type", "")).upper() != setup_type.upper():
+def collect_false_positive_examples(setup_type: str, run_id: str | None = None) -> list[dict[str, object]]:
+    normalized = setup_type.upper()
+    feedback_map = load_feedback_map()
+    manifest_cache: dict[str, dict[str, dict[str, object]]] = {}
+    examples: list[dict[str, object]] = []
+
+    for feedback in feedback_map.values():
+        if str(feedback.get("setup_type", "")).upper() != normalized:
             continue
-        if item.get("outcome") != "false_positive":
+        if feedback.get("outcome") != "false_positive":
             continue
-        note = str(item.get("notes") or "").strip()
-        if note:
-            notes.append(note)
-    return notes[-limit:]
+
+        feedback_run_id = str(feedback.get("run_id") or "").strip()
+        chart_id = str(feedback.get("chart_id") or "").strip()
+        if run_id and feedback_run_id != run_id:
+            continue
+        if not feedback_run_id or not chart_id:
+            continue
+
+        if feedback_run_id not in manifest_cache:
+            manifest_cache[feedback_run_id] = {item["chart_id"]: item for item in load_run_manifest(feedback_run_id)}
+
+        manifest_item = manifest_cache[feedback_run_id].get(chart_id, {})
+        chart_path = str(manifest_item.get("chart_path") or "").replace("\\", "/")
+        asset_url = f"http://{HOST}:{PORT}/api/assets/{quote(feedback_run_id)}/{quote(chart_path, safe='/')}" if chart_path else None
+
+        examples.append(
+            {
+                "ticker": str(feedback.get("ticker") or manifest_item.get("ticker") or "").upper(),
+                "run_id": feedback_run_id,
+                "chart_id": chart_id,
+                "setup_type": normalized,
+                "reviewed_at": feedback.get("reviewed_at") or feedback.get("updated_at"),
+                "notes": str(feedback.get("notes") or "").strip(),
+                "chart_path": chart_path,
+                "asset_url": asset_url,
+            }
+        )
+
+    examples.sort(key=lambda item: str(item.get("reviewed_at") or ""))
+    return examples
 
 
 def infer_item_feedback(run_id: str, item: dict[str, object]) -> dict[str, object] | None:
     key = f"{run_id}::{item['chart_id']}"
     return load_feedback_map().get(key)
+
+
+def infer_item_note(run_id: str, item: dict[str, object]) -> dict[str, object] | None:
+    key = f"{run_id}::{item['chart_id']}"
+    return load_notes_map().get(key)
 
 
 def filter_manifest_items(
@@ -82,6 +119,7 @@ def filter_manifest_items(
 
     for item in items:
         feedback = infer_item_feedback(run_id, item)
+        note = infer_item_note(run_id, item)
         if ticker_query and ticker_query not in str(item.get("ticker", "")).upper():
             continue
         if setup_query and str(item.get("setup_type", "")).upper() != setup_query:
@@ -96,6 +134,7 @@ def filter_manifest_items(
 
         enriched = dict(item)
         enriched["feedback"] = feedback
+        enriched["note"] = note
         filtered.append(enriched)
     return filtered
 
@@ -325,7 +364,41 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "reviewed_at": utc_now_iso(),
                 }
             )
+            save_note(
+                {
+                    "run_id": run_id,
+                    "chart_id": chart_id,
+                    "ticker": item["ticker"],
+                    "setup_type": item["setup_type"],
+                    "notes": str(body.get("notes") or "").strip(),
+                    "saved_at": utc_now_iso(),
+                }
+            )
             self._send(200, {"saved": True, "feedback": saved})
+            return
+
+        if path == "/api/note":
+            run_id = str(body.get("run_id") or "")
+            chart_id = str(body.get("chart_id") or "")
+            if not run_id or not chart_id:
+                self._send(400, {"error": "invalid_note"})
+                return
+            manifest = {item["chart_id"]: item for item in load_run_manifest(run_id)}
+            item = manifest.get(chart_id)
+            if not item:
+                self._send(404, {"error": "chart_not_found"})
+                return
+            saved = save_note(
+                {
+                    "run_id": run_id,
+                    "chart_id": chart_id,
+                    "ticker": item["ticker"],
+                    "setup_type": item["setup_type"],
+                    "notes": str(body.get("notes") or "").strip(),
+                    "saved_at": utc_now_iso(),
+                }
+            )
+            self._send(200, {"saved": True, "note": saved})
             return
 
         if path == "/api/rerun":
@@ -379,7 +452,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
                     "run_id": body.get("run_id"),
                     "chart_id": body.get("chart_id"),
                     "notes": body.get("notes"),
-                    "recent_false_positive_notes": latest_false_positive_notes(setup_type),
+                    "false_positive_examples": collect_false_positive_examples(
+                        setup_type,
+                        str(body.get("run_id") or "").strip() or None,
+                    ),
                 },
             )
             self._send(200, {"prompt": prompt})

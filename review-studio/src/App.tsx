@@ -22,6 +22,7 @@ import {
   fetchRuns,
   saveFeedback,
   saveLogic,
+  saveNote,
   startRerun,
   type JobStatus,
   type LogicSnapshot,
@@ -99,6 +100,7 @@ export default function App() {
   const [selectedChartId, setSelectedChartId] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
   const [notes, setNotes] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
   const [savingReview, setSavingReview] = useState(false)
   const [savingLogicState, setSavingLogicState] = useState(false)
   const [logicCache, setLogicCache] = useState<Record<string, LogicSnapshot>>({})
@@ -185,8 +187,8 @@ export default function App() {
 
   useEffect(() => {
     if (!currentItem) return
-    setNotes(currentItem.feedback?.notes ?? '')
-  }, [currentItem?.chart_id, currentItem?.feedback?.notes])
+    setNotes(currentItem.feedback?.notes ?? currentItem.note?.notes ?? '')
+  }, [currentItem?.chart_id, currentItem?.feedback?.notes, currentItem?.note?.notes])
 
   useEffect(() => {
     if (!currentItem) return
@@ -251,7 +253,7 @@ export default function App() {
       setItems((prev) =>
         prev.map((item) =>
           item.chart_id === currentItem.chart_id && item.run_id === currentItem.run_id
-            ? { ...item, feedback: payload.feedback }
+            ? { ...item, feedback: payload.feedback, note: { ...(item.note ?? {}), ...payload.feedback } }
             : item,
         ),
       )
@@ -260,6 +262,30 @@ export default function App() {
       setStatusMessage(error instanceof Error ? error.message : 'Failed to save review.')
     } finally {
       setSavingReview(false)
+    }
+  }
+
+  async function handleSaveNote() {
+    if (!currentItem) return
+    setSavingNote(true)
+    try {
+      const payload = await saveNote({
+        run_id: currentItem.run_id,
+        chart_id: currentItem.chart_id,
+        notes,
+      })
+      setItems((prev) =>
+        prev.map((item) =>
+          item.chart_id === currentItem.chart_id && item.run_id === currentItem.run_id
+            ? { ...item, note: payload.note }
+            : item,
+        ),
+      )
+      setStatusMessage('Saved note.')
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Failed to save note.')
+    } finally {
+      setSavingNote(false)
     }
   }
 
@@ -546,6 +572,14 @@ export default function App() {
                         className={textareaClassName('min-h-[84px]')}
                       />
                       <div className="grid gap-2 lg:w-[180px]">
+                        <Button
+                          disabled={!currentItem || savingNote}
+                          variant="outline"
+                          onClick={() => void handleSaveNote()}
+                        >
+                          {savingNote ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+                          Save note
+                        </Button>
                         <Button
                           disabled={!currentItem || savingReview}
                           onClick={() => void handleReview('valid')}
