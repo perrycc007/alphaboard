@@ -12,6 +12,18 @@ import {
   type LabelStats,
 } from '@/lib/api/labels'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Progress } from '@/components/ui/progress'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 const RULE_VERSION = 'v1'
 
@@ -48,6 +60,7 @@ export default function LabelPage() {
   const [showWrongTypeMenu, setShowWrongTypeMenu] = useState(false)
   const [telegramChatId, setTelegramChatId] = useState('')
   const [telegramStatus, setTelegramStatus] = useState<string | null>(null)
+  const [chartLoadFailed, setChartLoadFailed] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
 
   useEffect(() => {
@@ -84,6 +97,10 @@ export default function LabelPage() {
   const currentLabel = current ? labels.get(current.chart_id) : undefined
   const labeledCount = labels.size
   const totalCount = manifest.length
+
+  useEffect(() => {
+    setChartLoadFailed(false)
+  }, [current?.chart_id])
 
   const handleLabel = useCallback(
     async (humanLabel: HumanLabel, correctType: string | null = null) => {
@@ -163,7 +180,6 @@ export default function LabelPage() {
 
   return (
     <div className="flex h-full flex-col gap-3 p-3 sm:gap-4 sm:p-4 lg:gap-5 lg:p-6">
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         <div>
           <h1 className="text-xl font-bold text-text-primary sm:text-2xl lg:text-3xl">
@@ -174,173 +190,213 @@ export default function LabelPage() {
             {queue.length !== totalCount && ` (${queue.length} in filter)`}
           </p>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <select
-            value={filterType}
-            onChange={(e) => { setFilterType(e.target.value); setCurrentIdx(0) }}
-            className="h-8 rounded-lg border border-border-default bg-bg-surface px-2 text-xs text-text-primary sm:h-9 sm:px-3 sm:text-sm lg:h-10"
-          >
-            <option value="all">All Types</option>
-            {ALL_SETUP_TYPES.map((t) => (
-              <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-hover sm:h-2">
-        <div
-          className="h-full rounded-full bg-accent transition-all"
-          style={{ width: `${totalCount > 0 ? (labeledCount / totalCount) * 100 : 0}%` }}
-        />
-      </div>
-
-      {/* Telegram quick send */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border-default bg-bg-surface p-2 sm:gap-3 sm:p-3">
-        <BarChart3 className="h-4 w-4 text-text-muted sm:h-5 sm:w-5" />
-        <span className="text-xs text-text-secondary sm:text-sm">Telegram quick label:</span>
-        <input
-          value={telegramChatId}
-          onChange={(e) => setTelegramChatId(e.target.value)}
-          placeholder="chat id"
-          className="h-8 w-36 rounded-md border border-border-default bg-bg-default px-2 text-xs text-text-primary sm:h-9 sm:w-44 sm:text-sm"
-        />
-        <button
-          onClick={async () => {
-            if (!telegramChatId.trim()) return
-            setTelegramStatus('sending...')
-            try {
-              const res = await sendNextToTelegram(telegramChatId.trim(), RULE_VERSION)
-              setTelegramStatus(res.sent ? `sent ${res.chart_id ?? 'next chart'}` : `not sent (${res.reason ?? 'unknown'})`)
-            } catch {
-              setTelegramStatus('failed to send')
-            }
+        <Select
+          value={filterType}
+          onValueChange={(value) => {
+            setFilterType(value)
+            setCurrentIdx(0)
           }}
-          className="h-8 rounded-md border border-accent/40 bg-accent/10 px-3 text-xs font-semibold text-accent hover:bg-accent/20 sm:h-9 sm:text-sm"
         >
-          Send Next To Telegram
-        </button>
-        {telegramStatus && <span className="text-[10px] text-text-muted sm:text-xs">{telegramStatus}</span>}
+          <SelectTrigger className="h-8 w-[200px] text-xs sm:h-9 sm:text-sm lg:h-10">
+            <SelectValue placeholder="All Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            {ALL_SETUP_TYPES.map((t) => (
+              <SelectItem key={t} value={t}>
+                {t.replace(/_/g, ' ')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      <Progress
+        value={totalCount > 0 ? (labeledCount / totalCount) * 100 : 0}
+        className="h-1.5 sm:h-2"
+      />
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-2 p-2 sm:gap-3 sm:p-3">
+          <BarChart3 className="h-4 w-4 text-text-muted sm:h-5 sm:w-5" />
+          <span className="text-xs text-text-secondary sm:text-sm">Telegram quick label:</span>
+          <Input
+            value={telegramChatId}
+            onChange={(e) => setTelegramChatId(e.target.value)}
+            placeholder="chat id"
+            className="h-8 w-36 text-xs sm:h-9 sm:w-44 sm:text-sm"
+          />
+          <Button
+            variant="outline"
+            className="h-8 border-accent/40 bg-accent/10 text-xs font-semibold text-accent hover:bg-accent/20 hover:text-accent sm:h-9 sm:text-sm"
+            onClick={async () => {
+              if (!telegramChatId.trim()) return
+              setTelegramStatus('sending...')
+              try {
+                const res = await sendNextToTelegram(telegramChatId.trim(), RULE_VERSION)
+                setTelegramStatus(
+                  res.sent
+                    ? `sent ${res.chart_id ?? 'next chart'}`
+                    : `not sent (${res.reason ?? 'unknown'})`,
+                )
+              } catch {
+                setTelegramStatus('failed to send')
+              }
+            }}
+          >
+            Send Next To Telegram
+          </Button>
+          {telegramStatus ? (
+            <span className="text-[10px] text-text-muted sm:text-xs">{telegramStatus}</span>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {current ? (
         <div className="flex flex-1 flex-col gap-3 sm:gap-4">
-          {/* Chart card */}
-          <div className="relative flex-1 overflow-hidden rounded-lg border border-border-default bg-bg-surface">
-            {/* Badge + info overlay */}
+          <Card className="relative flex-1 overflow-hidden">
             <div className="absolute left-3 top-3 z-10 flex items-center gap-2 sm:left-4 sm:top-4">
-              <span
+              <Badge
                 className={cn(
-                  'inline-flex items-center rounded border px-2 py-1 text-xs font-semibold sm:text-sm',
-                  SETUP_COLORS[current.setup_type] ?? 'bg-neutral-500/15 text-neutral-400 border-neutral-500/30',
+                  'px-2 py-1 text-xs font-semibold sm:text-sm',
+                  SETUP_COLORS[current.setup_type] ??
+                    'bg-neutral-500/15 text-neutral-400 border-neutral-500/30',
                 )}
               >
                 {current.setup_type.replace(/_/g, ' ')}
-              </span>
-              <span className="rounded bg-bg-surface/80 px-1.5 py-0.5 text-[10px] text-text-secondary backdrop-blur-sm sm:text-xs">
+              </Badge>
+              <Badge
+                variant="secondary"
+                className="bg-card/80 px-1.5 py-0.5 text-[10px] text-text-secondary backdrop-blur-sm sm:text-xs"
+              >
                 {current.ticker} &middot; {current.alert_date}
-              </span>
-              {currentLabel && (
-                <span className={cn(
-                  'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase sm:text-xs',
-                  currentLabel.human_label === 'yes' && 'bg-green-500/20 text-green-400',
-                  currentLabel.human_label === 'no' && 'bg-red-500/20 text-red-400',
-                  currentLabel.human_label === 'wrong_type' && 'bg-amber-500/20 text-amber-400',
-                  currentLabel.human_label === 'unsure' && 'bg-neutral-500/20 text-neutral-400',
-                )}>
+              </Badge>
+              {currentLabel ? (
+                <Badge
+                  className={cn(
+                    'px-1.5 py-0.5 text-[10px] font-bold uppercase sm:text-xs',
+                    currentLabel.human_label === 'yes' && 'bg-green-500/20 text-green-400',
+                    currentLabel.human_label === 'no' && 'bg-red-500/20 text-red-400',
+                    currentLabel.human_label === 'wrong_type' && 'bg-amber-500/20 text-amber-400',
+                    currentLabel.human_label === 'unsure' && 'bg-neutral-500/20 text-neutral-400',
+                  )}
+                >
                   {currentLabel.human_label === 'wrong_type'
-                    ? `WRONG → ${currentLabel.correct_type}`
+                    ? `WRONG -> ${currentLabel.correct_type}`
                     : currentLabel.human_label}
-                </span>
-              )}
+                </Badge>
+              ) : null}
             </div>
 
-            {/* Navigation */}
             <div className="absolute right-3 top-3 z-10 flex items-center gap-1 sm:right-4 sm:top-4">
-              <span className="rounded bg-bg-surface/80 px-1.5 py-0.5 text-[10px] text-text-muted backdrop-blur-sm sm:text-xs">
+              <Badge
+                variant="secondary"
+                className="bg-card/80 px-1.5 py-0.5 text-[10px] text-text-muted backdrop-blur-sm sm:text-xs"
+              >
                 {currentIdx + 1} / {queue.length}
-              </span>
+              </Badge>
             </div>
 
-            <img
-              ref={imgRef}
-              src={getChartImageUrl(RULE_VERSION, current.chart_path)}
-              alt={`${current.ticker} ${current.setup_type} ${current.alert_date}`}
-              className="h-full w-full object-contain"
-            />
-          </div>
+            {chartLoadFailed ? (
+              <div className="flex h-full w-full items-center justify-center bg-secondary p-6 text-center">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-text-primary">Chart preview unavailable</p>
+                  <p className="text-xs text-text-muted">
+                    Could not load <code>{current.chart_path}</code>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <img
+                ref={imgRef}
+                src={getChartImageUrl(RULE_VERSION, current.chart_path)}
+                alt={`${current.ticker} ${current.setup_type} ${current.alert_date}`}
+                className="h-full w-full object-contain"
+                onError={() => setChartLoadFailed(true)}
+              />
+            )}
+          </Card>
 
-          {/* Action buttons */}
           <div className="flex items-center justify-center gap-2 sm:gap-3">
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
               disabled={currentIdx === 0}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-default bg-bg-surface text-text-secondary transition-colors hover:bg-bg-hover disabled:opacity-30 sm:h-10 sm:w-10 lg:h-11 lg:w-11"
+              className="h-9 w-9 text-text-secondary hover:bg-secondary sm:h-10 sm:w-10 lg:h-11 lg:w-11"
             >
               <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="outline"
               onClick={() => handleLabel('yes')}
               disabled={saving}
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 text-xs font-semibold text-green-400 transition-colors hover:bg-green-500/20 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
+              className="h-9 gap-1.5 border-green-500/30 bg-green-500/10 px-4 text-xs font-semibold text-green-400 hover:bg-green-500/20 hover:text-green-300 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
             >
               Yes <kbd className="ml-1 rounded bg-green-500/20 px-1 text-[10px] sm:text-xs">Y</kbd>
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="outline"
               onClick={() => handleLabel('no')}
               disabled={saving}
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-4 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/20 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
+              className="h-9 gap-1.5 border-red-500/30 bg-red-500/10 px-4 text-xs font-semibold text-red-400 hover:bg-red-500/20 hover:text-red-300 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
             >
               No <kbd className="ml-1 rounded bg-red-500/20 px-1 text-[10px] sm:text-xs">N</kbd>
-            </button>
+            </Button>
 
             <div className="relative">
-              <button
+              <Button
+                variant="outline"
                 onClick={() => setShowWrongTypeMenu((v) => !v)}
                 disabled={saving}
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 text-xs font-semibold text-amber-400 transition-colors hover:bg-amber-500/20 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
+                className="h-9 gap-1.5 border-amber-500/30 bg-amber-500/10 px-4 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
               >
-                Wrong Type <kbd className="ml-1 rounded bg-amber-500/20 px-1 text-[10px] sm:text-xs">W</kbd>
-              </button>
-              {showWrongTypeMenu && (
-                <div className="absolute bottom-full left-0 z-20 mb-1 w-56 rounded-lg border border-border-default bg-bg-surface p-1 shadow-lg sm:w-64">
+                Wrong Type{' '}
+                <kbd className="ml-1 rounded bg-amber-500/20 px-1 text-[10px] sm:text-xs">W</kbd>
+              </Button>
+              {showWrongTypeMenu ? (
+                <Card className="absolute bottom-full left-0 z-20 mb-1 w-56 p-1 shadow-lg sm:w-64">
                   {ALL_SETUP_TYPES.filter((t) => t !== current.setup_type).map((t) => (
-                    <button
+                    <Button
                       key={t}
+                      variant="ghost"
                       onClick={() => handleLabel('wrong_type', t)}
-                      className="w-full rounded px-3 py-1.5 text-left text-xs text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary sm:text-sm"
+                      className="h-auto w-full justify-start rounded px-3 py-1.5 text-left text-xs text-text-secondary hover:bg-secondary hover:text-text-primary sm:text-sm"
                     >
                       {t.replace(/_/g, ' ')}
-                    </button>
+                    </Button>
                   ))}
-                  <button
+                  <Button
+                    variant="ghost"
                     onClick={() => setShowWrongTypeMenu(false)}
-                    className="mt-1 w-full rounded px-3 py-1.5 text-left text-xs text-text-muted hover:bg-bg-hover sm:text-sm"
+                    className="mt-1 h-auto w-full justify-start rounded px-3 py-1.5 text-left text-xs text-text-muted hover:bg-secondary sm:text-sm"
                   >
                     Cancel
-                  </button>
-                </div>
-              )}
+                  </Button>
+                </Card>
+              ) : null}
             </div>
 
-            <button
+            <Button
+              variant="outline"
               onClick={() => handleLabel('unsure')}
               disabled={saving}
-              className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-500/30 bg-neutral-500/10 px-4 text-xs font-semibold text-neutral-400 transition-colors hover:bg-neutral-500/20 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
+              className="h-9 gap-1.5 border-neutral-500/30 bg-neutral-500/10 px-4 text-xs font-semibold text-neutral-400 hover:bg-neutral-500/20 hover:text-neutral-300 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
             >
               Unsure <kbd className="ml-1 rounded bg-neutral-500/20 px-1 text-[10px] sm:text-xs">U</kbd>
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="outline"
+              size="icon"
               onClick={() => setCurrentIdx((i) => Math.min(queue.length - 1, i + 1))}
               disabled={currentIdx >= queue.length - 1}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-border-default bg-bg-surface text-text-secondary transition-colors hover:bg-bg-hover disabled:opacity-30 sm:h-10 sm:w-10 lg:h-11 lg:w-11"
+              className="h-9 w-9 text-text-secondary hover:bg-secondary sm:h-10 sm:w-10 lg:h-11 lg:w-11"
             >
               <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
@@ -349,23 +405,24 @@ export default function LabelPage() {
         </div>
       )}
 
-      {/* Stats footer */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-2 rounded-lg border border-border-default bg-bg-surface p-3 sm:grid-cols-4 sm:gap-3 sm:p-4 lg:grid-cols-7">
-          {Object.entries(stats.byType).map(([type, counts]) => (
-            <div key={type} className="space-y-0.5">
-              <p className="truncate text-[10px] font-medium text-text-muted sm:text-xs">
-                {type.replace(/_/g, ' ')}
-              </p>
-              <div className="flex gap-1.5 text-[10px] sm:text-xs">
-                <span className="text-green-400">{counts.yes}Y</span>
-                <span className="text-red-400">{counts.no}N</span>
-                <span className="text-text-muted">{counts.total}T</span>
+      {stats ? (
+        <Card>
+          <CardContent className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 sm:gap-3 sm:p-4 lg:grid-cols-7">
+            {Object.entries(stats.byType).map(([type, counts]) => (
+              <div key={type} className="space-y-0.5">
+                <p className="truncate text-[10px] font-medium text-text-muted sm:text-xs">
+                  {type.replace(/_/g, ' ')}
+                </p>
+                <div className="flex gap-1.5 text-[10px] sm:text-xs">
+                  <span className="text-green-400">{counts.yes}Y</span>
+                  <span className="text-red-400">{counts.no}N</span>
+                  <span className="text-text-muted">{counts.total}T</span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   )
 }

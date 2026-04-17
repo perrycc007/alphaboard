@@ -1,5 +1,6 @@
 import type { SetupType } from '@/types'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 
 const SETUP_CONFIG: Record<SetupType, { label: string; color: string }> = {
   VCP: { label: 'VCP', color: 'bg-setup-vcp/15 text-setup-vcp border-setup-vcp/25' },
@@ -34,9 +35,9 @@ export function SetupTypeBadge({ type, size = 'sm', className }: SetupTypeBadgeP
   if (!config) return null
 
   return (
-    <span
+    <Badge
       className={cn(
-        'inline-flex items-center rounded border font-medium leading-none',
+        'font-medium leading-none',
         size === 'sm' && 'px-1.5 py-0.5 text-[10px] sm:text-xs',
         size === 'md' && 'px-2 py-1 text-xs sm:text-sm',
         config.color,
@@ -44,6 +45,6 @@ export function SetupTypeBadge({ type, size = 'sm', className }: SetupTypeBadgeP
       )}
     >
       {config.label}
-    </span>
+    </Badge>
   )
 }

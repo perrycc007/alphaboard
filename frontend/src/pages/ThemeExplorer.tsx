@@ -7,6 +7,10 @@ import type { ThemeDirection } from '@/types'
 import { LoadingSkeleton, SkeletonGroup } from '@/components/shared'
 import { ThemeStockList } from '@/components/ThemeStockList'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
 
 type DirectionFilter = 'ALL' | ThemeDirection
 
@@ -42,14 +46,14 @@ export default function ThemeExplorer() {
 
   const handleToggleExpand = useCallback(
     (id: string) => {
-      setExpandedId((prev) => {
-        if (prev === id) return null
+      const isClosing = expandedId === id
+      setExpandedId(isClosing ? null : id)
+      if (!isClosing) {
         // Fetch detail if not cached
         fetchThemeDetail(id)
-        return id
-      })
+      }
     },
-    [fetchThemeDetail],
+    [expandedId, fetchThemeDetail],
   )
 
   // Compute direction for each theme and filter
@@ -80,18 +84,20 @@ export default function ThemeExplorer() {
         {/* Direction filter pills */}
         <div className="flex gap-1">
           {DIRECTION_FILTERS.map((f) => (
-            <button
+            <Button
               key={f.value}
               onClick={() => setDirectionFilter(f.value)}
+              variant={directionFilter === f.value ? 'secondary' : 'ghost'}
+              size="sm"
               className={cn(
-                'cursor-pointer rounded-md px-2 py-1 text-[10px] font-medium transition-colors sm:px-3 sm:text-xs',
+                'rounded-md px-2 py-1 text-[10px] font-medium sm:px-3 sm:text-xs',
                 directionFilter === f.value
                   ? 'bg-accent/15 text-accent'
-                  : 'text-text-muted hover:bg-bg-elevated hover:text-text-secondary',
+                  : 'text-text-muted hover:text-text-secondary',
               )}
             >
               {f.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -117,14 +123,15 @@ export default function ThemeExplorer() {
             const isDetailLoading = detailLoading[theme.id]
 
             return (
-              <div
+              <Card
                 key={theme.id}
-                className="overflow-hidden rounded-xl border border-border-default bg-bg-surface transition-colors hover:border-border-accent/30"
+                className="overflow-hidden border-border transition-colors hover:border-border-accent/30"
               >
                 {/* Theme row header */}
-                <button
+                <Button
                   onClick={() => handleToggleExpand(theme.id)}
-                  className="flex w-full cursor-pointer items-center justify-between p-4 text-left sm:p-5"
+                  variant="ghost"
+                  className="h-auto w-full justify-between rounded-none px-4 py-4 text-left sm:px-5 sm:py-5"
                 >
                   <div className="flex items-center gap-3 sm:gap-4">
                     <div
@@ -159,16 +166,16 @@ export default function ThemeExplorer() {
                       </span>
                     </div>
 
-                    <span
+                    <Badge
                       className={cn(
-                        'rounded-md px-2 py-0.5 text-[10px] font-medium sm:px-2.5 sm:py-1 sm:text-xs',
+                        'px-2 py-0.5 text-[10px] font-medium sm:px-2.5 sm:py-1 sm:text-xs',
                         theme.direction === 'BULLISH' && 'bg-bullish-muted text-bullish',
                         theme.direction === 'BEARISH' && 'bg-bearish-muted text-bearish',
-                        theme.direction === 'NEUTRAL' && 'bg-bg-elevated text-text-muted',
+                        theme.direction === 'NEUTRAL' && 'bg-secondary text-text-muted',
                       )}
                     >
                       {theme.direction}
-                    </span>
+                    </Badge>
 
                     {isExpanded ? (
                       <ChevronDown className="h-4 w-4 text-text-muted sm:h-5 sm:w-5" />
@@ -176,11 +183,13 @@ export default function ThemeExplorer() {
                       <ChevronRight className="h-4 w-4 text-text-muted transition-transform sm:h-5 sm:w-5" />
                     )}
                   </div>
-                </button>
+                </Button>
 
                 {/* Expanded detail */}
                 {isExpanded ? (
-                  <div className="border-t border-border-muted px-4 py-3 sm:px-5 sm:py-4">
+                  <>
+                    <Separator />
+                    <CardContent className="px-4 py-3 sm:px-5 sm:py-4">
                     {isDetailLoading ? (
                       <SkeletonGroup count={3}>
                         <LoadingSkeleton className="h-10 rounded-lg" />
@@ -192,9 +201,10 @@ export default function ThemeExplorer() {
                         No data available
                       </div>
                     )}
-                  </div>
+                    </CardContent>
+                  </>
                 ) : null}
-              </div>
+              </Card>
             )
           })}
         </div>

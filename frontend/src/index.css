@@ -2,6 +2,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap');
 
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* ============================================
    ALPHABOARD DESIGN SYSTEM
@@ -27,6 +28,26 @@
   --color-text-secondary: #8b949e;
   --color-text-muted: #545d68;
   --color-text-inverse: #06080f;
+
+  /* ---- shadcn semantic aliases ---- */
+  --color-background: #06080f;
+  --color-foreground: #e6edf3;
+  --color-card: #0d1117;
+  --color-card-foreground: #e6edf3;
+  --color-popover: #0d1117;
+  --color-popover-foreground: #e6edf3;
+  --color-primary: #3b82f6;
+  --color-primary-foreground: #f8fbff;
+  --color-secondary: #161b22;
+  --color-secondary-foreground: #e6edf3;
+  --color-muted: #161b22;
+  --color-muted-foreground: #8b949e;
+  --color-accent-foreground: #f8fbff;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #fff5f5;
+  --color-border: #2a3041;
+  --color-input: #2a3041;
+  --color-ring: #3b82f6;
 
   /* ---- Brand / Accent ---- */
   --color-accent: #3b82f6;
@@ -94,8 +115,8 @@ html {
 
 body {
   font-family: var(--font-body);
-  background-color: var(--color-bg-base);
-  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -23,6 +23,9 @@ interface LabelEntry {
   human_label: 'yes' | 'no' | 'wrong_type' | 'unsure';
   correct_type: string | null;
   reviewed_at: string;
+  review_outcome?: 'valid' | 'false_positive' | 'unclear';
+  reason_tags?: string[];
+  notes?: string | null;
   reviewer?: string;
   source?: 'web' | 'telegram';
 }

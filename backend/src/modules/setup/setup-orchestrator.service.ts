@@ -60,6 +60,16 @@ const TYPE_SCORES: Record<string, number> = {
   TIRING_DOWN: 15,
 };
 
+const SETUP_DEDUP_COOLDOWN_DAYS: Partial<Record<SetupType, number>> = {
+  [SetupType.BREAKOUT_PIVOT]: 10,
+  [SetupType.FAIL_BASE]: 12,
+  [SetupType.FAIL_BREAKOUT]: 12,
+  [SetupType.VCP]: 15,
+  [SetupType.DOUBLE_TOP]: 15,
+  [SetupType.EMA20_PULLBACK]: 10,
+  [SetupType.MA_RALLY_FAILURE]: 12,
+};
+
 function scoreSetup(setup: { type: string | SetupType }): number {
   return TYPE_SCORES[setup.type] ?? 0;
 }
@@ -104,11 +114,12 @@ export class SetupOrchestratorService {
   async runDailyDetection(stockId: string, bars: Bar[]): Promise<void> {
     const swingPoints = detectSignificantSwingPoints(bars);
     const context = await this.buildDailyContext(stockId, bars);
+    const detectedAt = bars[bars.length - 1]?.date ?? new Date();
 
     for (const detector of this.dailyDetectors) {
       const result = detector.detect(bars, swingPoints, context);
       if (result && !(result.direction === 'SHORT' && !context.canShortLeader)) {
-        await this.persistSetup(stockId, result);
+        await this.persistSetup(stockId, result, detectedAt);
         this.logger.log(`Detected ${result.type} for stock ${stockId}`);
       }
     }
@@ -207,9 +218,15 @@ export class SetupOrchestratorService {
       state: s.state,
       direction: s.direction,
       timeframe: s.timeframe,
+      detectedAt: s.detectedAt,
+      lastStateAt: s.lastStateAt,
       pivotPrice: s.pivotPrice ? Number(s.pivotPrice) : undefined,
       stopPrice: s.stopPrice ? Number(s.stopPrice) : undefined,
       targetPrice: s.targetPrice ? Number(s.targetPrice) : undefined,
+      metadata:
+        s.metadata && typeof s.metadata === 'object'
+          ? (s.metadata as Record<string, unknown>)
+          : undefined,
     }));
 
     // Compute market regime
@@ -288,14 +305,36 @@ export class SetupOrchestratorService {
   private async persistSetup(
     stockId: string,
     detected: DetectedSetup,
+    detectedAt: Date,
   ): Promise<void> {
-    const expiresAt = new Date();
+    const expiresAt = new Date(detectedAt);
     expiresAt.setDate(expiresAt.getDate() + 42);
 
     const stock = await this.prisma.stock.findUnique({
       where: { id: stockId },
       select: { ticker: true },
     });
+
+    const recentDuplicate = await this.findRecentDuplicateSetup(
+      stockId,
+      detected,
+      detectedAt,
+    );
+    if (recentDuplicate) {
+      await this.logEvent(
+        'setup_orchestrator',
+        'setup_deduped',
+        stock?.ticker,
+        detected.type,
+        {
+          duplicateOfSetupId: recentDuplicate.id,
+          detectedAt: detectedAt.toISOString(),
+          pivotPrice: detected.pivotPrice,
+          direction: detected.direction,
+        },
+      );
+      return;
+    }
 
     const setup = await this.prisma.setup.create({
       data: {
@@ -304,13 +343,20 @@ export class SetupOrchestratorService {
         timeframe: detected.timeframe,
         direction: detected.direction,
         state: SetupState.BUILDING,
+        detectedAt,
+        lastStateAt: detectedAt,
         pivotPrice: detected.pivotPrice,
         stopPrice: detected.stopPrice,
         targetPrice: detected.targetPrice,
         riskReward: detected.riskReward,
         evidence: detected.evidence ?? [],
         waitingFor: detected.waitingFor,
-        metadata: (detected.metadata as any) ?? undefined,
+        metadata: ({
+          ...(detected.metadata ?? {}),
+          audit: {
+            dedupeWindowDays: this.getDetectionCooldownDays(detected.type),
+          },
+        } as any),
         dailyBaseId: detected.dailyBaseId,
         expiresAt,
       },
@@ -325,6 +371,125 @@ export class SetupOrchestratorService {
       targetPrice: detected.targetPrice,
       riskReward: detected.riskReward,
       evidence: detected.evidence,
+    });
+  }
+
+  private getDetectionCooldownDays(type: SetupType): number {
+    return SETUP_DEDUP_COOLDOWN_DAYS[type] ?? 7;
+  }
+
+  private getPivotTolerance(price: number): number {
+    return Math.max(0.5, Math.abs(price) * 0.01);
+  }
+
+  private isStructurallySimilarSetup(
+    candidate: {
+      pivotPrice: unknown;
+      metadata: unknown;
+    },
+    detected: DetectedSetup,
+  ): boolean {
+    if (candidate.pivotPrice != null && detected.pivotPrice != null) {
+      const candidatePivot = Number(candidate.pivotPrice);
+      const tolerance = this.getPivotTolerance(candidatePivot);
+      if (Math.abs(candidatePivot - detected.pivotPrice) > tolerance) {
+        return false;
+      }
+    }
+
+    const candidateMeta =
+      candidate.metadata && typeof candidate.metadata === 'object'
+        ? (candidate.metadata as Record<string, unknown>)
+        : null;
+    const detectedMeta = detected.metadata ?? null;
+
+    const candidateContext =
+      candidateMeta && typeof candidateMeta.context === 'string'
+        ? candidateMeta.context
+        : null;
+    const detectedContext =
+      detectedMeta && typeof detectedMeta.context === 'string'
+        ? detectedMeta.context
+        : null;
+    if (candidateContext && detectedContext && candidateContext !== detectedContext) {
+      return false;
+    }
+
+    const candidateClass =
+      candidateMeta && typeof candidateMeta.setupClass === 'string'
+        ? candidateMeta.setupClass
+        : null;
+    const detectedClass =
+      detectedMeta && typeof detectedMeta.setupClass === 'string'
+        ? detectedMeta.setupClass
+        : null;
+    if (candidateClass && detectedClass && candidateClass !== detectedClass) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private async findRecentDuplicateSetup(
+    stockId: string,
+    detected: DetectedSetup,
+    detectedAt: Date,
+  ): Promise<{ id: string } | null> {
+    const cutoff = new Date(detectedAt);
+    cutoff.setDate(cutoff.getDate() - this.getDetectionCooldownDays(detected.type));
+
+    const recentSetups = await this.prisma.setup.findMany({
+      where: {
+        stockId,
+        type: detected.type,
+        direction: detected.direction,
+        timeframe: detected.timeframe,
+        detectedAt: { gte: cutoff },
+      },
+      orderBy: { detectedAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        pivotPrice: true,
+        metadata: true,
+      },
+    });
+
+    return (
+      recentSetups.find((candidate) =>
+        this.isStructurallySimilarSetup(candidate, detected),
+      ) ?? null
+    );
+  }
+
+  private hasRecentSimulationDuplicate(
+    existing: SimulatedSetup[],
+    detected: DetectedSetup,
+    detectedAt: Date,
+  ): boolean {
+    const cooldownMs =
+      this.getDetectionCooldownDays(detected.type) * 24 * 60 * 60 * 1000;
+    return existing.some((candidate) => {
+      if (
+        candidate.type !== detected.type ||
+        candidate.direction !== detected.direction ||
+        !candidate.detectedAt
+      ) {
+        return false;
+      }
+
+      const candidateDetectedAt = new Date(candidate.detectedAt);
+      if (Math.abs(detectedAt.getTime() - candidateDetectedAt.getTime()) > cooldownMs) {
+        return false;
+      }
+
+      return this.isStructurallySimilarSetup(
+        {
+          pivotPrice: candidate.pivotPrice,
+          metadata: candidate.metadata,
+        },
+        detected,
+      );
     });
   }
 
@@ -726,9 +891,15 @@ export class SetupOrchestratorService {
           state: s.state,
           direction: s.direction as any,
           timeframe: Timeframe.DAILY,
+          detectedAt: s.detectedAt ? new Date(s.detectedAt) : undefined,
+          lastStateAt:
+            s.stateHistory.length > 0
+              ? new Date(s.stateHistory[s.stateHistory.length - 1].date)
+              : undefined,
           pivotPrice: s.pivotPrice ?? undefined,
           stopPrice: s.stopPrice ?? undefined,
           targetPrice: s.targetPrice ?? undefined,
+          metadata: s.metadata,
         }));
 
       const activeStage =
@@ -778,6 +949,13 @@ export class SetupOrchestratorService {
       for (const detector of this.dailyDetectors) {
         const result = detector.detect(windowBars, swingPoints, simContext);
         if (result && !(result.direction === 'SHORT' && !simContext.canShortLeader)) {
+          if (
+            latestBar.date &&
+            this.hasRecentSimulationDuplicate(activeSimSetups, result, latestBar.date)
+          ) {
+            continue;
+          }
+
           const tradeCategory = BREAKOUT_TYPES.includes(result.type)
             ? 'BREAKOUT'
             : REVERSAL_TYPES.includes(result.type)

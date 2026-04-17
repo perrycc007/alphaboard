@@ -15,6 +15,8 @@ import {
 } from 'lucide-react'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,7 +41,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'fixed top-0 left-0 z-40 flex h-screen flex-col border-r border-border-default bg-bg-surface transition-all',
+        'fixed top-0 left-0 z-40 flex h-screen flex-col border-r border-border bg-card transition-all',
         collapsed ? 'w-16' : 'w-60',
       )}
       style={{ transitionDuration: '200ms' }}
@@ -47,7 +49,7 @@ export function Sidebar() {
       {/* Logo area */}
       <div
         className={cn(
-          'flex h-14 items-center border-b border-border-muted px-4',
+          'flex h-14 items-center px-4',
           collapsed ? 'justify-center' : 'gap-3',
         )}
       >
@@ -69,16 +71,18 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom nav */}
-      <div className="space-y-1 border-t border-border-muted px-2 py-3 sm:px-3 sm:py-4">
+      <Separator />
+      <div className="space-y-1 px-2 py-3 sm:px-3 sm:py-4">
         {BOTTOM_ITEMS.map((item) => (
           <SidebarLink key={item.to} {...item} collapsed={collapsed} />
         ))}
 
         {/* Collapse toggle */}
-        <button
+        <Button
           onClick={toggle}
+          variant="ghost"
           className={cn(
-            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary focus-ring cursor-pointer',
+            'h-auto w-full justify-start gap-3 px-3 py-2 text-sm text-text-secondary hover:bg-accent/10 hover:text-text-primary',
             collapsed && 'justify-center px-0',
           )}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -89,7 +93,7 @@ export function Sidebar() {
             <PanelLeftClose className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
           )}
           {!collapsed && <span>Collapse</span>}
-        </button>
+        </Button>
       </div>
     </aside>
   )
@@ -112,10 +116,10 @@ function SidebarLink({
       end={to === '/'}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-colors focus-ring cursor-pointer sm:text-sm',
+          'flex items-center gap-3 rounded-md px-3 py-2 text-xs font-medium transition-colors focus-ring cursor-pointer sm:text-sm',
           isActive
-            ? 'bg-accent/10 text-accent'
-            : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary',
+            ? 'bg-accent/10 text-accent shadow-inner'
+            : 'text-text-secondary hover:bg-secondary hover:text-text-primary',
           collapsed && 'justify-center px-0',
         )
       }

@@ -38,7 +38,7 @@ export class Ema20PullbackDetector implements DailyDetector {
     _swingPoints: SwingPointResult[],
     context: DailyDetectorContext,
   ): DetectedSetup | null {
-    if (bars.length < 10) return null;
+    if (bars.length < 20) return null;
     if (context.regime !== 'TREND') return null;
 
     const atr = context.atr14 ?? 0;
@@ -50,21 +50,37 @@ export class Ema20PullbackDetector implements DailyDetector {
     // EMA20 must be above SMA50 (ordered trend)
     if (ema20 <= sma50) return null;
 
-    // Context A: active triggered breakout/VCP/HTF
+    const latestBar = bars[bars.length - 1];
+    const latestBarDate = latestBar.date ?? null;
+
+    // Context A: active triggered breakout/VCP/HTF within a recent trend phase.
     const breakoutTypes: string[] = [
       'BREAKOUT_PIVOT',
       'VCP',
       'HIGH_TIGHT_FLAG',
     ];
-    const hasActiveBreakout = context.activeSetups?.some(
-      (s) => breakoutTypes.includes(s.type) && s.state === 'TRIGGERED',
+    const activeBreakout = context.activeSetups?.find(
+      (s) =>
+        breakoutTypes.includes(s.type) &&
+        s.state === 'TRIGGERED' &&
+        this.isRecentSetupAnchor(
+          s.lastStateAt ?? s.detectedAt,
+          latestBarDate,
+          35,
+        ),
     );
+    const hasActiveBreakout = Boolean(activeBreakout);
 
     // Context B: active base pivot + contraction
-    const hasActiveBase = context.activeSetups?.some(
+    const activeBase = context.activeSetups?.find(
       (s) =>
         s.type === ('VCP' as SetupType) &&
-        (s.state === 'BUILDING' || s.state === 'READY'),
+        (s.state === 'BUILDING' || s.state === 'READY') &&
+        this.isRecentSetupAnchor(
+          s.lastStateAt ?? s.detectedAt,
+          latestBarDate,
+          45,
+        ),
     );
     const ranges = bars.map((b) => b.high - b.low);
     const recentRanges = ranges.slice(-3);
@@ -82,17 +98,16 @@ export class Ema20PullbackDetector implements DailyDetector {
       Number.isFinite(avgPriorRange) &&
       avgRecentRange <= 0.8 * avgPriorRange;
 
-    const hasBasePivotPullbackContext = Boolean(hasActiveBase && hasContraction);
+    const hasBasePivotPullbackContext = Boolean(activeBase && hasContraction);
     if (!hasActiveBreakout && !hasBasePivotPullbackContext) return null;
 
-    const latestBar = bars[bars.length - 1];
-
-    // Meaningful departure: max close in the window must be >= ema20 + 2.0*ATR
-    let maxClose = -Infinity;
-    for (const b of bars) {
-      if (b.close > maxClose) maxClose = b.close;
-    }
-    if (maxClose < ema20 + 2.0 * atr) return null;
+    // Meaningful departure should be recent, not something that happened months ago.
+    const recentDepartureWindow = bars.slice(-15, -1);
+    const maxClose =
+      recentDepartureWindow.length > 0
+        ? Math.max(...recentDepartureWindow.map((b) => b.close))
+        : -Infinity;
+    if (maxClose < ema20 + 1.5 * atr) return null;
 
     // Touch-based entry: candle must interact with EMA20
     const touchedEma20 = latestBar.low <= ema20 && latestBar.high >= ema20;
@@ -100,16 +115,32 @@ export class Ema20PullbackDetector implements DailyDetector {
 
     // Proximity guard (keeps noisy far-close touches out)
     const distFromEma20 = Math.abs(latestBar.close - ema20);
-    if (distFromEma20 > 1 * atr) return null;
+    if (distFromEma20 > 0.6 * atr) return null;
+
+    // Precision-first: require a constructive touch, not a weak close through EMA20.
+    if (latestBar.close < ema20 || latestBar.close < sma50) return null;
+    const closeLocation =
+      latestBar.high > latestBar.low
+        ? (latestBar.close - latestBar.low) / (latestBar.high - latestBar.low)
+        : 0;
+    if (closeLocation < 0.55) return null;
+
+    const pullbackBars = bars.slice(-3);
+    if (pullbackBars.length < 3) return null;
+    const descendingHighs =
+      pullbackBars[0].high >= pullbackBars[1].high &&
+      pullbackBars[1].high >= pullbackBars[2].high;
+    const heldAboveSma50 = pullbackBars.every((b) => b.close >= sma50);
+    if (!descendingHighs || !heldAboveSma50) return null;
 
     // Volume on pullback bars (last 3) should not be EXPANSION
     const avgVol = context.avgVolume ?? 0;
     if (avgVol > 0) {
-      const recentBars = bars.slice(-3);
-      const hasExpansion = recentBars.some(
+      const hasExpansion = pullbackBars.some(
         (b) => classifyVolume(b.volume, avgVol) === 'EXPANSION',
       );
       if (hasExpansion) return null;
+      if (latestBar.volume > avgVol * 1.15) return null;
     }
 
     const stopPrice = ema20 - 1 * atr;
@@ -137,6 +168,9 @@ export class Ema20PullbackDetector implements DailyDetector {
         ema20,
         sma50,
         touchedEma20,
+        closeLocation: Math.round(closeLocation * 100) / 100,
+        descendingHighs,
+        heldAboveSma50,
         hasContraction,
         avgRecentRange: Number.isFinite(avgRecentRange)
           ? Math.round(avgRecentRange * 100) / 100
@@ -150,7 +184,30 @@ export class Ema20PullbackDetector implements DailyDetector {
         distFromEma20Atr:
           Math.round((distFromEma20 / atr) * 100) / 100,
         atrUsed: atr,
+        anchorAgeDays: this.anchorAgeDays(
+          activeBreakout?.lastStateAt ??
+            activeBreakout?.detectedAt ??
+            activeBase?.lastStateAt ??
+            activeBase?.detectedAt,
+          latestBarDate,
+        ),
       },
     };
+  }
+
+  private isRecentSetupAnchor(
+    anchorDate: Date | undefined,
+    latestBarDate: Date | null,
+    maxAgeDays: number,
+  ): boolean {
+    if (!anchorDate || !latestBarDate) return true;
+    return this.anchorAgeDays(anchorDate, latestBarDate) <= maxAgeDays;
+  }
+
+  private anchorAgeDays(anchorDate: Date | undefined, latestBarDate: Date | null): number | null {
+    if (!anchorDate || !latestBarDate) return null;
+    return Math.floor(
+      (latestBarDate.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24),
+    );
   }
 }

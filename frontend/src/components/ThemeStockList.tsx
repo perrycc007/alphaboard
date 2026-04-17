@@ -4,6 +4,8 @@ import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { useSetupStore } from '@/stores/useSetupStore'
 import { StageTag, SetupTypeBadge } from '@/components/shared'
 import { formatPrice, formatCompactNumber } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 interface ThemeStockListProps {
   detail: ApiThemeDetail
@@ -50,9 +52,10 @@ function StockRow({
   const rsRank = latestBar?.rsRank
 
   return (
-    <button
+    <Button
       onClick={() => onSelect(stock.ticker)}
-      className="flex w-full items-center justify-between rounded-lg border border-transparent bg-bg-elevated/50 px-3 py-2 text-left transition-colors hover:border-border-accent/20 hover:bg-bg-elevated cursor-pointer sm:px-4 sm:py-2.5"
+      variant="ghost"
+      className="h-auto w-full justify-between rounded-lg border border-transparent bg-secondary/40 px-3 py-2 text-left hover:border-border-accent/20 hover:bg-secondary sm:px-4 sm:py-2.5"
     >
       <div className="flex items-center gap-2 sm:gap-3">
         <span className="w-12 font-heading text-xs font-bold text-text-primary sm:w-14 sm:text-sm">
@@ -69,9 +72,9 @@ function StockRow({
               <SetupTypeBadge key={setup.id} type={setup.type} />
             ))}
             {tickerSetups.length > 2 ? (
-              <span className="inline-flex items-center rounded border border-border-muted px-1 text-[10px] text-text-muted">
+              <Badge variant="outline" className="border-border-muted px-1 text-[10px] text-text-muted">
                 +{tickerSetups.length - 2}
-              </span>
+              </Badge>
             ) : null}
           </div>
         ) : null}
@@ -110,6 +113,6 @@ function StockRow({
           </span>
         ) : null}
       </div>
-    </button>
+    </Button>
   )
 }
