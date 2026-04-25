@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { FormEvent, startTransition, useEffect, useMemo, useState } from 'react'
 import {
   ArrowUpRight,
   Bot,
@@ -93,7 +93,8 @@ export default function App() {
   const [items, setItems] = useState<ReviewItem[]>([])
   const [loadingRuns, setLoadingRuns] = useState(true)
   const [loadingItems, setLoadingItems] = useState(false)
-  const [tickerFilter, setTickerFilter] = useState('')
+  const [tickerInput, setTickerInput] = useState('')
+  const [activeSearch, setActiveSearch] = useState<{ runId: string; ticker: string } | null>(null)
   const [setupFilter, setSetupFilter] = useState('ALL')
   const [reviewedFilter, setReviewedFilter] = useState('all')
   const [outcomeFilter, setOutcomeFilter] = useState('all')
@@ -111,8 +112,6 @@ export default function App() {
     common_false_positives: '',
   })
   const [activeJob, setActiveJob] = useState<JobStatus | null>(null)
-
-  const deferredTicker = useDeferredValue(tickerFilter)
 
   const currentRun = useMemo(
     () => runs.find((run) => run.run_id === selectedRunId) ?? null,
@@ -158,11 +157,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!selectedRunId) return
+    if (!activeSearch || activeSearch.runId !== selectedRunId) {
+      setItems([])
+      setSelectedChartId('')
+      setLoadingItems(false)
+      return
+    }
+
     setLoadingItems(true)
     void fetchItems({
-      runId: selectedRunId,
-      ticker: deferredTicker.trim() || undefined,
+      runId: activeSearch.runId,
+      ticker: activeSearch.ticker,
       setupType: setupFilter,
       reviewed: reviewedFilter,
       outcome: outcomeFilter,
@@ -183,7 +188,7 @@ export default function App() {
       .finally(() => {
         setLoadingItems(false)
       })
-  }, [selectedRunId, deferredTicker, setupFilter, reviewedFilter, outcomeFilter])
+  }, [selectedRunId, activeSearch, setupFilter, reviewedFilter, outcomeFilter])
 
   useEffect(() => {
     if (!currentItem) return
@@ -350,6 +355,23 @@ export default function App() {
     }
   }
 
+  function handleTickerSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const ticker = tickerInput.trim().toUpperCase()
+
+    if (!selectedRunId || !ticker) {
+      setActiveSearch(null)
+      setItems([])
+      setSelectedChartId('')
+      setStatusMessage('Pick a run and enter a ticker before loading charts.')
+      return
+    }
+
+    startTransition(() => {
+      setActiveSearch({ runId: selectedRunId, ticker })
+    })
+  }
+
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <div
@@ -377,15 +399,20 @@ export default function App() {
                 </SelectContent>
               </Select>
 
-              <div className="relative">
-                <Filter className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted" />
-                <Input
-                  value={tickerFilter}
-                  onChange={(event) => setTickerFilter(event.target.value)}
-                  placeholder="Ticker"
-                  className="pl-9"
-                />
-              </div>
+              <form className="flex gap-2" onSubmit={handleTickerSearch}>
+                <div className="relative flex-1">
+                  <Filter className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted" />
+                  <Input
+                    value={tickerInput}
+                    onChange={(event) => setTickerInput(event.target.value.toUpperCase())}
+                    placeholder="Ticker"
+                    className="pl-9"
+                  />
+                </div>
+                <Button type="submit" variant="outline">
+                  Search
+                </Button>
+              </form>
 
               <Select value={setupFilter} onValueChange={setSetupFilter}>
                 <SelectTrigger>
@@ -469,7 +496,9 @@ export default function App() {
             <CardContent className="min-h-0 space-y-2 overflow-auto pt-0">
               {items.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border bg-bg-surface p-3 text-sm text-text-muted">
-                  No charts match this view.
+                  {activeSearch && activeSearch.runId === selectedRunId
+                    ? 'No charts match this view.'
+                    : 'Pick a run, enter a ticker, then click Search.'}
                 </div>
               ) : null}
 
@@ -602,7 +631,9 @@ export default function App() {
                 </>
               ) : (
                 <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border bg-bg-surface text-text-muted">
-                  No chart in this filtered view.
+                  {activeSearch && activeSearch.runId === selectedRunId
+                    ? 'No chart in this filtered view.'
+                    : 'Charts stay unloaded until you search for a ticker.'}
                 </div>
               )}
             </CardContent>

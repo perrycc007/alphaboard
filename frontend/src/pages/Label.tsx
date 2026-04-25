@@ -259,24 +259,27 @@ export default function LabelPage() {
         </div>
 
         <div className="flex flex-wrap gap-2 sm:gap-3">
-          <Input
-            value={tickerInput}
-            onChange={(event) => setTickerInput(event.target.value.toUpperCase())}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                submitTicker()
-              }
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              submitTicker()
             }}
-            placeholder="Enter ticker"
-            className="h-8 w-[220px] text-xs sm:h-9 sm:w-[260px] sm:text-sm lg:h-10"
-          />
-          <Button
-            onClick={submitTicker}
-            disabled={manifestLoading || !tickerInput.trim()}
-            className="h-8 px-4 text-xs sm:h-9 sm:text-sm lg:h-10"
+            className="flex flex-wrap gap-2 sm:gap-3"
           >
-            Load Ticker
-          </Button>
+            <Input
+              value={tickerInput}
+              onChange={(event) => setTickerInput(event.target.value.toUpperCase())}
+              placeholder="Enter ticker"
+              className="h-8 w-[220px] text-xs sm:h-9 sm:w-[260px] sm:text-sm lg:h-10"
+            />
+            <Button
+              type="submit"
+              disabled={manifestLoading || !tickerInput.trim()}
+              className="h-8 px-4 text-xs sm:h-9 sm:text-sm lg:h-10"
+            >
+              Search
+            </Button>
+          </form>
 
           <Select
             value={filterType}
