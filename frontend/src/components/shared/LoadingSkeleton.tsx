@@ -1,5 +1,6 @@
 import React from 'react'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface LoadingSkeletonProps {
   className?: string
@@ -8,9 +9,8 @@ interface LoadingSkeletonProps {
 
 export function LoadingSkeleton({ className, variant = 'text' }: LoadingSkeletonProps) {
   return (
-    <div
+    <Skeleton
       className={cn(
-        'animate-pulse rounded bg-bg-elevated',
         variant === 'text' && 'h-4 w-full',
         variant === 'card' && 'h-32 w-full rounded-xl',
         variant === 'chart' && 'h-48 w-full rounded-xl',

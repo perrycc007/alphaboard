@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   Res,
   NotFoundException,
   BadRequestException,
@@ -23,6 +24,9 @@ interface LabelEntry {
   human_label: 'yes' | 'no' | 'wrong_type' | 'unsure';
   correct_type: string | null;
   reviewed_at: string;
+  review_outcome?: 'valid' | 'false_positive' | 'unclear';
+  reason_tags?: string[];
+  notes?: string | null;
   reviewer?: string;
   source?: 'web' | 'telegram';
 }
@@ -40,10 +44,16 @@ interface ManifestEntry {
   direction?: string;
 }
 
+interface LabelTickerSummary {
+  ticker: string;
+}
+
 interface TelegramSendNextBody {
   chatId: string | number;
   version?: string;
 }
+
+const manifestCache = new Map<string, ManifestEntry[]>();
 
 function shouldIgnoreForTelegram(entry: ManifestEntry): boolean {
   const normalizedPath = entry.chart_path.replace(/\\/g, '/').toLowerCase();
@@ -72,11 +82,36 @@ function writeLabels(version: string, labels: LabelEntry[]): void {
 }
 
 function readManifest(version: string): ManifestEntry[] {
+  const cachedManifest = manifestCache.get(version);
+  if (cachedManifest) return cachedManifest;
+
   const manifestPath = path.join(ARTIFACTS_ROOT, version, 'manifest.json');
   if (!fs.existsSync(manifestPath)) {
     throw new NotFoundException(`Manifest not found for version ${version}`);
   }
-  return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as ManifestEntry[];
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as ManifestEntry[];
+  manifestCache.set(version, manifest);
+  return manifest;
+}
+
+function getManifestEntries(version: string, ticker?: string): ManifestEntry[] {
+  const manifest = readManifest(version);
+  const normalizedTicker = ticker?.trim().toUpperCase();
+  if (!normalizedTicker) return manifest;
+  return manifest.filter((entry) => entry.ticker.toUpperCase() === normalizedTicker);
+}
+
+function getTickerSummaries(version: string): LabelTickerSummary[] {
+  const versionRoot = path.join(ARTIFACTS_ROOT, version);
+  if (!fs.existsSync(versionRoot)) {
+    throw new NotFoundException(`Version not found: ${version}`);
+  }
+
+  return fs
+    .readdirSync(versionRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => ({ ticker: entry.name }))
+    .sort((left, right) => left.ticker.localeCompare(right.ticker));
 }
 
 function getNextUnlabeled(version: string, forTelegram = false): ManifestEntry | null {
@@ -166,8 +201,13 @@ async function sendTelegramChart(
 @AllowAnonymous()
 export class LabelController {
   @Get('manifest/:version')
-  getManifest(@Param('version') version: string) {
-    return readManifest(version);
+  getManifest(@Param('version') version: string, @Query('ticker') ticker?: string) {
+    return getManifestEntries(version, ticker);
+  }
+
+  @Get('tickers/:version')
+  getTickers(@Param('version') version: string) {
+    return getTickerSummaries(version);
   }
 
   @Get('labels/:version')
@@ -371,12 +411,8 @@ export class LabelController {
   }
 
   @Get('stats/:version')
-  getStats(@Param('version') version: string) {
-    const manifestPath = path.join(ARTIFACTS_ROOT, version, 'manifest.json');
-    if (!fs.existsSync(manifestPath)) {
-      throw new NotFoundException(`Manifest not found for version ${version}`);
-    }
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  getStats(@Param('version') version: string, @Query('ticker') ticker?: string) {
+    const manifest = getManifestEntries(version, ticker);
     const labels = readLabels(version);
 
     const labelMap = new Map(labels.map((l) => [l.chart_id, l]));

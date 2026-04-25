@@ -52,13 +52,15 @@ export class DoubleTopDetector implements DailyDetector {
     const pullbackAtr = 2.5;
     const minBarsSince = 10;
     const breakTol = 0.1 * atr;
-    const nearAtr = 0.5;
+    const nearAtr = 0.35;
+    const maxBarsSince = 80;
 
     // Try each significant swing high as Top1, starting from most recent
     for (let k = swingHighs.length - 1; k >= 0; k--) {
       const top1 = swingHighs[k];
       const barsAfterTop1 = bars.length - 1 - top1.index;
       if (barsAfterTop1 < minBarsSince) continue;
+      if (barsAfterTop1 > maxBarsSince) continue;
 
       // Pullback: lowest low since Top1
       let pullbackLow = Infinity;
@@ -78,6 +80,10 @@ export class DoubleTopDetector implements DailyDetector {
       const nearDistance = Math.abs(latestBar.high - top1.price);
       const isNear = nearDistance <= nearAtr * atr;
       const hasExceeded = latestBar.high > top1.price + breakTol;
+      const closeLocation =
+        latestBar.high > latestBar.low
+          ? (latestBar.close - latestBar.low) / (latestBar.high - latestBar.low)
+          : 1;
 
       if (!isNear && !hasExceeded) continue;
 
@@ -85,7 +91,12 @@ export class DoubleTopDetector implements DailyDetector {
 
       // TRIGGERED: High exceeded Top1 AND Low came back below Top1
       //            (intrabar failure on the same bar)
-      if (hasExceeded && latestBar.low < top1.price) {
+      if (
+        hasExceeded &&
+        latestBar.low < top1.price &&
+        latestBar.close < top1.price - breakTol &&
+        closeLocation <= 0.45
+      ) {
         const stopPrice = latestBar.high + 0.5 * atr;
         const riskPerShare = stopPrice - top1.price;
 
@@ -109,6 +120,7 @@ export class DoubleTopDetector implements DailyDetector {
             top2High: latestBar.high,
             pullbackLow,
             pullbackDepthAtr: Math.round((pullbackDepth / atr) * 100) / 100,
+            closeLocation: Math.round(closeLocation * 100) / 100,
             atrUsed: atr,
             state: 'TRIGGERED',
           },
@@ -116,7 +128,7 @@ export class DoubleTopDetector implements DailyDetector {
       }
 
       // READY: High exceeded Top1 but Low hasn't failed back yet
-      if (hasExceeded) {
+      if (hasExceeded && latestBar.close <= top1.price + breakTol * 0.5) {
         const stopPrice = latestBar.high + 0.5 * atr;
         const riskPerShare = stopPrice - top1.price;
 
@@ -141,6 +153,7 @@ export class DoubleTopDetector implements DailyDetector {
             top2High: latestBar.high,
             pullbackLow,
             pullbackDepthAtr: Math.round((pullbackDepth / atr) * 100) / 100,
+            closeLocation: Math.round(closeLocation * 100) / 100,
             atrUsed: atr,
             state: 'READY',
           },
@@ -148,6 +161,7 @@ export class DoubleTopDetector implements DailyDetector {
       }
 
       // BUILDING: approaching Top1 but hasn't exceeded yet
+      if (latestBar.close > top1.price + breakTol * 0.25) continue;
       return {
         type: SetupType.DOUBLE_TOP,
         direction: 'SHORT',
@@ -166,6 +180,7 @@ export class DoubleTopDetector implements DailyDetector {
           nearCrossDistance: nearDistance,
           pullbackLow,
           pullbackDepthAtr: Math.round((pullbackDepth / atr) * 100) / 100,
+          closeLocation: Math.round(closeLocation * 100) / 100,
           atrUsed: atr,
           state: 'BUILDING',
         },

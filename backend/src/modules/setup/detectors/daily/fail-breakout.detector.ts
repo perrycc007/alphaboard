@@ -24,6 +24,8 @@ export class FailBreakoutDetector implements DailyDetector {
     context: DailyDetectorContext,
   ): DetectedSetup | null {
     if (bars.length < 3) return null;
+    const latestBar = bars[bars.length - 1];
+    const latestBarDate = latestBar.date ?? null;
 
     // Find triggered breakout setups
     const triggeredBreakout = context.activeSetups?.find(
@@ -31,6 +33,7 @@ export class FailBreakoutDetector implements DailyDetector {
         (s.type === SetupType.BREAKOUT_PIVOT ||
           s.type === SetupType.BREAKOUT_VCB) &&
         s.state === 'TRIGGERED' &&
+        this.isRecentBreakoutFailureAnchor(s.lastStateAt ?? s.detectedAt, latestBarDate) &&
         s.pivotPrice != null,
     );
 
@@ -38,7 +41,6 @@ export class FailBreakoutDetector implements DailyDetector {
 
     const pivot = Number(triggeredBreakout.pivotPrice);
     const abs = averageBarSize(bars);
-    const latestBar = bars[bars.length - 1];
     const prevBar = bars[bars.length - 2];
     const avgVol = context.avgVolume ?? 0;
 
@@ -53,8 +55,12 @@ export class FailBreakoutDetector implements DailyDetector {
     // Confirmation: 2 consecutive closes below, or single with volume expansion
     const twoConsecutive = prevBar.close < pivot && latestBar.close < pivot;
     const volumeExpansion = avgVol > 0 && latestBar.volume > avgVol * 1.5;
+    const closeLocation =
+      latestBar.high > latestBar.low
+        ? (latestBar.close - latestBar.low) / (latestBar.high - latestBar.low)
+        : 0;
 
-    if (!twoConsecutive && !volumeExpansion) return null;
+    if ((!twoConsecutive && !volumeExpansion) || closeLocation > 0.4) return null;
 
     const stopPrice = pivot + abs; // Stop above pivot for short
     const riskPerShare = stopPrice - latestBar.close;
@@ -76,7 +82,19 @@ export class FailBreakoutDetector implements DailyDetector {
         failureClose: latestBar.close,
         dropFromPivot: Math.round(dropFromPivot * 100) / 100,
         failureStrength: dropFromPivot / abs,
+        closeLocation: Math.round(closeLocation * 100) / 100,
       },
     };
+  }
+
+  private isRecentBreakoutFailureAnchor(
+    anchorDate: Date | undefined,
+    latestBarDate: Date | null,
+  ): boolean {
+    if (!anchorDate || !latestBarDate) return true;
+    const ageDays =
+      (latestBarDate.getTime() - anchorDate.getTime()) /
+      (1000 * 60 * 60 * 24);
+    return ageDays >= 0 && ageDays <= 30;
   }
 }

@@ -1,6 +1,7 @@
 import type { StageNumber, StageEnum } from '@/types'
 import { parseStageToNumber } from '@/types'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 
 const STAGE_CONFIG: Record<StageNumber, { label: string; className: string }> = {
   1: { label: 'S1', className: 'bg-stage-1/15 text-stage-1 border-stage-1/25' },
@@ -21,9 +22,9 @@ export function StageTag({ stage, size = 'sm', className }: StageTagProps) {
   const config = STAGE_CONFIG[num]
 
   return (
-    <span
+    <Badge
       className={cn(
-        'inline-flex items-center rounded border font-mono font-semibold leading-none',
+        'font-mono font-semibold leading-none',
         size === 'sm' && 'px-1.5 py-0.5 text-[10px] sm:text-xs',
         size === 'md' && 'px-2 py-1 text-xs sm:text-sm',
         config.className,
@@ -31,6 +32,6 @@ export function StageTag({ stage, size = 'sm', className }: StageTagProps) {
       )}
     >
       {config.label}
-    </span>
+    </Badge>
   )
 }

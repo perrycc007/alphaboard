@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 
 type DirectionValue = 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'LONG' | 'SHORT'
 
@@ -21,9 +22,9 @@ export function DirectionBadge({ direction, size = 'sm', className }: DirectionB
   if (!config) return null
 
   return (
-    <span
+    <Badge
       className={cn(
-        'inline-flex items-center rounded border font-medium leading-none',
+        'font-medium leading-none',
         size === 'sm' && 'px-1.5 py-0.5 text-[10px] sm:text-xs',
         size === 'md' && 'px-2 py-1 text-xs sm:text-sm',
         config.className,
@@ -31,6 +32,6 @@ export function DirectionBadge({ direction, size = 'sm', className }: DirectionB
       )}
     >
       {config.label}
-    </span>
+    </Badge>
   )
 }

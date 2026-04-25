@@ -49,6 +49,8 @@ export class MaRallyFailureDetector implements DailyDetector {
   ): DetectedSetup | null {
     if (bars.length < 15) return null;
     if (context.regime !== 'FAILURE') return null;
+    const latestBar = bars[bars.length - 1];
+    const latestBarDate = latestBar.date ?? null;
 
     // First-rally-only gating: once a failure rally setup is active/triggered,
     // do not emit another one from the same failure phase.
@@ -56,19 +58,24 @@ export class MaRallyFailureDetector implements DailyDetector {
       (s) =>
         s.type === ('MA_RALLY_FAILURE' as SetupType) &&
         (s.state === 'TRIGGERED' ||
-          s.state === 'ACTIVE' ||
           s.state === 'READY' ||
           s.state === 'BUILDING'),
     );
     if (hasExistingFailureRally) return null;
+
+    const recentFailureAnchor = context.activeSetups?.find(
+      (s) =>
+        (s.type === SetupType.FAIL_BASE || s.type === SetupType.FAIL_BREAKOUT) &&
+        s.state === 'TRIGGERED' &&
+        this.isRecentFailureAnchor(s.lastStateAt ?? s.detectedAt, latestBarDate),
+    );
+    if (!recentFailureAnchor) return null;
 
     const atr = context.atr14 ?? 0;
     if (atr <= 0) return null;
     const ema20 = context.ema20;
     const sma50 = context.sma50;
     if (ema20 == null || sma50 == null) return null;
-
-    const latestBar = bars[bars.length - 1];
 
     // --- Weak rally filter (need at least 1) ---
     let weakSignals = 0;
@@ -94,7 +101,12 @@ export class MaRallyFailureDetector implements DailyDetector {
       if (noExpansion) weakSignals++;
     }
 
-    if (weakSignals === 0) return null;
+    if (weakSignals < 2) return null;
+    const closeLocation =
+      latestBar.high > latestBar.low
+        ? (latestBar.close - latestBar.low) / (latestBar.high - latestBar.low)
+        : 1;
+    if (closeLocation > 0.45) return null;
 
     // --- Variant 1: SMA50 resistance ---
     if (ema20 < sma50) {
@@ -119,13 +131,17 @@ export class MaRallyFailureDetector implements DailyDetector {
             'first_rally_back',
             'weak_rally',
             'sma50_resistance',
+            'recent_failure_anchor',
           ],
           metadata: {
             context: 'BASE_FAILURE',
             ma: 'SMA50',
+            anchorType: recentFailureAnchor.type,
             sma50,
             ema20,
             priceEfficiency10: Math.round(eff10 * 100) / 100,
+            weakSignalCount: weakSignals,
+            closeLocation: Math.round(closeLocation * 100) / 100,
             distToMaAtr:
               Math.round((distToSma50 / atr) * 100) / 100,
             atrUsed: atr,
@@ -163,13 +179,17 @@ export class MaRallyFailureDetector implements DailyDetector {
             'weak_rally',
             'ema20_resistance',
             'ema20_slope_negative',
+            'recent_failure_anchor',
           ],
           metadata: {
             context: 'BASE_FAILURE',
             ma: 'EMA20',
+            anchorType: recentFailureAnchor.type,
             ema20,
             sma50,
             priceEfficiency10: Math.round(eff10 * 100) / 100,
+            weakSignalCount: weakSignals,
+            closeLocation: Math.round(closeLocation * 100) / 100,
             distToMaAtr:
               Math.round((distToEma20 / atr) * 100) / 100,
             atrUsed: atr,
@@ -179,5 +199,16 @@ export class MaRallyFailureDetector implements DailyDetector {
     }
 
     return null;
+  }
+
+  private isRecentFailureAnchor(
+    anchorDate: Date | undefined,
+    latestBarDate: Date | null,
+  ): boolean {
+    if (!anchorDate || !latestBarDate) return true;
+    const ageDays =
+      (latestBarDate.getTime() - anchorDate.getTime()) /
+      (1000 * 60 * 60 * 24);
+    return ageDays >= 0 && ageDays <= 30;
   }
 }

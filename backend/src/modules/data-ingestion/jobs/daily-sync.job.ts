@@ -11,6 +11,12 @@ import { PipelineService } from '../services/pipeline.service';
 export class DailySyncJob {
   private readonly logger = new Logger(DailySyncJob.name);
 
+  private isDailySyncEnabled(): boolean {
+    const raw = process.env.ENABLE_DAILY_SYNC_CRON;
+    if (!raw) return false;
+    return raw.toLowerCase() === 'true';
+  }
+
   constructor(
     @Inject(forwardRef(() => PipelineService))
     private readonly pipelineService: PipelineService,
@@ -18,6 +24,13 @@ export class DailySyncJob {
 
   @Cron('0 17 * * 1-5')
   async run(): Promise<void> {
+    if (!this.isDailySyncEnabled()) {
+      this.logger.log(
+        'Daily sync cron skipped (ENABLE_DAILY_SYNC_CRON != true)',
+      );
+      return;
+    }
+
     if (this.pipelineService.isRunning()) {
       this.logger.log('Pipeline already running, skipping daily sync cron');
       return;

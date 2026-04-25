@@ -25,6 +25,7 @@ export class FailBaseDetector implements DailyDetector {
   ): DetectedSetup | null {
     if (bars.length < 3) return null;
     if (!context.sma50) return null;
+    if (context.ema20 != null && context.ema20 >= context.sma50) return null;
 
     // Must have active VCP in BUILDING or READY state
     const activeVcp = context.activeSetups?.find(
@@ -36,17 +37,23 @@ export class FailBaseDetector implements DailyDetector {
     if (!activeVcp) return null;
 
     const sma50 = context.sma50;
+    const ema20 = context.ema20;
     const abs = averageBarSize(bars);
     const latestBar = bars[bars.length - 1];
     const prevBar = bars[bars.length - 2];
 
     if (latestBar.close >= sma50) return null;
+    if (ema20 != null && latestBar.close >= ema20) return null;
 
     const distanceBelow = sma50 - latestBar.close;
     const twoConsecutive = prevBar.close < sma50 && latestBar.close < sma50;
     const singleStrong = distanceBelow > 0.5 * abs;
+    const closeLocation =
+      latestBar.high > latestBar.low
+        ? (latestBar.close - latestBar.low) / (latestBar.high - latestBar.low)
+        : 0;
 
-    if (!twoConsecutive && !singleStrong) return null;
+    if ((!twoConsecutive && !singleStrong) || closeLocation > 0.45) return null;
 
     return {
       type: SetupType.FAIL_BASE,
@@ -59,8 +66,10 @@ export class FailBaseDetector implements DailyDetector {
       ],
       metadata: {
         sma50,
+        ema20,
         failureClose: latestBar.close,
         distanceBelow: Math.round(distanceBelow * 100) / 100,
+        closeLocation: Math.round(closeLocation * 100) / 100,
         vcpSetupId: activeVcp.id,
       },
     };

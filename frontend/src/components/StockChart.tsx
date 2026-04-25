@@ -1,19 +1,13 @@
-import { useEffect, useRef, useCallback } from 'react'
-import {
-  createChart,
-  createSeriesMarkers,
-  type IChartApi,
-  type ISeriesApi,
-  type Time,
-  ColorType,
-  LineStyle,
-  CandlestickSeries,
-  HistogramSeries,
-  LineSeries,
-} from 'lightweight-charts'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { LoadingSkeleton } from '@/components/shared'
+import { formatPrice } from '@/lib/utils'
 import type { ApiStockDaily, ApiSetup } from '@/types'
 
-interface StockChartProps {
+const LazyStockChartInner = lazy(() => import('./StockChartInner'))
+
+const PRELOAD_ROOT_MARGIN = '240px 0px'
+
+export interface StockChartProps {
   dailyBars: ApiStockDaily[]
   spyBars?: ApiStockDaily[]
   setups?: ApiSetup[]
@@ -22,23 +16,90 @@ interface StockChartProps {
   showSpy?: boolean
   /** When true, draw entry/exit markers instead of horizontal price lines (for simulation) */
   showMarkers?: boolean
+  /** Load immediately instead of waiting for the chart to enter the viewport. */
+  priority?: boolean
 }
 
-type CandleSeriesApi = ISeriesApi<'Candlestick', Time>
-type LineSeriesApi = ISeriesApi<'Line', Time>
+function latestBarByDate(dailyBars: ApiStockDaily[]) {
+  return dailyBars.reduce((latest, current) => (current.date > latest.date ? current : latest), dailyBars[0])
+}
 
-// MA line configs
-const MA_LINES = [
-  { key: 'ema6' as const, color: '#8b5cf6', width: 1, label: 'EMA 6' },
-  { key: 'ema20' as const, color: '#f59e0b', width: 1, label: 'EMA 20' },
-  { key: 'sma50' as const, color: '#3b82f6', width: 1.5, label: 'SMA 50' },
-  { key: 'sma150' as const, color: '#14b8a6', width: 1, label: 'SMA 150' },
-  { key: 'sma200' as const, color: '#ef4444', width: 1.5, label: 'SMA 200' },
-] as const
+function earliestBarByDate(dailyBars: ApiStockDaily[]) {
+  return dailyBars.reduce((earliest, current) => (current.date < earliest.date ? current : earliest), dailyBars[0])
+}
 
-function toChartDate(dateStr: string): string {
-  // Convert ISO date to YYYY-MM-DD for lightweight-charts
-  return dateStr.slice(0, 10)
+function ChartPlaceholder({
+  dailyBars,
+  height,
+  loading = false,
+}: {
+  dailyBars: ApiStockDaily[]
+  height: number
+  loading?: boolean
+}) {
+  const latestBar = useMemo(() => latestBarByDate(dailyBars), [dailyBars])
+  const firstBar = useMemo(() => earliestBarByDate(dailyBars), [dailyBars])
+  const changePct =
+    firstBar.close !== 0 ? ((latestBar.close - firstBar.close) / firstBar.close) * 100 : null
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-lg border border-border-muted bg-bg-elevated"
+      style={{ height }}
+    >
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(139,92,246,0.08),transparent_45%),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:auto,24px_24px,24px_24px]" />
+      <div className="relative flex h-full flex-col justify-between gap-4 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-muted">
+              {loading ? 'Loading chart' : 'Chart preview'}
+            </p>
+            <p className="text-sm font-medium text-text-primary sm:text-base">
+              {loading ? 'Rendering the interactive chart.' : 'Interactive chart loads when needed.'}
+            </p>
+          </div>
+          <div className="rounded-full border border-border-muted bg-bg-surface/80 px-2.5 py-1 text-[10px] font-medium text-text-secondary">
+            {dailyBars.length} bars
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-xl border border-border-muted bg-bg-surface/70 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-text-muted">Latest close</div>
+            <div className="mt-1 font-mono text-sm font-semibold text-text-primary sm:text-base">
+              ${formatPrice(latestBar.close)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border-muted bg-bg-surface/70 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-text-muted">Date range</div>
+            <div className="mt-1 font-mono text-xs text-text-primary sm:text-sm">
+              {firstBar.date.slice(0, 10)} to {latestBar.date.slice(0, 10)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border-muted bg-bg-surface/70 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-text-muted">Period change</div>
+            <div
+              className={`mt-1 font-mono text-sm font-semibold sm:text-base ${
+                changePct != null && changePct >= 0 ? 'text-bullish' : 'text-bearish'
+              }`}
+            >
+              {changePct == null ? '--' : `${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%`}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <LoadingSkeleton className="h-24 rounded-xl" />
+          <div className="grid grid-cols-4 gap-2">
+            <LoadingSkeleton className="h-10 rounded-lg" />
+            <LoadingSkeleton className="h-10 rounded-lg" />
+            <LoadingSkeleton className="h-10 rounded-lg" />
+            <LoadingSkeleton className="h-10 rounded-lg" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function StockChart({
@@ -49,233 +110,35 @@ export function StockChart({
   showMAs = true,
   showSpy = false,
   showMarkers = false,
+  priority = false,
 }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi | null>(null)
-  const candlestickRef = useRef<CandleSeriesApi | null>(null)
-  const maSeriesRef = useRef<Map<string, LineSeriesApi>>(new Map())
-  void spyBars
-  void showSpy
+  const [shouldLoad, setShouldLoad] = useState(priority)
 
-  // Sort bars by date ascending (backend sends desc)
-  const sortedBars = [...dailyBars].sort((a, b) => a.date.localeCompare(b.date))
-
-  const initChart = useCallback(() => {
-    if (!containerRef.current || sortedBars.length === 0) return
-
-    // Clean up existing chart
-    if (chartRef.current) {
-      chartRef.current.remove()
-      chartRef.current = null
-      candlestickRef.current = null
-      maSeriesRef.current.clear()
-    }
-
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#6b7280',
-        fontFamily: '"DM Sans", sans-serif',
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: 'rgba(255,255,255,0.04)' },
-        horzLines: { color: 'rgba(255,255,255,0.04)' },
-      },
-      crosshair: {
-        vertLine: { color: 'rgba(139,92,246,0.3)', labelBackgroundColor: '#1e1b4b' },
-        horzLine: { color: 'rgba(139,92,246,0.3)', labelBackgroundColor: '#1e1b4b' },
-      },
-      rightPriceScale: {
-        borderColor: 'rgba(255,255,255,0.08)',
-        scaleMargins: { top: 0.1, bottom: 0.15 },
-      },
-      timeScale: {
-        borderColor: 'rgba(255,255,255,0.08)',
-        timeVisible: false,
-      },
-      width: containerRef.current.clientWidth,
-      height,
-    })
-
-    chartRef.current = chart
-
-    // Candlestick series (v5 API)
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e',
-      downColor: '#ef4444',
-      borderUpColor: '#22c55e',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e',
-      wickDownColor: '#ef4444',
-    })
-
-    candleSeries.setData(
-      sortedBars.map((bar) => ({
-        time: toChartDate(bar.date),
-        open: Number(bar.open),
-        high: Number(bar.high),
-        low: Number(bar.low),
-        close: Number(bar.close),
-      })),
-    )
-
-    candlestickRef.current = candleSeries
-
-    // Volume histogram (v5 API)
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
-    })
-
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: { top: 0.85, bottom: 0 },
-    })
-
-    volumeSeries.setData(
-      sortedBars.map((bar) => ({
-        time: toChartDate(bar.date),
-        value: Number(bar.volume),
-        color: Number(bar.close) >= Number(bar.open) ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-      })),
-    )
-
-    // MA overlay lines
-    if (showMAs) {
-      for (const ma of MA_LINES) {
-        const maData = sortedBars
-          .filter((bar) => bar[ma.key] != null)
-          .map((bar) => ({
-            time: toChartDate(bar.date),
-            value: Number(bar[ma.key]),
-          }))
-
-        if (maData.length > 0) {
-          const lineSeries = chart.addSeries(LineSeries, {
-            color: ma.color,
-            lineWidth: ma.width as 1 | 2 | 3 | 4,
-            priceLineVisible: false,
-            lastValueVisible: false,
-            crosshairMarkerVisible: false,
-          })
-          lineSeries.setData(maData)
-          maSeriesRef.current.set(ma.key, lineSeries)
-        }
-      }
-    }
-
-    // Setup annotations
-    if (setups && setups.length > 0) {
-      if (showMarkers) {
-        // Simulation mode: draw entry/exit markers on candles
-        const markers: Array<{
-          time: string
-          position: 'belowBar' | 'aboveBar'
-          color: string
-          shape: 'arrowUp' | 'arrowDown'
-          text: string
-        }> = []
-
-        for (const setup of setups) {
-          const meta = setup.metadata as Record<string, unknown> | undefined
-          // Entry marker
-          if (meta?.entryDate) {
-            markers.push({
-              time: toChartDate(meta.entryDate as string),
-              position: setup.direction === 'LONG' ? 'belowBar' : 'aboveBar',
-              color: '#22c55e',
-              shape: setup.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
-              text: '',
-            })
-          }
-          // Exit marker
-          if (meta?.exitDate) {
-            const finalR = meta.finalR as number | undefined
-            markers.push({
-              time: toChartDate(meta.exitDate as string),
-              position: setup.direction === 'LONG' ? 'aboveBar' : 'belowBar',
-              color: finalR != null && finalR >= 0 ? '#3b82f6' : '#ef4444',
-              shape: setup.direction === 'LONG' ? 'arrowDown' : 'arrowUp',
-              text: '',
-            })
-          }
-        }
-
-        // Sort markers by time (required by lightweight-charts)
-        markers.sort((a, b) => a.time.localeCompare(b.time))
-        createSeriesMarkers(candleSeries, markers)
-      } else {
-        // Normal mode: draw horizontal price lines
-        for (const setup of setups) {
-          if (setup.pivotPrice != null) {
-            candleSeries.createPriceLine({
-              price: Number(setup.pivotPrice),
-              color: '#8b5cf6',
-              lineWidth: 1,
-              lineStyle: LineStyle.Dashed,
-              axisLabelVisible: true,
-              title: `Pivot (${setup.type})`,
-            })
-          }
-          if (setup.stopPrice != null) {
-            candleSeries.createPriceLine({
-              price: Number(setup.stopPrice),
-              color: '#ef4444',
-              lineWidth: 1,
-              lineStyle: LineStyle.Dotted,
-              axisLabelVisible: true,
-              title: 'Stop',
-            })
-          }
-          if (setup.targetPrice != null) {
-            candleSeries.createPriceLine({
-              price: Number(setup.targetPrice),
-              color: '#22c55e',
-              lineWidth: 1,
-              lineStyle: LineStyle.Dotted,
-              axisLabelVisible: true,
-              title: 'Target',
-            })
-          }
-        }
-      }
-    }
-
-    // Fit content
-    chart.timeScale().fitContent()
-  }, [sortedBars, setups, showMAs, showMarkers, height])
-
-  // Init chart on mount or data change
   useEffect(() => {
-    initChart()
-  }, [initChart])
+    if (priority) {
+      setShouldLoad(true)
+    }
+  }, [priority])
 
-  // Handle resize
   useEffect(() => {
-    if (!containerRef.current || !chartRef.current) return
+    if (shouldLoad || dailyBars.length === 0 || !containerRef.current) return
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width } = entry.contentRect
-        chartRef.current?.applyOptions({ width })
-      }
-    })
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldLoad(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: PRELOAD_ROOT_MARGIN },
+    )
 
     observer.observe(containerRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [dailyBars.length, shouldLoad])
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.remove()
-        chartRef.current = null
-      }
-    }
-  }, [])
-
-  if (sortedBars.length === 0) {
+  if (dailyBars.length === 0) {
     return (
       <div
         className="flex items-center justify-center rounded-lg border border-border-muted bg-bg-elevated"
@@ -286,5 +149,23 @@ export function StockChart({
     )
   }
 
-  return <div ref={containerRef} className="w-full rounded-lg" style={{ height }} />
+  return (
+    <div ref={containerRef} className="w-full">
+      {shouldLoad ? (
+        <Suspense fallback={<ChartPlaceholder dailyBars={dailyBars} height={height} loading />}>
+          <LazyStockChartInner
+            dailyBars={dailyBars}
+            spyBars={spyBars}
+            setups={setups}
+            height={height}
+            showMAs={showMAs}
+            showSpy={showSpy}
+            showMarkers={showMarkers}
+          />
+        </Suspense>
+      ) : (
+        <ChartPlaceholder dailyBars={dailyBars} height={height} />
+      )}
+    </div>
+  )
 }

@@ -1,7 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   Direction,
-  KeyLevelType,
   LeaderPeriodActivity,
   MarketPeriodGranularity,
   MarketRegimeLabel,
@@ -12,142 +11,32 @@ import {
   SetupState,
   SetupType,
   StageEnum,
-  TimingSignalType,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { IndicatorService } from '../data-ingestion/services/indicator.service';
 import { StageClassifierService } from '../stock/services/stage-classifier.service';
 import { SetupOrchestratorService } from '../setup/setup-orchestrator.service';
+import { LeaderPeriodSnapshotService } from './leader-period-snapshot.service';
+import { MarketPeriodAssemblerService } from './market-period-assembler.service';
 import { getSetupFamily } from './setup-family';
 import { detectSignificantSwingPoints } from '../setup/primitives';
 import type { Bar } from '../../common/types';
 import {
-  AggregatedPeriodGranularity,
-  buildCalendarBuckets,
   classifyMarketRegime,
-  deriveLeaderPeriodActivity,
   extractLeaderRunsFromSeries,
-  overlapDays,
-  periodSpanDays,
-  pickDominantRegimeLabel,
 } from './market-regime.helpers';
+import type {
+  ComputedPeriodView,
+  LeaderMarkdownSummary,
+  LeaderSnapshotContext,
+  ProxyStateSummary,
+  RegimePeriodCreateData,
+  SetupOutcomeRow,
+} from './market-regime.types';
 
 const PROXY_TICKERS = ['SPY', 'QQQ', 'IWM', 'GLD', 'UUP'] as const;
 const EQUITY_PROXY_TICKERS = ['SPY', 'QQQ', 'IWM'] as const;
-const LIVE_SAMPLE_THRESHOLD = 12;
-const FAMILY_SAMPLE_THRESHOLD = 3;
 const ROLLING_WINDOW_DAYS = 60;
-
-type FamilyMetric = {
-  count: number;
-  winRate: number;
-  avgFinalR: number;
-  source: 'LIVE' | 'SIMULATED' | 'MIXED' | 'NONE';
-};
-
-type ProxyStateSummary = {
-  ticker: string;
-  stage: StageEnum;
-  trend: MarketTrendLabel;
-  dominantFamily: SetupFamily | null;
-  dominantSetup: SetupType | null;
-  close: number;
-};
-
-type SetupSummary = {
-  type: SetupType;
-  state: SetupState;
-  direction: Direction;
-  detectedAt?: string;
-};
-
-type TimingSignalSummary = {
-  type: TimingSignalType;
-  direction: Direction;
-  signalAt: string;
-  levelType: KeyLevelType;
-  referenceLevel: number;
-  triggerPrice: number | null;
-  stopPrice: number | null;
-};
-
-type LeaderPeriodSummary = {
-  ticker: string;
-  name: string;
-  stage2StartDate: Date;
-  stage2EndDate: Date;
-  peakGainPct: number;
-  entryPrice: number;
-  peakPrice: number;
-  stageAtPeriodStart: StageEnum | null;
-  stageAtPeriodEnd: StageEnum | null;
-  activity: LeaderPeriodActivity;
-  activityNote: string;
-  identifiedSetupLabel: string | null;
-  activeSetups: SetupSummary[];
-  primarySetup: SetupSummary | null;
-  timingSignals: TimingSignalSummary[];
-  periodStartClose: number | null;
-  periodEndClose: number | null;
-  periodReturnPct: number | null;
-  shortingEnabled: boolean;
-};
-
-type LeaderMarkdownSummary = {
-  ticker: string;
-  identifiedSetupLabel: string | null;
-  activity: LeaderPeriodActivity | null;
-  peakGainPct: number;
-  stageAtPeriodEnd: StageEnum | null;
-  shortingEnabled: boolean;
-};
-
-type ComputedPeriodView = {
-  granularity: MarketPeriodGranularity;
-  periodKey: string;
-  startDate: Date;
-  endDate: Date;
-  label: MarketRegimeLabel;
-  liveSampleCount: number;
-  simulatedSampleCount: number;
-  sourcePeriodCount: number;
-  scorecard: Record<string, unknown>;
-  proxyStates: ProxyStateSummary[];
-};
-
-type SetupOutcomeRow = Prisma.SetupOutcomeCreateManyInput;
-type LeaderSnapshotRow = Omit<
-  Prisma.MarketLeaderPeriodSnapshotCreateManyInput,
-  'marketRegimePeriodId'
->;
-type RegimePeriodCreateData = Prisma.MarketRegimePeriodCreateInput;
-
-interface SetupOutcomeMetricRow {
-  family: SetupFamily;
-  source: SetupOutcomeSource;
-  isWin: boolean | null;
-  finalR: Prisma.Decimal | null;
-  effectiveDate: Date;
-}
-
-type FamilyOutcomeAccumulator = {
-  count: number;
-  wins: number;
-  finalRSum: number;
-};
-
-type FamilySourceAccumulators = Record<
-  SetupFamily,
-  {
-    live: FamilyOutcomeAccumulator;
-    simulated: FamilyOutcomeAccumulator;
-  }
->;
-
-interface LeaderSnapshotBuildResult {
-  summary: LeaderPeriodSummary[];
-  snapshots: LeaderSnapshotRow[];
-}
 
 @Injectable()
 export class MarketRegimeService {
@@ -158,6 +47,8 @@ export class MarketRegimeService {
     private readonly indicatorService: IndicatorService,
     private readonly stageClassifier: StageClassifierService,
     private readonly orchestrator: SetupOrchestratorService,
+    private readonly leaderSnapshotService: LeaderPeriodSnapshotService,
+    private readonly periodAssembler: MarketPeriodAssemblerService,
   ) {}
 
   async rebuildAll(): Promise<{
@@ -503,7 +394,11 @@ export class MarketRegimeService {
         effectiveDate: true,
       },
     });
-    const rollingMetricsByDate = this.buildRollingFamilyMetricsByDate(dates, outcomes);
+    const rollingMetricsByDate = this.periodAssembler.buildRollingFamilyMetricsByDate(
+      dates,
+      outcomes,
+      ROLLING_WINDOW_DAYS,
+    );
     const points: Array<{
       date: Date;
       label: MarketRegimeLabel;
@@ -530,7 +425,7 @@ export class MarketRegimeService {
 
       const metrics =
         rollingMetricsByDate.get(dateKey) ??
-        this.buildFamilyMetricsFromRows(outcomes, windowStart, date);
+        this.periodAssembler.buildFamilyMetricsFromRows(outcomes, windowStart, date);
       const label = classifyMarketRegime(proxyStates, metrics);
 
       points.push({
@@ -549,60 +444,106 @@ export class MarketRegimeService {
       });
     }
 
-    const merged: ComputedPeriodView[] = [];
-
-    for (const point of points) {
-      const last = merged[merged.length - 1];
-      if (last && last.label === point.label) {
-        last.endDate = point.date;
-        last.liveSampleCount += point.liveSampleCount;
-        last.simulatedSampleCount += point.simulatedSampleCount;
-        last.scorecard = point.scorecard;
-        last.proxyStates = point.proxyStates;
-      } else {
-        merged.push({
-          granularity: MarketPeriodGranularity.REGIME,
-          periodKey: this.buildPeriodKey(
-            MarketPeriodGranularity.REGIME,
-            point.date,
-            point.date,
-            merged.length,
-          ),
-          startDate: point.date,
-          endDate: point.date,
-          label: point.label,
-          liveSampleCount: point.liveSampleCount,
-          simulatedSampleCount: point.simulatedSampleCount,
-          sourcePeriodCount: 1,
-          scorecard: point.scorecard,
-          proxyStates: point.proxyStates,
-        });
-      }
-    }
-
-    for (const [index, period] of merged.entries()) {
-      period.periodKey = this.buildPeriodKey(
-        MarketPeriodGranularity.REGIME,
+    const allPeriods = this.periodAssembler.assemblePeriodViews(points);
+    const leaderSnapshotContext =
+      await this.buildLeaderSnapshotContextForPeriods(allPeriods);
+    const periodPayloads = allPeriods.map((period) => {
+      const leaderData = this.leaderSnapshotService.buildFromContext(
         period.startDate,
         period.endDate,
-        index,
+        leaderSnapshotContext,
       );
-    }
+      const markdown = this.renderPeriodMarkdown({
+        ...period,
+        leaderSummary: leaderData.summary,
+      });
 
-    const derivedPeriods = [
-      ...this.buildAggregatedPeriodViews(merged, MarketPeriodGranularity.MONTH),
-      ...this.buildAggregatedPeriodViews(merged, MarketPeriodGranularity.YEAR),
-    ];
+      const periodCreateData: RegimePeriodCreateData = {
+        granularity: period.granularity,
+        periodKey: period.periodKey,
+        startDate: period.startDate,
+        endDate: period.endDate,
+        label: period.label,
+        liveSampleCount: period.liveSampleCount,
+        simulatedSampleCount: period.simulatedSampleCount,
+        sourcePeriodCount: period.sourcePeriodCount,
+        scorecard: this.toInputJson(period.scorecard),
+        proxyStates: this.toInputJson(period.proxyStates),
+        leaderSummary: this.toInputJson(leaderData.summary),
+        markdown,
+      };
 
-    const allPeriods = [...merged, ...derivedPeriods];
+      return {
+        periodKey: period.periodKey,
+        granularity: period.granularity,
+        periodCreateData,
+        snapshots: leaderData.snapshots,
+      };
+    });
 
-    const createdPeriods = await this.runWithConcurrency(
-      allPeriods,
-      2,
-      async (period) => this.persistPeriodView(period),
-    );
+    await this.prisma.$transaction(async (tx) => {
+      if (periodPayloads.length > 0) {
+        await this.createManyInChunks(periodPayloads, (chunk) =>
+          tx.marketRegimePeriod.createMany({
+            data: chunk.map((item) => item.periodCreateData),
+          }),
+        );
+      }
 
-    return createdPeriods.length;
+      const persistedPeriods = await tx.marketRegimePeriod.findMany({
+        where: {
+          OR: periodPayloads.map((item) => ({
+            granularity: item.granularity,
+            periodKey: item.periodKey,
+          })),
+        },
+        select: {
+          id: true,
+          granularity: true,
+          periodKey: true,
+        },
+      });
+
+      const periodIdByCompositeKey = new Map<string, string>();
+      for (const period of persistedPeriods) {
+        periodIdByCompositeKey.set(
+          `${period.granularity}:${period.periodKey}`,
+          period.id,
+        );
+      }
+
+      const snapshotRows: Prisma.MarketLeaderPeriodSnapshotCreateManyInput[] = [];
+      for (const payload of periodPayloads) {
+        if (payload.snapshots.length === 0) {
+          continue;
+        }
+
+        const periodId = periodIdByCompositeKey.get(
+          `${payload.granularity}:${payload.periodKey}`,
+        );
+        if (!periodId) {
+          this.logger.warn(
+            `Skipped leader snapshot persistence for missing period key ${payload.granularity}:${payload.periodKey}`,
+          );
+          continue;
+        }
+
+        snapshotRows.push(
+          ...payload.snapshots.map((snapshot) => ({
+            marketRegimePeriodId: periodId,
+            ...snapshot,
+          })),
+        );
+      }
+
+      if (snapshotRows.length > 0) {
+        await this.createManyInChunks(snapshotRows, (chunk) =>
+          tx.marketLeaderPeriodSnapshot.createMany({ data: chunk }),
+        );
+      }
+    });
+
+    return periodPayloads.length;
   }
 
   async listPeriods(
@@ -734,51 +675,6 @@ export class MarketRegimeService {
     return ['# Market Regime Report', '', ...sections].join('\n');
   }
 
-  private async persistPeriodView(period: ComputedPeriodView) {
-    const periodCreateData: RegimePeriodCreateData = {
-      granularity: period.granularity,
-      periodKey: period.periodKey,
-      startDate: period.startDate,
-      endDate: period.endDate,
-      label: period.label,
-      liveSampleCount: period.liveSampleCount,
-      simulatedSampleCount: period.simulatedSampleCount,
-      sourcePeriodCount: period.sourcePeriodCount,
-      scorecard: this.toInputJson(period.scorecard),
-      proxyStates: this.toInputJson(period.proxyStates),
-      leaderSummary: this.toInputJson([]),
-    };
-
-    const leaderData = await this.buildLeaderSnapshots(period.startDate, period.endDate);
-    const markdown = this.renderPeriodMarkdown({
-      ...period,
-      leaderSummary: leaderData.summary,
-    });
-
-    await this.prisma.$transaction(async (tx) => {
-      const created = await tx.marketRegimePeriod.create({
-        data: periodCreateData,
-      });
-
-      if (leaderData.snapshots.length > 0) {
-        await tx.marketLeaderPeriodSnapshot.createMany({
-          data: leaderData.snapshots.map((snapshot) => ({
-            marketRegimePeriodId: created.id,
-            ...snapshot,
-          })),
-        });
-      }
-
-      await tx.marketRegimePeriod.update({
-        where: { id: created.id },
-        data: {
-          leaderSummary: this.toInputJson(leaderData.summary),
-          markdown,
-        },
-      });
-    });
-  }
-
   private classifyProxyTrend(input: {
     close: number;
     sma50: number;
@@ -858,351 +754,44 @@ export class MarketRegimeService {
     return null;
   }
 
-  private buildFamilyMetricsFromRows(
-    rows: SetupOutcomeMetricRow[],
-    windowStart: Date,
-    windowEnd: Date,
-  ) {
-    const outcomes = rows.filter(
-      (row) =>
-        row.effectiveDate.getTime() >= this.asDateOnly(windowStart).getTime() &&
-        row.effectiveDate.getTime() <= this.asDateOnly(windowEnd).getTime(),
+  private async buildLeaderSnapshotContextForPeriods(
+    periods: ComputedPeriodView[],
+  ): Promise<LeaderSnapshotContext> {
+    if (periods.length === 0) {
+      return this.createEmptyLeaderSnapshotContext();
+    }
+
+    const sorted = [...periods].sort(
+      (a, b) => a.startDate.getTime() - b.startDate.getTime(),
     );
-    const families: SetupFamily[] = [
-      SetupFamily.REVERSAL,
-      SetupFamily.TREND_LONG,
-      SetupFamily.TREND_SHORT,
-    ];
-    const totalLiveCount = outcomes.filter(
-      (item) => item.source === SetupOutcomeSource.LIVE,
-    ).length;
-
-    const metrics = Object.fromEntries(
-      families.map((family) => {
-        const live = outcomes.filter(
-          (outcome) => outcome.family === family && outcome.source === SetupOutcomeSource.LIVE,
-        );
-        const simulated = outcomes.filter(
-          (outcome) => outcome.family === family && outcome.source === SetupOutcomeSource.SIMULATED,
-        );
-        const preferred =
-          live.length >= FAMILY_SAMPLE_THRESHOLD && totalLiveCount >= LIVE_SAMPLE_THRESHOLD
-            ? live
-            : [...live, ...simulated];
-
-        const winCount = preferred.filter((item) => item.isWin === true).length;
-        const avgFinalR =
-          preferred.length > 0
-            ? preferred.reduce((sum, item) => sum + Number(item.finalR ?? 0), 0) / preferred.length
-            : 0;
-        const source: FamilyMetric['source'] =
-          preferred.length === 0
-            ? 'NONE'
-            : live.length >= FAMILY_SAMPLE_THRESHOLD &&
-                totalLiveCount >= LIVE_SAMPLE_THRESHOLD
-              ? 'LIVE'
-              : live.length > 0
-                ? 'MIXED'
-                : 'SIMULATED';
-
-        return [
-          family,
-          {
-            count: preferred.length,
-            winRate: preferred.length > 0 ? (winCount / preferred.length) * 100 : 0,
-            avgFinalR,
-            source,
-            liveCount: live.length,
-            simulatedCount: simulated.length,
-          },
-        ];
-      }),
-    ) as Record<
-      SetupFamily,
-      FamilyMetric & { liveCount: number; simulatedCount: number }
-    >;
-
-    return metrics;
+    const startDate = sorted[0].startDate;
+    const endDate = sorted[sorted.length - 1].endDate;
+    return this.buildLeaderSnapshotContextForRange(startDate, endDate);
   }
 
-  private buildRollingFamilyMetricsByDate(
-    orderedDateKeys: string[],
-    rows: SetupOutcomeMetricRow[],
-  ): Map<
-    string,
-    Record<SetupFamily, FamilyMetric & { liveCount: number; simulatedCount: number }>
-  > {
-    const metricsByDate = new Map<
-      string,
-      Record<SetupFamily, FamilyMetric & { liveCount: number; simulatedCount: number }>
-    >();
-    if (orderedDateKeys.length === 0) {
-      return metricsByDate;
-    }
-
-    const sortedRows = [...rows].sort(
-      (a, b) => a.effectiveDate.getTime() - b.effectiveDate.getTime(),
-    );
-    const accumulators = this.createEmptyFamilyAccumulators();
-    const windowRows: SetupOutcomeMetricRow[] = [];
-    let rowIndex = 0;
-
-    for (const dateKey of orderedDateKeys) {
-      const date = this.asDateOnly(new Date(dateKey));
-      const windowStart = new Date(date);
-      windowStart.setDate(windowStart.getDate() - ROLLING_WINDOW_DAYS);
-      const windowStartMs = this.asDateOnly(windowStart).getTime();
-      const windowEndMs = date.getTime();
-
-      while (
-        rowIndex < sortedRows.length &&
-        this.asDateOnly(sortedRows[rowIndex].effectiveDate).getTime() <= windowEndMs
-      ) {
-        const row = sortedRows[rowIndex];
-        windowRows.push(row);
-        this.applyOutcomeAccumulator(accumulators, row, 1);
-        rowIndex++;
-      }
-
-      while (
-        windowRows.length > 0 &&
-        this.asDateOnly(windowRows[0].effectiveDate).getTime() < windowStartMs
-      ) {
-        const row = windowRows.shift();
-        if (!row) break;
-        this.applyOutcomeAccumulator(accumulators, row, -1);
-      }
-
-      metricsByDate.set(dateKey, this.buildFamilyMetricsFromAccumulators(accumulators));
-    }
-
-    return metricsByDate;
-  }
-
-  private createEmptyFamilyAccumulators(): FamilySourceAccumulators {
-    return {
-      [SetupFamily.REVERSAL]: {
-        live: this.createEmptyAccumulator(),
-        simulated: this.createEmptyAccumulator(),
-      },
-      [SetupFamily.TREND_LONG]: {
-        live: this.createEmptyAccumulator(),
-        simulated: this.createEmptyAccumulator(),
-      },
-      [SetupFamily.TREND_SHORT]: {
-        live: this.createEmptyAccumulator(),
-        simulated: this.createEmptyAccumulator(),
-      },
-    };
-  }
-
-  private createEmptyAccumulator(): FamilyOutcomeAccumulator {
-    return {
-      count: 0,
-      wins: 0,
-      finalRSum: 0,
-    };
-  }
-
-  private applyOutcomeAccumulator(
-    accumulators: FamilySourceAccumulators,
-    row: SetupOutcomeMetricRow,
-    delta: 1 | -1,
-  ): void {
-    const bucket =
-      row.source === SetupOutcomeSource.LIVE
-        ? accumulators[row.family].live
-        : accumulators[row.family].simulated;
-    bucket.count += delta;
-    if (row.isWin === true) {
-      bucket.wins += delta;
-    }
-    bucket.finalRSum += Number(row.finalR ?? 0) * delta;
-  }
-
-  private buildFamilyMetricsFromAccumulators(
-    accumulators: FamilySourceAccumulators,
-  ): Record<SetupFamily, FamilyMetric & { liveCount: number; simulatedCount: number }> {
-    const families: SetupFamily[] = [
-      SetupFamily.REVERSAL,
-      SetupFamily.TREND_LONG,
-      SetupFamily.TREND_SHORT,
-    ];
-    const liveTotal = families.reduce(
-      (sum, family) => sum + accumulators[family].live.count,
-      0,
-    );
-
-    return Object.fromEntries(
-      families.map((family) => {
-        const live = accumulators[family].live;
-        const simulated = accumulators[family].simulated;
-        const preferLiveOnly =
-          live.count >= FAMILY_SAMPLE_THRESHOLD && liveTotal >= LIVE_SAMPLE_THRESHOLD;
-        const count = preferLiveOnly ? live.count : live.count + simulated.count;
-        const wins = preferLiveOnly ? live.wins : live.wins + simulated.wins;
-        const finalRSum = preferLiveOnly
-          ? live.finalRSum
-          : live.finalRSum + simulated.finalRSum;
-        const source: FamilyMetric['source'] =
-          count === 0
-            ? 'NONE'
-            : preferLiveOnly
-              ? 'LIVE'
-              : live.count > 0
-                ? 'MIXED'
-                : 'SIMULATED';
-
-        return [
-          family,
-          {
-            count,
-            winRate: count > 0 ? (wins / count) * 100 : 0,
-            avgFinalR: count > 0 ? finalRSum / count : 0,
-            source,
-            liveCount: live.count,
-            simulatedCount: simulated.count,
-          },
-        ];
-      }),
-    ) as Record<SetupFamily, FamilyMetric & { liveCount: number; simulatedCount: number }>;
-  }
-
-  private buildAggregatedPeriodViews(
-    nativePeriods: ComputedPeriodView[],
-    granularity: AggregatedPeriodGranularity,
-  ): ComputedPeriodView[] {
-    if (nativePeriods.length === 0) return [];
-
-    const first = nativePeriods[0];
-    const last = nativePeriods[nativePeriods.length - 1];
-    const buckets = buildCalendarBuckets(first.startDate, last.endDate, granularity);
-    const aggregated: ComputedPeriodView[] = [];
-
-    for (const bucket of buckets) {
-      const overlaps = nativePeriods
-        .map((period) => ({
-          period,
-          overlap: overlapDays(
-            period.startDate,
-            period.endDate,
-            bucket.startDate,
-            bucket.endDate,
-          ),
-        }))
-        .filter((item) => item.overlap > 0);
-
-      if (overlaps.length === 0) {
-        continue;
-      }
-
-      const totalOverlap = overlaps.reduce((sum, item) => sum + item.overlap, 0);
-      const latestPeriod = overlaps
-        .map((item) => item.period)
-        .sort((a, b) => b.endDate.getTime() - a.endDate.getTime())[0];
-
-      const families: SetupFamily[] = [
-        SetupFamily.REVERSAL,
-        SetupFamily.TREND_LONG,
-        SetupFamily.TREND_SHORT,
-      ];
-      const weightedScorecard = Object.fromEntries(
-        families.map((family) => {
-          let count = 0;
-          let weightedWinRate = 0;
-          let weightedFinalR = 0;
-          let liveCount = 0;
-          let simulatedCount = 0;
-
-          for (const item of overlaps) {
-            const metric = (item.period.scorecard as Record<
-              SetupFamily,
-              {
-                count: number;
-                winRate: number;
-                avgFinalR: number;
-                source: string;
-                liveCount?: number;
-                simulatedCount?: number;
-              }
-            >)[family];
-            const ratio =
-              item.overlap /
-              Math.max(periodSpanDays(item.period.startDate, item.period.endDate), 1);
-            count += Math.round(metric.count * ratio);
-            liveCount += Math.round((metric.liveCount ?? 0) * ratio);
-            simulatedCount += Math.round((metric.simulatedCount ?? 0) * ratio);
-            weightedWinRate += metric.winRate * item.overlap;
-            weightedFinalR += metric.avgFinalR * item.overlap;
-          }
-
-          return [
-            family,
-            {
-              count,
-              winRate: totalOverlap > 0 ? weightedWinRate / totalOverlap : 0,
-              avgFinalR: totalOverlap > 0 ? weightedFinalR / totalOverlap : 0,
-              source:
-                liveCount > 0 && simulatedCount > 0
-                  ? 'MIXED'
-                  : liveCount > 0
-                    ? 'LIVE'
-                    : simulatedCount > 0
-                      ? 'SIMULATED'
-                      : 'NONE',
-              liveCount,
-              simulatedCount,
-            },
-          ];
-        }),
-      );
-
-      aggregated.push({
-        granularity: granularity as MarketPeriodGranularity,
-        periodKey: bucket.key,
-        startDate: bucket.startDate,
-        endDate: bucket.endDate,
-        label: pickDominantRegimeLabel(overlaps.map((item) => item.period.label)),
-        liveSampleCount: overlaps.reduce((sum, item) => {
-          const ratio =
-            item.overlap /
-            Math.max(periodSpanDays(item.period.startDate, item.period.endDate), 1);
-          return sum + Math.round(item.period.liveSampleCount * ratio);
-        }, 0),
-        simulatedSampleCount: overlaps.reduce((sum, item) => {
-          const ratio =
-            item.overlap /
-            Math.max(periodSpanDays(item.period.startDate, item.period.endDate), 1);
-          return sum + Math.round(item.period.simulatedSampleCount * ratio);
-        }, 0),
-        sourcePeriodCount: overlaps.length,
-        scorecard: weightedScorecard,
-        proxyStates: latestPeriod.proxyStates,
-      });
-    }
-
-    return aggregated;
-  }
-
-  private async buildLeaderSnapshots(
+  private async buildLeaderSnapshotContextForRange(
     startDate: Date,
     endDate: Date,
-  ): Promise<LeaderSnapshotBuildResult> {
-    const activeStockRows = await this.prisma.stockDaily.findMany({
+  ): Promise<LeaderSnapshotContext> {
+    const bars = await this.prisma.stockDaily.findMany({
       where: {
         date: {
           gte: startDate,
           lte: endDate,
         },
       },
-      select: { stockId: true },
-      distinct: ['stockId'],
+      orderBy: [{ stockId: 'asc' }, { date: 'asc' }],
+      select: {
+        stockId: true,
+        date: true,
+        close: true,
+      },
     });
-    const activeStockIds = activeStockRows.map((row) => row.stockId);
-    if (activeStockIds.length === 0) {
-      return { summary: [], snapshots: [] };
+    if (bars.length === 0) {
+      return this.createEmptyLeaderSnapshotContext();
     }
 
+    const activeStockIds = [...new Set(bars.map((row) => row.stockId))];
     const runs = await this.prisma.leaderRun.findMany({
       where: {
         isQualified: true,
@@ -1219,31 +808,36 @@ export class MarketRegimeService {
         },
       },
       orderBy: [{ peakGainPct: 'desc' }, { stage2EndDate: 'desc' }],
-      take: 40,
     });
-
-    const stockIds = [...new Set(runs.map((run) => run.stockId))];
-    if (stockIds.length === 0) {
-      return { summary: [], snapshots: [] };
+    if (runs.length === 0) {
+      return this.createEmptyLeaderSnapshotContext();
     }
-    const [stages, setups, timingSignals, bars] = await Promise.all([
+
+    const runStockIds = [...new Set(runs.map((run) => run.stockId))];
+    const runStockIdSet = new Set(runStockIds);
+    const [stages, setups, timingSignals] = await Promise.all([
       this.prisma.stockStage.findMany({
         where: {
-          stockId: { in: stockIds },
+          stockId: { in: runStockIds },
           date: { lte: endDate },
         },
         orderBy: [{ stockId: 'asc' }, { date: 'desc' }],
+        select: {
+          stockId: true,
+          date: true,
+          stage: true,
+        },
       }),
       this.prisma.setup.findMany({
         where: {
-          stockId: { in: stockIds },
+          stockId: { in: runStockIds },
           timeframe: 'DAILY',
           detectedAt: {
             gte: startDate,
             lte: endDate,
           },
         },
-        orderBy: [{ detectedAt: 'desc' }],
+        orderBy: [{ stockId: 'asc' }, { detectedAt: 'desc' }],
         select: {
           stockId: true,
           type: true,
@@ -1254,13 +848,13 @@ export class MarketRegimeService {
       }),
       this.prisma.intradayTimingSignal.findMany({
         where: {
-          stockId: { in: stockIds },
+          stockId: { in: runStockIds },
           signalAt: {
             gte: startDate,
             lte: endDate,
           },
         },
-        orderBy: [{ signalAt: 'desc' }],
+        orderBy: [{ stockId: 'asc' }, { signalAt: 'desc' }],
         select: {
           stockId: true,
           type: true,
@@ -1272,140 +866,35 @@ export class MarketRegimeService {
           stopPrice: true,
         },
       }),
-      this.prisma.stockDaily.findMany({
-        where: {
-          stockId: { in: stockIds },
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-        orderBy: [{ stockId: 'asc' }, { date: 'asc' }],
-        select: {
-          stockId: true,
-          close: true,
-        },
-      }),
     ]);
-    const stagesByStock = this.groupBy(stages, (item) => item.stockId);
-    const setupsByStock = this.groupBy(setups, (item) => item.stockId);
-    const timingByStock = this.groupBy(timingSignals, (item) => item.stockId);
-    const barsByStock = this.groupBy(bars, (item) => item.stockId);
 
-    const summaries = runs.map((run) => {
-        const stockStages = stagesByStock.get(run.stockId) ?? [];
-        const stageAtStart =
-          stockStages.find((row) => row.date.getTime() <= startDate.getTime()) ?? null;
-        const stageAtEnd =
-          stockStages.find((row) => row.date.getTime() <= endDate.getTime()) ?? null;
-        const stockSetups = (setupsByStock.get(run.stockId) ?? [])
-          .slice(0, 8)
-          .map((setup) => ({
-            type: setup.type,
-            state: setup.state,
-            direction: setup.direction,
-            detectedAt: setup.detectedAt.toISOString(),
-          }));
-        const stockSignals = (timingByStock.get(run.stockId) ?? [])
-          .slice(0, 10)
-          .map((signal) => ({
-            type: signal.type,
-            direction: signal.direction,
-            signalAt: signal.signalAt.toISOString(),
-            levelType: signal.levelType,
-            referenceLevel: Number(signal.referenceLevel),
-            triggerPrice: signal.triggerPrice != null ? Number(signal.triggerPrice) : null,
-            stopPrice: signal.stopPrice != null ? Number(signal.stopPrice) : null,
-          }));
-        const stockBars = barsByStock.get(run.stockId) ?? [];
-
-        const periodStartClose = stockBars[0] ? Number(stockBars[0].close) : null;
-        const periodEndClose = stockBars[stockBars.length - 1]
-          ? Number(stockBars[stockBars.length - 1].close)
-          : null;
-        const periodReturnPct =
-          periodStartClose != null && periodEndClose != null && periodStartClose > 0
-            ? ((periodEndClose - periodStartClose) / periodStartClose) * 100
-            : null;
-        const shortingEnabled =
-          run.isQualified &&
-          (stageAtEnd?.stage === StageEnum.STAGE_3 ||
-            stageAtEnd?.stage === StageEnum.STAGE_4);
-        const primarySetup = stockSetups[0] ?? null;
-        const activity = deriveLeaderPeriodActivity({
-          stageAtPeriodEnd: stageAtEnd?.stage ?? null,
-          primarySetupType: primarySetup?.type ?? null,
-          shortingEnabled,
-          periodReturnPct,
-          setupCount: stockSetups.length,
-        });
-
-        const summary: LeaderPeriodSummary = {
-          ticker: run.stock.ticker,
-          name: run.stock.name,
-          stage2StartDate: run.stage2StartDate,
-          stage2EndDate: run.stage2EndDate,
-          peakGainPct: Number(run.peakGainPct),
-          entryPrice: Number(run.entryPrice),
-          peakPrice: Number(run.peakPrice),
-          stageAtPeriodStart: stageAtStart?.stage ?? null,
-          stageAtPeriodEnd: stageAtEnd?.stage ?? null,
-          activity: activity.activity,
-          activityNote: activity.note,
-          identifiedSetupLabel: this.formatIdentifiedSetupLabel(primarySetup),
-          activeSetups: stockSetups,
-          primarySetup,
-          timingSignals: stockSignals,
-          periodStartClose,
-          periodEndClose,
-          periodReturnPct,
-          shortingEnabled,
-        };
-
-        const sortScore =
-          (shortingEnabled ? 50 : 0) +
-          (stockSetups.length > 0 ? 20 : 0) +
-          (stockSignals.length > 0 ? 8 : 0) +
-          (stageAtEnd?.stage === StageEnum.STAGE_2 ? 12 : 0) +
-          (periodReturnPct ?? 0) / 5 +
-          Number(run.peakGainPct) / 20;
-
-        return {
-          runId: run.id,
-          stockId: run.stockId,
-          summary,
-          sortScore,
-        };
-      });
-
-    const top = summaries
-      .sort((a, b) => b.sortScore - a.sortScore)
-      .slice(0, 10);
+    const barsByStock = this.groupBy(
+      bars
+        .filter((bar) => runStockIdSet.has(bar.stockId))
+        .map((bar) => ({
+          stockId: bar.stockId,
+          date: bar.date,
+          close: Number(bar.close),
+        })),
+      (item) => item.stockId,
+    );
 
     return {
-      summary: top.map((item) => item.summary),
-      snapshots: top.map((item) => ({
-        leaderRunId: item.runId,
-        stockId: item.stockId,
-        periodStartDate: startDate,
-        periodEndDate: endDate,
-        stageAtPeriodStart: item.summary.stageAtPeriodStart,
-        stageAtPeriodEnd: item.summary.stageAtPeriodEnd,
-        activity: item.summary.activity,
-        activityNote: item.summary.activityNote,
-        identifiedSetupLabel: item.summary.identifiedSetupLabel,
-        primarySetupType: item.summary.primarySetup?.type ?? null,
-        primarySetupDirection: item.summary.primarySetup?.direction ?? null,
-        primarySetupState: item.summary.primarySetup?.state ?? null,
-        setupCount: item.summary.activeSetups.length,
-        activeSetups: this.toInputJson(item.summary.activeSetups),
-        timingSignalCount: item.summary.timingSignals.length,
-        timingSignals: this.toInputJson(item.summary.timingSignals),
-        startClose: item.summary.periodStartClose,
-        endClose: item.summary.periodEndClose,
-        periodReturnPct: item.summary.periodReturnPct,
-        shortingEnabled: item.summary.shortingEnabled,
-      })),
+      runs,
+      stagesByStock: this.groupBy(stages, (item) => item.stockId),
+      setupsByStock: this.groupBy(setups, (item) => item.stockId),
+      timingByStock: this.groupBy(timingSignals, (item) => item.stockId),
+      barsByStock,
+    };
+  }
+
+  private createEmptyLeaderSnapshotContext(): LeaderSnapshotContext {
+    return {
+      runs: [],
+      stagesByStock: new Map(),
+      setupsByStock: new Map(),
+      timingByStock: new Map(),
+      barsByStock: new Map(),
     };
   }
 
@@ -1451,37 +940,6 @@ export class MarketRegimeService {
       '```',
       '',
     ].join('\n');
-  }
-
-  private buildPeriodKey(
-    granularity: MarketPeriodGranularity,
-    startDate: Date,
-    endDate: Date,
-    ordinal = 0,
-  ): string {
-    if (granularity === MarketPeriodGranularity.MONTH) {
-      return `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}`;
-    }
-
-    if (granularity === MarketPeriodGranularity.YEAR) {
-      return `${startDate.getUTCFullYear()}`;
-    }
-
-    return `${startDate.toISOString().slice(0, 10)}_${endDate.toISOString().slice(0, 10)}_${ordinal}`;
-  }
-
-  private formatIdentifiedSetupLabel(setup: SetupSummary | null): string | null {
-    if (!setup) {
-      return null;
-    }
-
-    const setupLabel = setup.type
-      .split('_')
-      .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
-      .join(' ');
-    const stateLabel = setup.state.charAt(0) + setup.state.slice(1).toLowerCase();
-
-    return `${setupLabel} ${stateLabel} / ${setup.direction}`;
   }
 
   private asDateOnly(value: Date): Date {

@@ -18,6 +18,9 @@ export interface LabelEntry {
   human_label: 'yes' | 'no' | 'wrong_type' | 'unsure'
   correct_type: string | null
   reviewed_at: string
+  review_outcome?: 'valid' | 'false_positive' | 'unclear'
+  reason_tags?: string[]
+  notes?: string | null
 }
 
 export interface LabelStats {
@@ -27,14 +30,23 @@ export interface LabelStats {
   byType: Record<string, { total: number; yes: number; no: number; wrong_type: number; unsure: number }>
 }
 
+export interface LabelTickerSummary {
+  ticker: string
+}
+
 export interface TelegramSendNextResponse {
   sent: boolean
   reason?: string
   chart_id?: string
 }
 
-export function fetchManifest(version: string): Promise<ManifestEntry[]> {
-  return api.get<ManifestEntry[]>(`/labels/manifest/${version}`)
+export function fetchManifest(version: string, ticker?: string): Promise<ManifestEntry[]> {
+  const query = ticker ? `?ticker=${encodeURIComponent(ticker)}` : ''
+  return api.get<ManifestEntry[]>(`/labels/manifest/${version}${query}`)
+}
+
+export function fetchLabelTickers(version: string): Promise<LabelTickerSummary[]> {
+  return api.get<LabelTickerSummary[]>(`/labels/tickers/${version}`)
 }
 
 export function fetchLabels(version: string): Promise<LabelEntry[]> {
@@ -45,8 +57,9 @@ export function saveLabel(version: string, label: LabelEntry): Promise<{ saved: 
   return api.post<{ saved: boolean; total: number }>(`/labels/labels/${version}`, label)
 }
 
-export function fetchLabelStats(version: string): Promise<LabelStats> {
-  return api.get<LabelStats>(`/labels/stats/${version}`)
+export function fetchLabelStats(version: string, ticker?: string): Promise<LabelStats> {
+  const query = ticker ? `?ticker=${encodeURIComponent(ticker)}` : ''
+  return api.get<LabelStats>(`/labels/stats/${version}${query}`)
 }
 
 export function getChartImageUrl(version: string, chartPath: string): string {

@@ -1,0 +1,22 @@
+{
+  "version": "python_v1",
+  "description": "Baseline config for the extracted Python setup detector package",
+  "created_at": "2026-04-17",
+  "parameters": {
+    "review_years": 5,
+    "fetch_period": "5y",
+    "bars_before_alert": 60,
+    "bars_after_alert": 20,
+    "min_window_bars": 80,
+    "export_image_scale": 2,
+    "sig_left": 3,
+    "sig_right": 3,
+    "sig_prom_atr": 1.5,
+    "sig_depart_atr": 2.5,
+    "sig_depart_look": 10,
+    "sig_min_sep": 7,
+    "ema20_dist_atr": 1.0,
+    "ema20_depart_win": 30,
+    "ema20_target_rr": 3.0
+  }
+}

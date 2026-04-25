@@ -50,9 +50,12 @@ export interface DailyDetectorContext {
     state: string;
     direction: Direction;
     timeframe: Timeframe;
+    detectedAt?: Date;
+    lastStateAt?: Date;
     pivotPrice?: number;
     stopPrice?: number;
     targetPrice?: number;
+    metadata?: Record<string, unknown>;
   }>;
   keyLevels?: Array<{
     type: KeyLevelType;

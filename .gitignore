@@ -5,5 +5,15 @@ backend/node_modules/
 frontend/node_modules/
 backend/dist/
 frontend/dist/
+review-studio/dist/
 coverage/
 *.tsbuildinfo
+*.log
+*.out.log
+*.err.log
+*.stackdump
+*.pid
+__pycache__/
+*.pyc
+review-studio/vite.config.js
+review-studio/vite.config.d.ts

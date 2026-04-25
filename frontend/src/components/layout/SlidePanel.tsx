@@ -1,5 +1,5 @@
-import { useEffect, useRef, useMemo, useState } from 'react'
-import { X, TrendingUp, AlertCircle, Clock, BarChart2, Filter } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { TrendingUp, AlertCircle, Clock, BarChart2, Filter } from 'lucide-react'
 import { useSlidePanelStore } from '@/stores/useSlidePanelStore'
 import { useStockDetailStore } from '@/stores/useStockDetailStore'
 import { useSetupStore } from '@/stores/useSetupStore'
@@ -8,6 +8,16 @@ import type { ApiBarEvidence, ApiSetup, ApiStageHistory, SetupType } from '@/typ
 import { StageTag, SetupTypeBadge, DirectionBadge, LoadingSkeleton, SkeletonGroup } from '@/components/shared'
 import { StockChart } from '@/components/StockChart'
 import { cn, formatPrice, formatCompactNumber, formatPercent } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 export function SlidePanel() {
   const open = useSlidePanelStore((s) => s.open)
@@ -24,9 +34,6 @@ export function SlidePanel() {
   const fetchStockDetail = useStockDetailStore((s) => s.fetchStockDetail)
   const clear = useStockDetailStore((s) => s.clear)
 
-  const panelRef = useRef<HTMLDivElement>(null)
-
-  // Fetch stock detail when ticker changes
   useEffect(() => {
     if (ticker) {
       fetchStockDetail(ticker)
@@ -34,38 +41,14 @@ export function SlidePanel() {
     return () => clear()
   }, [ticker, fetchStockDetail, clear])
 
-  // Close on Escape
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && open) closePanel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, closePanel])
-
-  // Close on click outside
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (open && panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        closePanel()
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [open, closePanel])
-
-  // Get setups for this ticker (client-side filter from global setup store)
   const getSetupsForTicker = useSetupStore((s) => s.getSetupsForTicker)
   const rawTickerSetups = useMemo(() => (ticker ? getSetupsForTicker(ticker) : []), [ticker, getSetupsForTicker])
 
-  // Setup type filter state
   const [hiddenSetupTypes, setHiddenSetupTypes] = useState<Set<SetupType>>(new Set())
 
-  // Deduplicate setups: group by type+pivotPrice, pick best one per group
   const deduplicatedSetups = useMemo(() => {
     if (rawTickerSetups.length === 0 || dailyBars.length === 0) return []
 
-    // Group setups by type and pivotPrice (within 0.1% tolerance)
     const groups = new Map<string, ApiSetup[]>()
     for (const setup of rawTickerSetups) {
       if (setup.pivotPrice == null) continue
@@ -74,15 +57,13 @@ export function SlidePanel() {
       groups.get(key)!.push(setup)
     }
 
-    // For each group, pick the best setup
     const result: ApiSetup[] = []
-    for (const [_, group] of groups) {
+    for (const group of groups.values()) {
       if (group.length === 1) {
         result.push(group[0])
         continue
       }
 
-      // Find bars for each setup's detectedAt date
       const setupsWithBars = group
         .map((setup) => {
           const detectedDate = setup.detectedAt.slice(0, 10)
@@ -92,21 +73,17 @@ export function SlidePanel() {
         .filter((item) => item.bar != null)
 
       if (setupsWithBars.length === 0) {
-        // Fallback: pick first setup if no bars found
         result.push(group[0])
         continue
       }
 
-      // Pick best setup based on direction
       const firstSetup = setupsWithBars[0].setup
       if (firstSetup.direction === 'SHORT') {
-        // SHORT: pick setup with lowest bar.low
         const best = setupsWithBars.reduce((best, current) =>
           current.bar!.low < best.bar!.low ? current : best,
         )
         result.push(best.setup)
       } else {
-        // LONG: pick setup with highest bar.high (or first if tied)
         const best = setupsWithBars.reduce((best, current) =>
           current.bar!.high > best.bar!.high ? current : best,
         )
@@ -117,12 +94,10 @@ export function SlidePanel() {
     return result
   }, [rawTickerSetups, dailyBars])
 
-  // Apply type filter
   const filteredSetups = useMemo(() => {
     return deduplicatedSetups.filter((setup) => !hiddenSetupTypes.has(setup.type))
   }, [deduplicatedSetups, hiddenSetupTypes])
 
-  // Get unique setup types for filter UI
   const availableSetupTypes = useMemo(() => {
     const types = new Set<SetupType>()
     for (const setup of deduplicatedSetups) {
@@ -151,206 +126,176 @@ export function SlidePanel() {
     price != null && prevClose != null ? ((price - prevClose) / prevClose) * 100 : null
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className={cn(
-          'fixed inset-0 z-40 bg-black/40 transition-opacity',
-          open ? 'opacity-100' : 'pointer-events-none opacity-0',
-        )}
-        style={{ transitionDuration: '200ms' }}
-        aria-hidden="true"
-      />
-
-      {/* Panel */}
-      <div
-        ref={panelRef}
-        className={cn(
-          'fixed right-0 top-0 z-50 flex h-screen w-full flex-col border-l border-border-default bg-bg-surface shadow-2xl transition-transform sm:w-[480px] lg:w-[560px]',
-          open ? 'translate-x-0' : 'translate-x-full',
-        )}
-        style={{ transitionDuration: '300ms' }}
-        role="dialog"
-        aria-modal="true"
-        aria-label={ticker ? `Stock detail: ${ticker}` : 'Stock detail panel'}
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) closePanel()
+      }}
+    >
+      <SheetContent
+        side="right"
+        className="w-full max-w-none border-border bg-card p-0 sm:max-w-[480px] lg:max-w-[560px]"
       >
-        {/* Header */}
-        <div className="flex h-12 items-center justify-between border-b border-border-default px-4 sm:h-14 sm:px-6">
-          <div className="flex items-center gap-2 sm:gap-3">
-            {ticker ? (
-              <>
-                <span className="font-heading text-base font-bold text-text-primary sm:text-lg">
-                  {ticker}
-                </span>
-                {stock?.name ? (
-                  <span className="text-xs text-text-secondary sm:text-sm">{stock.name}</span>
-                ) : null}
-                {latestStage ? <StageTag stage={latestStage.stage} /> : null}
-              </>
-            ) : null}
+        <SheetHeader className="gap-2 border-b border-border px-4 py-3 sm:px-6 sm:py-4">
+          <div className="pr-10">
+            <SheetTitle className="flex flex-wrap items-center gap-2 text-base sm:text-lg">
+              {ticker ?? 'Stock Detail'}
+              {latestStage ? <StageTag stage={latestStage.stage} /> : null}
+            </SheetTitle>
+            <SheetDescription className="mt-1 text-xs sm:text-sm">
+              {stock?.name ?? (ticker ? `Detail view for ${ticker}` : 'Select a stock to view details')}
+            </SheetDescription>
           </div>
-          <button
-            onClick={closePanel}
-            className="cursor-pointer rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary focus-ring"
-            aria-label="Close panel"
-          >
-            <X className="h-4 w-4 sm:h-5 sm:w-5" />
-          </button>
-        </div>
+        </SheetHeader>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          {!ticker ? (
-            <div className="flex h-full items-center justify-center text-xs text-text-muted sm:text-sm">
-              Select a stock to view details
-            </div>
-          ) : loading ? (
-            <div className="space-y-4">
-              <LoadingSkeleton className="h-64 rounded-lg" />
-              <SkeletonGroup count={4}>
-                <LoadingSkeleton className="h-20 rounded-lg" />
-              </SkeletonGroup>
-            </div>
-          ) : error ? (
-            <div className="rounded-xl border border-bearish/30 bg-bearish/5 p-4 text-sm text-bearish">
-              Failed to load: {error}
-            </div>
-          ) : (
-            <div className="space-y-4 sm:space-y-6">
-              {/* Price header */}
-              {price != null ? (
-                <div className="flex items-baseline gap-3">
-                  <span className="font-mono text-2xl font-bold text-text-primary sm:text-3xl">
-                    ${formatPrice(price)}
-                  </span>
-                  {changePercent != null ? (
-                    <span
-                      className={cn(
-                        'font-mono text-sm font-semibold sm:text-base',
-                        changePercent >= 0 ? 'text-bullish' : 'text-bearish',
-                      )}
-                    >
-                      {formatPercent(changePercent)}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+            {!ticker ? (
+              <div className="flex h-full items-center justify-center text-xs text-text-muted sm:text-sm">
+                Select a stock to view details
+              </div>
+            ) : loading ? (
+              <div className="space-y-4">
+                <LoadingSkeleton className="h-64 rounded-lg" />
+                <SkeletonGroup count={4}>
+                  <LoadingSkeleton className="h-20 rounded-lg" />
+                </SkeletonGroup>
+              </div>
+            ) : error ? (
+              <Card className="border-bearish/30 bg-bearish/5 text-bearish">
+                <CardContent className="p-4 text-sm">Failed to load: {error}</CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4 sm:space-y-6">
+                {price != null ? (
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-mono text-2xl font-bold text-text-primary sm:text-3xl">
+                      ${formatPrice(price)}
                     </span>
-                  ) : null}
-                </div>
-              ) : null}
+                    {changePercent != null ? (
+                      <span
+                        className={cn(
+                          'font-mono text-sm font-semibold sm:text-base',
+                          changePercent >= 0 ? 'text-bullish' : 'text-bearish',
+                        )}
+                      >
+                        {formatPercent(changePercent)}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
 
-              {/* Setup type filter */}
-              {availableSetupTypes.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Filter className="h-3.5 w-3.5 text-text-muted" />
-                  {availableSetupTypes.map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => toggleSetupType(type)}
-                      className={cn(
-                        'cursor-pointer rounded-full border border-border-default px-2 py-0.5 text-[10px] font-medium transition-opacity sm:text-xs',
-                        hiddenSetupTypes.has(type)
-                          ? 'opacity-40 line-through'
-                          : 'bg-bg-elevated text-text-primary',
-                      )}
-                    >
-                      {type.replace(/_/g, ' ')}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Chart */}
-              <StockChart
-                dailyBars={dailyBars}
-                spyBars={spyBars}
-                setups={filteredSetups}
-                height={300}
-              />
-
-              {/* Active Setups */}
-              {filteredSetups.length > 0 ? (
-                <Section title="Active Setups" icon={<TrendingUp className="h-3.5 w-3.5" />}>
-                  <div className="space-y-2">
-                    {filteredSetups.map((setup) => (
-                      <SetupCard key={setup.id} setup={setup} />
+                {availableSetupTypes.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Filter className="h-3.5 w-3.5 text-text-muted" />
+                    {availableSetupTypes.map((type) => (
+                      <Button
+                        key={type}
+                        variant={hiddenSetupTypes.has(type) ? 'ghost' : 'secondary'}
+                        size="sm"
+                        onClick={() => toggleSetupType(type)}
+                        className={cn(
+                          'h-7 rounded-full px-2 text-[10px] sm:text-xs',
+                          hiddenSetupTypes.has(type) && 'opacity-50 line-through',
+                        )}
+                      >
+                        {type.replace(/_/g, ' ')}
+                      </Button>
                     ))}
                   </div>
-                </Section>
-              ) : null}
+                ) : null}
 
-              {/* Evidence Timeline */}
-              {evidence.length > 0 ? (
-                <Section title="Confirmation / Violation" icon={<AlertCircle className="h-3.5 w-3.5" />}>
-                  <div className="space-y-1.5">
-                    {evidence.slice(0, 15).map((ev) => (
-                      <EvidenceRow key={ev.id} evidence={ev} />
-                    ))}
-                  </div>
-                </Section>
-              ) : null}
+                <StockChart
+                  dailyBars={dailyBars}
+                  spyBars={spyBars}
+                  setups={filteredSetups}
+                  height={300}
+                  priority
+                />
 
-              {/* Stage History */}
-              {stageHistory.length > 0 ? (
-                <Section title="Stage History" icon={<Clock className="h-3.5 w-3.5" />}>
-                  <div className="space-y-1.5">
-                    {stageHistory.slice(0, 10).map((sh) => (
-                      <StageHistoryRow key={sh.id} entry={sh} />
-                    ))}
-                  </div>
-                </Section>
-              ) : null}
+                {filteredSetups.length > 0 ? (
+                  <Section title="Active Setups" icon={<TrendingUp className="h-3.5 w-3.5" />}>
+                    <div className="space-y-2">
+                      {filteredSetups.map((setup) => (
+                        <SetupCard key={setup.id} setup={setup} />
+                      ))}
+                    </div>
+                  </Section>
+                ) : null}
 
-              {/* Key Levels */}
-              {(filteredSetups.length > 0 || latestBar) ? (
-                <Section title="Key Levels" icon={<BarChart2 className="h-3.5 w-3.5" />}>
-                  <KeyLevels setups={filteredSetups} latestBar={latestBar} />
-                </Section>
-              ) : null}
+                {evidence.length > 0 ? (
+                  <Section
+                    title="Confirmation / Violation"
+                    icon={<AlertCircle className="h-3.5 w-3.5" />}
+                  >
+                    <div className="space-y-1.5">
+                      {evidence.slice(0, 15).map((ev) => (
+                        <EvidenceRow key={ev.id} evidence={ev} />
+                      ))}
+                    </div>
+                  </Section>
+                ) : null}
 
-              {/* Fundamentals */}
-              {stock ? (
-                <Section title="Fundamentals" icon={<BarChart2 className="h-3.5 w-3.5" />}>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <FundamentalItem label="Sector" value={stock.sector ?? '-'} />
-                    <FundamentalItem label="Industry" value={stock.industry ?? '-'} />
-                    <FundamentalItem label="Exchange" value={stock.exchange ?? '-'} />
-                    <FundamentalItem
-                      label="Market Cap"
-                      value={stock.marketCap != null ? formatCompactNumber(stock.marketCap) : '-'}
-                    />
-                    <FundamentalItem
-                      label="Avg Volume"
-                      value={stock.avgVolume != null ? formatCompactNumber(stock.avgVolume) : '-'}
-                    />
-                    <FundamentalItem
-                      label="RS Rank"
-                      value={latestBar?.rsRank != null ? String(latestBar.rsRank) : '-'}
-                    />
-                  </div>
-                </Section>
-              ) : null}
-            </div>
-          )}
-        </div>
+                {stageHistory.length > 0 ? (
+                  <Section title="Stage History" icon={<Clock className="h-3.5 w-3.5" />}>
+                    <div className="space-y-1.5">
+                      {stageHistory.slice(0, 10).map((sh) => (
+                        <StageHistoryRow key={sh.id} entry={sh} />
+                      ))}
+                    </div>
+                  </Section>
+                ) : null}
 
-        {/* Action bar */}
-        {ticker ? (
-          <div className="flex items-center gap-2 border-t border-border-default bg-bg-surface px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
-            <button className="flex-1 cursor-pointer rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover focus-ring sm:text-sm">
-              Add to Watchlist
-            </button>
-            <button className="flex-1 cursor-pointer rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-medium text-text-primary transition-colors hover:bg-bg-hover focus-ring sm:text-sm">
-              Configure Alerts
-            </button>
-            <button className="flex-1 cursor-pointer rounded-lg border border-bullish bg-bullish/10 px-3 py-2 text-xs font-medium text-bullish transition-colors hover:bg-bullish/20 focus-ring sm:text-sm">
-              Trade Idea
-            </button>
+                {filteredSetups.length > 0 || latestBar ? (
+                  <Section title="Key Levels" icon={<BarChart2 className="h-3.5 w-3.5" />}>
+                    <KeyLevels setups={filteredSetups} latestBar={latestBar} />
+                  </Section>
+                ) : null}
+
+                {stock ? (
+                  <Section title="Fundamentals" icon={<BarChart2 className="h-3.5 w-3.5" />}>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <FundamentalItem label="Sector" value={stock.sector ?? '-'} />
+                      <FundamentalItem label="Industry" value={stock.industry ?? '-'} />
+                      <FundamentalItem label="Exchange" value={stock.exchange ?? '-'} />
+                      <FundamentalItem
+                        label="Market Cap"
+                        value={stock.marketCap != null ? formatCompactNumber(stock.marketCap) : '-'}
+                      />
+                      <FundamentalItem
+                        label="Avg Volume"
+                        value={stock.avgVolume != null ? formatCompactNumber(stock.avgVolume) : '-'}
+                      />
+                      <FundamentalItem
+                        label="RS Rank"
+                        value={latestBar?.rsRank != null ? String(latestBar.rsRank) : '-'}
+                      />
+                    </div>
+                  </Section>
+                ) : null}
+              </div>
+            )}
           </div>
-        ) : null}
-      </div>
-    </>
+
+          {ticker ? (
+            <div className="flex items-center gap-2 border-t border-border px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
+              <Button className="flex-1">Add to Watchlist</Button>
+              <Button variant="outline" className="flex-1">
+                Configure Alerts
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 border-bullish/30 bg-bullish/10 text-bullish hover:bg-bullish/20 hover:text-bullish"
+              >
+                Trade Idea
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
-
-// ---- Sub-components ----
 
 function Section({
   title,
@@ -374,29 +319,35 @@ function Section({
 
 function SetupCard({ setup }: { setup: ApiSetup }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border-muted bg-bg-elevated p-2.5 sm:p-3">
-      <div className="flex items-center gap-2">
-        <SetupTypeBadge type={setup.type} />
-        <DirectionBadge direction={setup.direction} />
-        <span className="rounded bg-bg-hover px-1.5 py-0.5 text-[10px] font-medium text-text-muted sm:text-xs">
-          {setup.state}
-        </span>
-      </div>
-      <div className="flex items-center gap-3 text-right">
-        {setup.pivotPrice != null ? (
-          <div>
-            <div className="text-[10px] text-text-muted">Pivot</div>
-            <div className="font-mono text-xs text-text-primary">${formatPrice(setup.pivotPrice)}</div>
-          </div>
-        ) : null}
-        {setup.riskReward != null ? (
-          <div>
-            <div className="text-[10px] text-text-muted">R:R</div>
-            <div className="font-mono text-xs text-accent">{Number(setup.riskReward).toFixed(1)}</div>
-          </div>
-        ) : null}
-      </div>
-    </div>
+    <Card className="border-border-muted bg-secondary/60">
+      <CardContent className="flex items-center justify-between p-2.5 sm:p-3">
+        <div className="flex items-center gap-2">
+          <SetupTypeBadge type={setup.type} />
+          <DirectionBadge direction={setup.direction} />
+          <Badge variant="secondary" className="text-[10px] text-text-muted sm:text-xs">
+            {setup.state}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3 text-right">
+          {setup.pivotPrice != null ? (
+            <div>
+              <div className="text-[10px] text-text-muted">Pivot</div>
+              <div className="font-mono text-xs text-text-primary">
+                ${formatPrice(setup.pivotPrice)}
+              </div>
+            </div>
+          ) : null}
+          {setup.riskReward != null ? (
+            <div>
+              <div className="text-[10px] text-text-muted">R:R</div>
+              <div className="font-mono text-xs text-accent">
+                {Number(setup.riskReward).toFixed(1)}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -404,30 +355,34 @@ function EvidenceRow({ evidence }: { evidence: ApiBarEvidence }) {
   const date = evidence.barDate.slice(0, 10)
 
   return (
-    <div className="flex items-center justify-between rounded-lg bg-bg-elevated/50 px-3 py-1.5 sm:px-4 sm:py-2">
-      <div className="flex items-center gap-2">
-        <div
-          className={cn(
-            'h-1.5 w-1.5 rounded-full',
-            evidence.isViolation ? 'bg-bearish' : evidence.bias === 'BULLISH' ? 'bg-bullish' : 'bg-bearish',
-          )}
-        />
-        <span className="text-[10px] font-medium text-text-primary sm:text-xs">
-          {evidence.pattern.replace(/_/g, ' ')}
-        </span>
-        {evidence.isViolation ? (
-          <span className="rounded bg-bearish/15 px-1 py-0.5 text-[9px] font-medium text-bearish">
-            VIOLATION
+    <Card className="border-transparent bg-secondary/40 shadow-none">
+      <CardContent className="flex items-center justify-between px-3 py-1.5 sm:px-4 sm:py-2">
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'h-1.5 w-1.5 rounded-full',
+              evidence.isViolation
+                ? 'bg-bearish'
+                : evidence.bias === 'BULLISH'
+                  ? 'bg-bullish'
+                  : 'bg-bearish',
+            )}
+          />
+          <span className="text-[10px] font-medium text-text-primary sm:text-xs">
+            {evidence.pattern.replace(/_/g, ' ')}
           </span>
-        ) : null}
-      </div>
-      <div className="flex items-center gap-2 text-right">
-        <span className="font-mono text-[10px] text-text-muted sm:text-xs">{date}</span>
-        <span className="font-mono text-[10px] text-text-secondary sm:text-xs">
-          ${formatPrice(evidence.keyLevelPrice)}
-        </span>
-      </div>
-    </div>
+          {evidence.isViolation ? (
+            <Badge className="px-1 py-0.5 text-[9px] font-medium text-bearish">VIOLATION</Badge>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2 text-right">
+          <span className="font-mono text-[10px] text-text-muted sm:text-xs">{date}</span>
+          <span className="font-mono text-[10px] text-text-secondary sm:text-xs">
+            ${formatPrice(evidence.keyLevelPrice)}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -436,13 +391,17 @@ function StageHistoryRow({ entry }: { entry: ApiStageHistory }) {
   const num = parseStageToNumber(entry.stage)
 
   return (
-    <div className="flex items-center justify-between rounded-lg bg-bg-elevated/50 px-3 py-1.5 sm:px-4 sm:py-2">
-      <div className="flex items-center gap-2">
-        <StageTag stage={num} />
-        <span className="rounded bg-bg-hover px-1.5 py-0.5 text-[10px] text-text-muted">{entry.category}</span>
-      </div>
-      <span className="font-mono text-[10px] text-text-muted sm:text-xs">{date}</span>
-    </div>
+    <Card className="border-transparent bg-secondary/40 shadow-none">
+      <CardContent className="flex items-center justify-between px-3 py-1.5 sm:px-4 sm:py-2">
+        <div className="flex items-center gap-2">
+          <StageTag stage={num} />
+          <Badge variant="secondary" className="text-[10px] text-text-muted">
+            {entry.category}
+          </Badge>
+        </div>
+        <span className="font-mono text-[10px] text-text-muted sm:text-xs">{date}</span>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -456,9 +415,15 @@ function KeyLevels({
   const levels: { label: string; price: number; color: string }[] = []
 
   for (const setup of setups) {
-    if (setup.pivotPrice != null) levels.push({ label: `Pivot (${setup.type})`, price: setup.pivotPrice, color: 'text-accent' })
-    if (setup.stopPrice != null) levels.push({ label: 'Stop', price: setup.stopPrice, color: 'text-bearish' })
-    if (setup.targetPrice != null) levels.push({ label: 'Target', price: setup.targetPrice, color: 'text-bullish' })
+    if (setup.pivotPrice != null) {
+      levels.push({ label: `Pivot (${setup.type})`, price: setup.pivotPrice, color: 'text-accent' })
+    }
+    if (setup.stopPrice != null) {
+      levels.push({ label: 'Stop', price: setup.stopPrice, color: 'text-bearish' })
+    }
+    if (setup.targetPrice != null) {
+      levels.push({ label: 'Target', price: setup.targetPrice, color: 'text-bullish' })
+    }
   }
 
   if (latestBar) {
@@ -471,12 +436,14 @@ function KeyLevels({
   return (
     <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
       {levels.map((lvl, i) => (
-        <div key={`${lvl.label}-${i}`} className="rounded-lg bg-bg-elevated p-2">
-          <div className="text-[10px] text-text-muted">{lvl.label}</div>
-          <div className={cn('font-mono text-xs font-semibold', lvl.color)}>
-            ${formatPrice(lvl.price)}
-          </div>
-        </div>
+        <Card key={`${lvl.label}-${i}`} className="border-transparent bg-secondary/60 shadow-none">
+          <CardContent className="p-2">
+            <div className="text-[10px] text-text-muted">{lvl.label}</div>
+            <div className={cn('font-mono text-xs font-semibold', lvl.color)}>
+              ${formatPrice(lvl.price)}
+            </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   )
@@ -484,9 +451,11 @@ function KeyLevels({
 
 function FundamentalItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-bg-elevated p-2">
-      <div className="text-[10px] text-text-muted">{label}</div>
-      <div className="text-xs font-medium text-text-primary sm:text-sm">{value}</div>
-    </div>
+    <Card className="border-transparent bg-secondary/60 shadow-none">
+      <CardContent className="p-2">
+        <div className="text-[10px] text-text-muted">{label}</div>
+        <div className="text-xs font-medium text-text-primary sm:text-sm">{value}</div>
+      </CardContent>
+    </Card>
   )
 }

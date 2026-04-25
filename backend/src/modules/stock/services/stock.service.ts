@@ -107,7 +107,11 @@ export class StockService {
       distinct: ['stockId'],
     });
 
-    if (stage2Entries.length === 0) return [];
+    if (stage2Entries.length === 0) {
+      const page = params.page ?? 1;
+      const limit = params.limit ?? 25;
+      return { items: [], total: 0, page, limit };
+    }
 
     // Batch: fetch all daily bars for all candidate stocks in one query
     const stockIds = stage2Entries.map((e) => e.stockId);
