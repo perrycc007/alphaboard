@@ -27,7 +27,8 @@ from setup_detector.review_storage import (
     load_feedback_map,
     load_job_record,
     load_notes_map,
-    load_run_manifest,
+    load_run_chart_map,
+    load_run_manifest_for_ticker,
     save_feedback,
     save_job_record,
     save_logic_snapshot,
@@ -72,7 +73,7 @@ def collect_false_positive_examples(setup_type: str, run_id: str | None = None) 
             continue
 
         if feedback_run_id not in manifest_cache:
-            manifest_cache[feedback_run_id] = {item["chart_id"]: item for item in load_run_manifest(feedback_run_id)}
+            manifest_cache[feedback_run_id] = load_run_chart_map(feedback_run_id)
 
         manifest_item = manifest_cache[feedback_run_id].get(chart_id, {})
         chart_path = str(manifest_item.get("chart_path") or "").replace("\\", "/")
@@ -94,17 +95,6 @@ def collect_false_positive_examples(setup_type: str, run_id: str | None = None) 
     examples.sort(key=lambda item: str(item.get("reviewed_at") or ""))
     return examples
 
-
-def infer_item_feedback(run_id: str, item: dict[str, object]) -> dict[str, object] | None:
-    key = f"{run_id}::{item['chart_id']}"
-    return load_feedback_map().get(key)
-
-
-def infer_item_note(run_id: str, item: dict[str, object]) -> dict[str, object] | None:
-    key = f"{run_id}::{item['chart_id']}"
-    return load_notes_map().get(key)
-
-
 def filter_manifest_items(
     run_id: str,
     ticker: str | None,
@@ -112,16 +102,16 @@ def filter_manifest_items(
     reviewed: str | None,
     outcome: str | None,
 ) -> list[dict[str, object]]:
-    items = load_run_manifest(run_id)
+    items = load_run_manifest_for_ticker(run_id, ticker)
     filtered: list[dict[str, object]] = []
-    ticker_query = ticker.upper() if ticker else None
     setup_query = setup_type.upper() if setup_type else None
+    feedback_map = load_feedback_map()
+    notes_map = load_notes_map()
 
     for item in items:
-        feedback = infer_item_feedback(run_id, item)
-        note = infer_item_note(run_id, item)
-        if ticker_query and ticker_query not in str(item.get("ticker", "")).upper():
-            continue
+        item_key = f"{run_id}::{item['chart_id']}"
+        feedback = feedback_map.get(item_key)
+        note = notes_map.get(item_key)
         if setup_query and str(item.get("setup_type", "")).upper() != setup_query:
             continue
         is_reviewed = feedback is not None
@@ -348,8 +338,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             if not run_id or not chart_id or outcome not in {"valid", "false_positive"}:
                 self._send(400, {"error": "invalid_feedback"})
                 return
-            manifest = {item["chart_id"]: item for item in load_run_manifest(run_id)}
-            item = manifest.get(chart_id)
+            item = load_run_chart_map(run_id).get(chart_id)
             if not item:
                 self._send(404, {"error": "chart_not_found"})
                 return
@@ -383,8 +372,7 @@ class ReviewHandler(BaseHTTPRequestHandler):
             if not run_id or not chart_id:
                 self._send(400, {"error": "invalid_note"})
                 return
-            manifest = {item["chart_id"]: item for item in load_run_manifest(run_id)}
-            item = manifest.get(chart_id)
+            item = load_run_chart_map(run_id).get(chart_id)
             if not item:
                 self._send(404, {"error": "chart_not_found"})
                 return

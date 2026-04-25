@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,8 @@ FEEDBACK_PATH = STATE_ROOT / "feedback.json"
 NOTES_PATH = STATE_ROOT / "notes.json"
 LOGIC_PATH = STATE_ROOT / "logic_snapshots.json"
 JOB_ROOT = STATE_ROOT / "jobs"
+RUN_INDEX_CACHE: dict[str, dict[str, object]] = {}
+RUN_INDEX_LOCK = threading.Lock()
 
 
 def ensure_state_dirs() -> None:
@@ -87,12 +90,78 @@ def _infer_rule_version(manifest: object) -> str:
     return "unknown"
 
 
-def load_run_manifest(run_id: str) -> list[dict[str, object]]:
+def _manifest_signature(path: Path) -> tuple[int, int] | None:
+    if not path.exists():
+        return None
+    stat = path.stat()
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def load_run_index(run_id: str) -> dict[str, object]:
     manifest_path = ARTIFACTS_ROOT / run_id / "manifest.json"
+    signature = _manifest_signature(manifest_path)
+    if signature is None:
+        return {"manifest": [], "by_ticker": {}, "by_chart_id": {}, "signature": None}
+
+    with RUN_INDEX_LOCK:
+        cached = RUN_INDEX_CACHE.get(run_id)
+        if cached and cached.get("signature") == signature:
+            return cached
+
     manifest = _read_json(manifest_path, [])
     if not isinstance(manifest, list):
-        return []
-    return [normalize_chart_entry(entry, run_id) for entry in manifest if isinstance(entry, dict)]
+        normalized: list[dict[str, object]] = []
+    else:
+        normalized = [normalize_chart_entry(entry, run_id) for entry in manifest if isinstance(entry, dict)]
+
+    by_ticker: dict[str, list[dict[str, object]]] = {}
+    by_chart_id: dict[str, dict[str, object]] = {}
+    for item in normalized:
+        ticker = str(item.get("ticker") or "").upper()
+        chart_id = str(item.get("chart_id") or "")
+        by_ticker.setdefault(ticker, []).append(item)
+        if chart_id:
+            by_chart_id[chart_id] = item
+
+    indexed = {
+        "manifest": normalized,
+        "by_ticker": by_ticker,
+        "by_chart_id": by_chart_id,
+        "signature": signature,
+    }
+    with RUN_INDEX_LOCK:
+        RUN_INDEX_CACHE[run_id] = indexed
+    return indexed
+
+
+def load_run_manifest(run_id: str) -> list[dict[str, object]]:
+    return list(load_run_index(run_id)["manifest"])
+
+
+def load_run_manifest_for_ticker(run_id: str, ticker: str | None) -> list[dict[str, object]]:
+    index = load_run_index(run_id)
+    manifest = index["manifest"]
+    if not ticker:
+        return list(manifest)
+
+    ticker_query = ticker.strip().upper()
+    if not ticker_query:
+        return list(manifest)
+
+    by_ticker = index["by_ticker"]
+    exact_match = by_ticker.get(ticker_query)
+    if exact_match is not None:
+        return list(exact_match)
+
+    filtered: list[dict[str, object]] = []
+    for candidate_ticker, items in by_ticker.items():
+        if ticker_query in candidate_ticker:
+            filtered.extend(items)
+    return filtered
+
+
+def load_run_chart_map(run_id: str) -> dict[str, dict[str, object]]:
+    return dict(load_run_index(run_id)["by_chart_id"])
 
 
 def load_feedback_map() -> dict[str, dict[str, object]]:
