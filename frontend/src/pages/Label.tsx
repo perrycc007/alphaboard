@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Loader2, ChevronLeft, ChevronRight, BarChart3, Tag } from 'lucide-react'
 import {
+  fetchLabelTickers,
   fetchManifest,
   fetchLabels,
   saveLabel,
-  fetchLabelStats,
   getChartImageUrl,
   sendNextToTelegram,
   type ManifestEntry,
   type LabelEntry,
   type LabelStats,
+  type LabelTickerSummary,
 } from '@/lib/api/labels'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -49,11 +50,41 @@ const ALL_SETUP_TYPES = [
 
 type HumanLabel = LabelEntry['human_label']
 
+function buildStats(manifest: ManifestEntry[], labels: Map<string, LabelEntry>): LabelStats | null {
+  if (manifest.length === 0) return null
+
+  const byType: LabelStats['byType'] = {}
+  let labeled = 0
+
+  for (const item of manifest) {
+    if (!byType[item.setup_type]) {
+      byType[item.setup_type] = { total: 0, yes: 0, no: 0, wrong_type: 0, unsure: 0 }
+    }
+
+    byType[item.setup_type].total += 1
+
+    const label = labels.get(item.chart_id)
+    if (label) {
+      labeled += 1
+      byType[item.setup_type][label.human_label] += 1
+    }
+  }
+
+  return {
+    total: manifest.length,
+    labeled,
+    unlabeled: manifest.length - labeled,
+    byType,
+  }
+}
+
 export default function LabelPage() {
+  const [tickers, setTickers] = useState<LabelTickerSummary[]>([])
+  const [selectedTicker, setSelectedTicker] = useState<string>()
   const [manifest, setManifest] = useState<ManifestEntry[]>([])
   const [labels, setLabels] = useState<Map<string, LabelEntry>>(new Map())
-  const [stats, setStats] = useState<LabelStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [manifestLoading, setManifestLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [currentIdx, setCurrentIdx] = useState(0)
   const [filterType, setFilterType] = useState<string>('all')
@@ -62,79 +93,147 @@ export default function LabelPage() {
   const [telegramStatus, setTelegramStatus] = useState<string | null>(null)
   const [chartLoadFailed, setChartLoadFailed] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
+  const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     async function load() {
       try {
-        const [m, l, s] = await Promise.all([
-          fetchManifest(RULE_VERSION),
-          fetchLabels(RULE_VERSION),
-          fetchLabelStats(RULE_VERSION),
-        ])
-        setManifest(m)
-        setLabels(new Map(l.map((lb) => [lb.chart_id, lb])))
-        setStats(s)
+        const tickerItems = await fetchLabelTickers(RULE_VERSION)
+        setTickers(tickerItems)
       } catch {
-        /* manifest may not exist yet */
+        setTickers([])
       } finally {
         setLoading(false)
       }
     }
+
     load()
   }, [])
+
+  useEffect(() => {
+    if (!selectedTicker) {
+      setManifest([])
+      setCurrentIdx(0)
+      preloadedImageUrlsRef.current.clear()
+      return
+    }
+
+    let cancelled = false
+    setManifestLoading(true)
+    setManifest([])
+    setCurrentIdx(0)
+    setChartLoadFailed(false)
+    preloadedImageUrlsRef.current.clear()
+
+    async function loadTickerManifest() {
+      try {
+        const [items, labelItems] = await Promise.all([
+          fetchManifest(RULE_VERSION, selectedTicker),
+          fetchLabels(RULE_VERSION),
+        ])
+        if (!cancelled) {
+          setManifest(items)
+          setLabels(new Map(labelItems.map((label) => [label.chart_id, label])))
+        }
+      } catch {
+        if (!cancelled) {
+          setManifest([])
+          setLabels(new Map())
+        }
+      } finally {
+        if (!cancelled) {
+          setManifestLoading(false)
+        }
+      }
+    }
+
+    void loadTickerManifest()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedTicker])
 
   const queue = useMemo(() => {
     let items = manifest
     if (filterType !== 'all') {
-      items = items.filter((m) => m.setup_type === filterType)
+      items = items.filter((item) => item.setup_type === filterType)
     }
-    const unlabeled = items.filter((m) => !labels.has(m.chart_id))
-    const labeled = items.filter((m) => labels.has(m.chart_id))
+    const unlabeled = items.filter((item) => !labels.has(item.chart_id))
+    const labeled = items.filter((item) => labels.has(item.chart_id))
     return [...unlabeled, ...labeled]
   }, [manifest, labels, filterType])
 
+  useEffect(() => {
+    setCurrentIdx((prev) => {
+      if (queue.length === 0) return 0
+      return Math.min(prev, queue.length - 1)
+    })
+  }, [queue.length])
+
+  const stats = useMemo(() => buildStats(manifest, labels), [manifest, labels])
   const current = queue[currentIdx] ?? null
+  const next = queue[currentIdx + 1] ?? null
   const currentLabel = current ? labels.get(current.chart_id) : undefined
-  const labeledCount = labels.size
-  const totalCount = manifest.length
+  const currentImageUrl = current ? getChartImageUrl(RULE_VERSION, current.chart_path) : null
+  const nextImageUrl = next ? getChartImageUrl(RULE_VERSION, next.chart_path) : null
 
   useEffect(() => {
     setChartLoadFailed(false)
   }, [current?.chart_id])
 
+  useEffect(() => {
+    if (!nextImageUrl || preloadedImageUrlsRef.current.has(nextImageUrl)) return
+
+    const preloadImage = new Image()
+    preloadImage.decoding = 'async'
+    preloadImage.src = nextImageUrl
+    preloadImage.onload = () => {
+      preloadedImageUrlsRef.current.add(nextImageUrl)
+    }
+
+    return () => {
+      preloadImage.onload = null
+    }
+  }, [nextImageUrl])
+
   const handleLabel = useCallback(
     async (humanLabel: HumanLabel, correctType: string | null = null) => {
       if (!current || saving) return
+
       setSaving(true)
       setShowWrongTypeMenu(false)
+
       const entry: LabelEntry = {
         chart_id: current.chart_id,
         human_label: humanLabel,
         correct_type: correctType,
         reviewed_at: new Date().toISOString(),
       }
+
       try {
         await saveLabel(RULE_VERSION, entry)
         setLabels((prev) => {
-          const next = new Map(prev)
-          next.set(current.chart_id, entry)
-          return next
+          const nextLabels = new Map(prev)
+          nextLabels.set(current.chart_id, entry)
+          return nextLabels
         })
         if (currentIdx < queue.length - 1) {
-          setCurrentIdx((i) => i + 1)
+          setCurrentIdx((index) => index + 1)
         }
       } finally {
         setSaving(false)
       }
     },
-    [current, saving, currentIdx, queue.length],
+    [current, currentIdx, queue.length, saving],
   )
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      if (showWrongTypeMenu) return
-      switch (e.key.toLowerCase()) {
+    function onKey(event: KeyboardEvent) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+      if (showWrongTypeMenu || !selectedTicker) return
+
+      switch (event.key.toLowerCase()) {
         case 'y':
           handleLabel('yes')
           break
@@ -148,16 +247,17 @@ export default function LabelPage() {
           handleLabel('unsure')
           break
         case 'arrowleft':
-          setCurrentIdx((i) => Math.max(0, i - 1))
+          setCurrentIdx((index) => Math.max(0, index - 1))
           break
         case 'arrowright':
-          setCurrentIdx((i) => Math.min(queue.length - 1, i + 1))
+          setCurrentIdx((index) => Math.min(queue.length - 1, index + 1))
           break
       }
     }
+
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleLabel, showWrongTypeMenu, queue.length])
+  }, [handleLabel, queue.length, selectedTicker, showWrongTypeMenu])
 
   if (loading) {
     return (
@@ -167,7 +267,7 @@ export default function LabelPage() {
     )
   }
 
-  if (manifest.length === 0) {
+  if (tickers.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 sm:gap-4">
         <Tag className="h-8 w-8 text-text-muted sm:h-10 sm:w-10" />
@@ -180,39 +280,64 @@ export default function LabelPage() {
 
   return (
     <div className="flex h-full flex-col gap-3 p-3 sm:gap-4 sm:p-4 lg:gap-5 lg:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
         <div>
           <h1 className="text-xl font-bold text-text-primary sm:text-2xl lg:text-3xl">
             Setup Labeling
           </h1>
           <p className="text-xs text-text-muted sm:text-sm">
-            {labeledCount} / {totalCount} labeled
-            {queue.length !== totalCount && ` (${queue.length} in filter)`}
+            {selectedTicker && stats
+              ? `${selectedTicker}: ${stats.labeled} / ${stats.total} labeled`
+              : 'Pick a ticker first so only that queue loads.'}
           </p>
         </div>
-        <Select
-          value={filterType}
-          onValueChange={(value) => {
-            setFilterType(value)
-            setCurrentIdx(0)
-          }}
-        >
-          <SelectTrigger className="h-8 w-[200px] text-xs sm:h-9 sm:text-sm lg:h-10">
-            <SelectValue placeholder="All Types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {ALL_SETUP_TYPES.map((t) => (
-              <SelectItem key={t} value={t}>
-                {t.replace(/_/g, ' ')}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+
+        <div className="flex flex-wrap gap-2 sm:gap-3">
+          <Select
+            value={selectedTicker}
+            onValueChange={(ticker) => {
+              setSelectedTicker(ticker)
+              setFilterType('all')
+              setCurrentIdx(0)
+            }}
+          >
+            <SelectTrigger className="h-8 w-[220px] text-xs sm:h-9 sm:w-[260px] sm:text-sm lg:h-10">
+              <SelectValue placeholder="Choose ticker" />
+            </SelectTrigger>
+            <SelectContent>
+              {tickers.map((ticker) => (
+                <SelectItem key={ticker.ticker} value={ticker.ticker}>
+                  {ticker.ticker}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filterType}
+            onValueChange={(value) => {
+              setFilterType(value)
+              setCurrentIdx(0)
+            }}
+            disabled={!selectedTicker || manifestLoading}
+          >
+            <SelectTrigger className="h-8 w-[200px] text-xs sm:h-9 sm:text-sm lg:h-10">
+              <SelectValue placeholder="All Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {ALL_SETUP_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type.replace(/_/g, ' ')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Progress
-        value={totalCount > 0 ? (labeledCount / totalCount) * 100 : 0}
+        value={stats && stats.total > 0 ? (stats.labeled / stats.total) * 100 : 0}
         className="h-1.5 sm:h-2"
       />
 
@@ -222,7 +347,7 @@ export default function LabelPage() {
           <span className="text-xs text-text-secondary sm:text-sm">Telegram quick label:</span>
           <Input
             value={telegramChatId}
-            onChange={(e) => setTelegramChatId(e.target.value)}
+            onChange={(event) => setTelegramChatId(event.target.value)}
             placeholder="chat id"
             className="h-8 w-36 text-xs sm:h-9 sm:w-44 sm:text-sm"
           />
@@ -231,13 +356,14 @@ export default function LabelPage() {
             className="h-8 border-accent/40 bg-accent/10 text-xs font-semibold text-accent hover:bg-accent/20 hover:text-accent sm:h-9 sm:text-sm"
             onClick={async () => {
               if (!telegramChatId.trim()) return
+
               setTelegramStatus('sending...')
               try {
-                const res = await sendNextToTelegram(telegramChatId.trim(), RULE_VERSION)
+                const response = await sendNextToTelegram(telegramChatId.trim(), RULE_VERSION)
                 setTelegramStatus(
-                  res.sent
-                    ? `sent ${res.chart_id ?? 'next chart'}`
-                    : `not sent (${res.reason ?? 'unknown'})`,
+                  response.sent
+                    ? `sent ${response.chart_id ?? 'next chart'}`
+                    : `not sent (${response.reason ?? 'unknown'})`,
                 )
               } catch {
                 setTelegramStatus('failed to send')
@@ -252,7 +378,35 @@ export default function LabelPage() {
         </CardContent>
       </Card>
 
-      {current ? (
+      {!selectedTicker ? (
+        <Card className="flex flex-1 items-center justify-center border-border-muted bg-bg-surface/70">
+          <CardContent className="flex max-w-xl flex-col items-center gap-3 p-8 text-center sm:gap-4">
+            <Tag className="h-8 w-8 text-text-muted sm:h-10 sm:w-10" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-text-primary sm:text-base">
+                Choose a ticker to load its labeling queue.
+              </p>
+              <p className="text-xs text-text-muted sm:text-sm">
+                Only the selected ticker&apos;s charts will be fetched, which keeps the page much
+                lighter than opening the full v1 manifest.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : manifestLoading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="flex items-center gap-2 text-sm text-text-muted">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading {selectedTicker} queue...
+          </div>
+        </div>
+      ) : manifest.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-text-muted sm:text-base">
+            No charts found for {selectedTicker}.
+          </p>
+        </div>
+      ) : current ? (
         <div className="flex flex-1 flex-col gap-3 sm:gap-4">
           <Card className="relative flex-1 overflow-hidden">
             <div className="absolute left-3 top-3 z-10 flex items-center gap-2 sm:left-4 sm:top-4">
@@ -309,7 +463,7 @@ export default function LabelPage() {
             ) : (
               <img
                 ref={imgRef}
-                src={getChartImageUrl(RULE_VERSION, current.chart_path)}
+                src={currentImageUrl ?? undefined}
                 alt={`${current.ticker} ${current.setup_type} ${current.alert_date}`}
                 className="h-full w-full object-contain"
                 onError={() => setChartLoadFailed(true)}
@@ -321,7 +475,7 @@ export default function LabelPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setCurrentIdx((i) => Math.max(0, i - 1))}
+              onClick={() => setCurrentIdx((index) => Math.max(0, index - 1))}
               disabled={currentIdx === 0}
               className="h-9 w-9 text-text-secondary hover:bg-secondary sm:h-10 sm:w-10 lg:h-11 lg:w-11"
             >
@@ -349,7 +503,7 @@ export default function LabelPage() {
             <div className="relative">
               <Button
                 variant="outline"
-                onClick={() => setShowWrongTypeMenu((v) => !v)}
+                onClick={() => setShowWrongTypeMenu((open) => !open)}
                 disabled={saving}
                 className="h-9 gap-1.5 border-amber-500/30 bg-amber-500/10 px-4 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 sm:h-10 sm:px-5 sm:text-sm lg:h-11 lg:px-6"
               >
@@ -358,14 +512,14 @@ export default function LabelPage() {
               </Button>
               {showWrongTypeMenu ? (
                 <Card className="absolute bottom-full left-0 z-20 mb-1 w-56 p-1 shadow-lg sm:w-64">
-                  {ALL_SETUP_TYPES.filter((t) => t !== current.setup_type).map((t) => (
+                  {ALL_SETUP_TYPES.filter((type) => type !== current.setup_type).map((type) => (
                     <Button
-                      key={t}
+                      key={type}
                       variant="ghost"
-                      onClick={() => handleLabel('wrong_type', t)}
+                      onClick={() => handleLabel('wrong_type', type)}
                       className="h-auto w-full justify-start rounded px-3 py-1.5 text-left text-xs text-text-secondary hover:bg-secondary hover:text-text-primary sm:text-sm"
                     >
-                      {t.replace(/_/g, ' ')}
+                      {type.replace(/_/g, ' ')}
                     </Button>
                   ))}
                   <Button
@@ -391,7 +545,7 @@ export default function LabelPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setCurrentIdx((i) => Math.min(queue.length - 1, i + 1))}
+              onClick={() => setCurrentIdx((index) => Math.min(queue.length - 1, index + 1))}
               disabled={currentIdx >= queue.length - 1}
               className="h-9 w-9 text-text-secondary hover:bg-secondary sm:h-10 sm:w-10 lg:h-11 lg:w-11"
             >
@@ -405,7 +559,7 @@ export default function LabelPage() {
         </div>
       )}
 
-      {stats ? (
+      {selectedTicker && stats ? (
         <Card>
           <CardContent className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 sm:gap-3 sm:p-4 lg:grid-cols-7">
             {Object.entries(stats.byType).map(([type, counts]) => (
@@ -423,6 +577,7 @@ export default function LabelPage() {
           </CardContent>
         </Card>
       ) : null}
+
     </div>
   )
 }

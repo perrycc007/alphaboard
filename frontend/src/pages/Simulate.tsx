@@ -335,6 +335,7 @@ export default function Simulate() {
                 height={450}
                 showMAs
                 showMarkers
+                priority
               />
             </div>
           )}

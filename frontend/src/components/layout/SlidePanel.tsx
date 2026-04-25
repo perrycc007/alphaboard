@@ -210,6 +210,7 @@ export function SlidePanel() {
                   spyBars={spyBars}
                   setups={filteredSetups}
                   height={300}
+                  priority
                 />
 
                 {filteredSetups.length > 0 ? (

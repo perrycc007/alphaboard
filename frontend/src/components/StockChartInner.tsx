@@ -1,0 +1,251 @@
+import { useCallback, useEffect, useRef } from 'react'
+import {
+  CandlestickSeries,
+  ColorType,
+  createChart,
+  createSeriesMarkers,
+  HistogramSeries,
+  LineSeries,
+  LineStyle,
+  type IChartApi,
+  type ISeriesApi,
+  type Time,
+} from 'lightweight-charts'
+import type { StockChartProps } from './StockChart'
+
+type CandleSeriesApi = ISeriesApi<'Candlestick', Time>
+type LineSeriesApi = ISeriesApi<'Line', Time>
+
+const MA_LINES = [
+  { key: 'ema6' as const, color: '#8b5cf6', width: 1, label: 'EMA 6' },
+  { key: 'ema20' as const, color: '#f59e0b', width: 1, label: 'EMA 20' },
+  { key: 'sma50' as const, color: '#3b82f6', width: 1.5, label: 'SMA 50' },
+  { key: 'sma150' as const, color: '#14b8a6', width: 1, label: 'SMA 150' },
+  { key: 'sma200' as const, color: '#ef4444', width: 1.5, label: 'SMA 200' },
+] as const
+
+function toChartDate(dateStr: string): string {
+  return dateStr.slice(0, 10)
+}
+
+export default function StockChartInner({
+  dailyBars,
+  spyBars,
+  setups,
+  height = 360,
+  showMAs = true,
+  showSpy = false,
+  showMarkers = false,
+}: StockChartProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<IChartApi | null>(null)
+  const candlestickRef = useRef<CandleSeriesApi | null>(null)
+  const maSeriesRef = useRef<Map<string, LineSeriesApi>>(new Map())
+  void spyBars
+  void showSpy
+
+  const sortedBars = [...dailyBars].sort((a, b) => a.date.localeCompare(b.date))
+
+  const initChart = useCallback(() => {
+    if (!containerRef.current || sortedBars.length === 0) return
+
+    if (chartRef.current) {
+      chartRef.current.remove()
+      chartRef.current = null
+      candlestickRef.current = null
+      maSeriesRef.current.clear()
+    }
+
+    const chart = createChart(containerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: '#6b7280',
+        fontFamily: '"DM Sans", sans-serif',
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: 'rgba(255,255,255,0.04)' },
+        horzLines: { color: 'rgba(255,255,255,0.04)' },
+      },
+      crosshair: {
+        vertLine: { color: 'rgba(139,92,246,0.3)', labelBackgroundColor: '#1e1b4b' },
+        horzLine: { color: 'rgba(139,92,246,0.3)', labelBackgroundColor: '#1e1b4b' },
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        scaleMargins: { top: 0.1, bottom: 0.15 },
+      },
+      timeScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        timeVisible: false,
+      },
+      width: containerRef.current.clientWidth,
+      height,
+    })
+
+    chartRef.current = chart
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderUpColor: '#22c55e',
+      borderDownColor: '#ef4444',
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    })
+
+    candleSeries.setData(
+      sortedBars.map((bar) => ({
+        time: toChartDate(bar.date),
+        open: Number(bar.open),
+        high: Number(bar.high),
+        low: Number(bar.low),
+        close: Number(bar.close),
+      })),
+    )
+
+    candlestickRef.current = candleSeries
+
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: 'volume' },
+      priceScaleId: 'volume',
+    })
+
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: { top: 0.85, bottom: 0 },
+    })
+
+    volumeSeries.setData(
+      sortedBars.map((bar) => ({
+        time: toChartDate(bar.date),
+        value: Number(bar.volume),
+        color: Number(bar.close) >= Number(bar.open) ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+      })),
+    )
+
+    if (showMAs) {
+      for (const ma of MA_LINES) {
+        const maData = sortedBars
+          .filter((bar) => bar[ma.key] != null)
+          .map((bar) => ({
+            time: toChartDate(bar.date),
+            value: Number(bar[ma.key]),
+          }))
+
+        if (maData.length > 0) {
+          const lineSeries = chart.addSeries(LineSeries, {
+            color: ma.color,
+            lineWidth: ma.width as 1 | 2 | 3 | 4,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+          })
+          lineSeries.setData(maData)
+          maSeriesRef.current.set(ma.key, lineSeries)
+        }
+      }
+    }
+
+    if (setups && setups.length > 0) {
+      if (showMarkers) {
+        const markers: Array<{
+          time: string
+          position: 'belowBar' | 'aboveBar'
+          color: string
+          shape: 'arrowUp' | 'arrowDown'
+          text: string
+        }> = []
+
+        for (const setup of setups) {
+          const meta = setup.metadata as Record<string, unknown> | undefined
+          if (meta?.entryDate) {
+            markers.push({
+              time: toChartDate(meta.entryDate as string),
+              position: setup.direction === 'LONG' ? 'belowBar' : 'aboveBar',
+              color: '#22c55e',
+              shape: setup.direction === 'LONG' ? 'arrowUp' : 'arrowDown',
+              text: '',
+            })
+          }
+          if (meta?.exitDate) {
+            const finalR = meta.finalR as number | undefined
+            markers.push({
+              time: toChartDate(meta.exitDate as string),
+              position: setup.direction === 'LONG' ? 'aboveBar' : 'belowBar',
+              color: finalR != null && finalR >= 0 ? '#3b82f6' : '#ef4444',
+              shape: setup.direction === 'LONG' ? 'arrowDown' : 'arrowUp',
+              text: '',
+            })
+          }
+        }
+
+        markers.sort((a, b) => a.time.localeCompare(b.time))
+        createSeriesMarkers(candleSeries, markers)
+      } else {
+        for (const setup of setups) {
+          if (setup.pivotPrice != null) {
+            candleSeries.createPriceLine({
+              price: Number(setup.pivotPrice),
+              color: '#8b5cf6',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: `Pivot (${setup.type})`,
+            })
+          }
+          if (setup.stopPrice != null) {
+            candleSeries.createPriceLine({
+              price: Number(setup.stopPrice),
+              color: '#ef4444',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dotted,
+              axisLabelVisible: true,
+              title: 'Stop',
+            })
+          }
+          if (setup.targetPrice != null) {
+            candleSeries.createPriceLine({
+              price: Number(setup.targetPrice),
+              color: '#22c55e',
+              lineWidth: 1,
+              lineStyle: LineStyle.Dotted,
+              axisLabelVisible: true,
+              title: 'Target',
+            })
+          }
+        }
+      }
+    }
+
+    chart.timeScale().fitContent()
+  }, [height, setups, showMAs, showMarkers, sortedBars])
+
+  useEffect(() => {
+    initChart()
+  }, [initChart])
+
+  useEffect(() => {
+    if (!containerRef.current || !chartRef.current) return
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width } = entry.contentRect
+        chartRef.current?.applyOptions({ width })
+      }
+    })
+
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.remove()
+        chartRef.current = null
+      }
+    }
+  }, [])
+
+  return <div ref={containerRef} className="w-full rounded-lg" style={{ height }} />
+}
