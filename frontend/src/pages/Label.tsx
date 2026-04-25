@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Loader2, ChevronLeft, ChevronRight, BarChart3, Tag } from 'lucide-react'
 import {
-  fetchLabelTickers,
   fetchManifest,
   fetchLabels,
   saveLabel,
@@ -10,7 +9,6 @@ import {
   type ManifestEntry,
   type LabelEntry,
   type LabelStats,
-  type LabelTickerSummary,
 } from '@/lib/api/labels'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -18,13 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 const RULE_VERSION = 'v1'
 
@@ -79,11 +71,10 @@ function buildStats(manifest: ManifestEntry[], labels: Map<string, LabelEntry>):
 }
 
 export default function LabelPage() {
-  const [tickers, setTickers] = useState<LabelTickerSummary[]>([])
+  const [tickerInput, setTickerInput] = useState('')
   const [selectedTicker, setSelectedTicker] = useState<string>()
   const [manifest, setManifest] = useState<ManifestEntry[]>([])
   const [labels, setLabels] = useState<Map<string, LabelEntry>>(new Map())
-  const [loading, setLoading] = useState(true)
   const [manifestLoading, setManifestLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -96,23 +87,9 @@ export default function LabelPage() {
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    async function load() {
-      try {
-        const tickerItems = await fetchLabelTickers(RULE_VERSION)
-        setTickers(tickerItems)
-      } catch {
-        setTickers([])
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    load()
-  }, [])
-
-  useEffect(() => {
     if (!selectedTicker) {
       setManifest([])
+      setLabels(new Map())
       setCurrentIdx(0)
       preloadedImageUrlsRef.current.clear()
       return
@@ -259,23 +236,12 @@ export default function LabelPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleLabel, queue.length, selectedTicker, showWrongTypeMenu])
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-text-muted sm:h-8 sm:w-8" />
-      </div>
-    )
-  }
-
-  if (tickers.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 sm:gap-4">
-        <Tag className="h-8 w-8 text-text-muted sm:h-10 sm:w-10" />
-        <p className="text-sm text-text-muted sm:text-base">
-          No chart images found. Run the batch export in <code>setup_detectors.ipynb</code> first.
-        </p>
-      </div>
-    )
+  const submitTicker = () => {
+    const normalizedTicker = tickerInput.trim().toUpperCase()
+    if (!normalizedTicker) return
+    setSelectedTicker(normalizedTicker)
+    setFilterType('all')
+    setCurrentIdx(0)
   }
 
   return (
@@ -293,25 +259,24 @@ export default function LabelPage() {
         </div>
 
         <div className="flex flex-wrap gap-2 sm:gap-3">
-          <Select
-            value={selectedTicker}
-            onValueChange={(ticker) => {
-              setSelectedTicker(ticker)
-              setFilterType('all')
-              setCurrentIdx(0)
+          <Input
+            value={tickerInput}
+            onChange={(event) => setTickerInput(event.target.value.toUpperCase())}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                submitTicker()
+              }
             }}
+            placeholder="Enter ticker"
+            className="h-8 w-[220px] text-xs sm:h-9 sm:w-[260px] sm:text-sm lg:h-10"
+          />
+          <Button
+            onClick={submitTicker}
+            disabled={manifestLoading || !tickerInput.trim()}
+            className="h-8 px-4 text-xs sm:h-9 sm:text-sm lg:h-10"
           >
-            <SelectTrigger className="h-8 w-[220px] text-xs sm:h-9 sm:w-[260px] sm:text-sm lg:h-10">
-              <SelectValue placeholder="Choose ticker" />
-            </SelectTrigger>
-            <SelectContent>
-              {tickers.map((ticker) => (
-                <SelectItem key={ticker.ticker} value={ticker.ticker}>
-                  {ticker.ticker}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            Load Ticker
+          </Button>
 
           <Select
             value={filterType}
@@ -384,11 +349,10 @@ export default function LabelPage() {
             <Tag className="h-8 w-8 text-text-muted sm:h-10 sm:w-10" />
             <div className="space-y-1">
               <p className="text-sm font-medium text-text-primary sm:text-base">
-                Choose a ticker to load its labeling queue.
+                Enter a ticker to load its labeling queue.
               </p>
               <p className="text-xs text-text-muted sm:text-sm">
-                Only the selected ticker&apos;s charts will be fetched, which keeps the page much
-                lighter than opening the full v1 manifest.
+                This page will not request the v1 queue until you submit a ticker.
               </p>
             </div>
           </CardContent>

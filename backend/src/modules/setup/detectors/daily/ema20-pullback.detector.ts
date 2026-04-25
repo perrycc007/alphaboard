@@ -201,7 +201,8 @@ export class Ema20PullbackDetector implements DailyDetector {
     maxAgeDays: number,
   ): boolean {
     if (!anchorDate || !latestBarDate) return true;
-    return this.anchorAgeDays(anchorDate, latestBarDate) <= maxAgeDays;
+    const ageDays = this.anchorAgeDays(anchorDate, latestBarDate);
+    return ageDays == null || ageDays <= maxAgeDays;
   }
 
   private anchorAgeDays(anchorDate: Date | undefined, latestBarDate: Date | null): number | null {
