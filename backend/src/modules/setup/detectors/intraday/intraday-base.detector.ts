@@ -8,7 +8,7 @@ import {
 } from '../detector.interface';
 
 /**
- * Intraday Base Detector (ref: setup-detector.md section 3)
+ * Intraday Base Detector (ref: docs/setup-detection-plan.md)
  *
  * Find intraday Swing High or Swing Low.
  * Scan next X bars (15-30): no break beyond peak +/- buffer, no 620 cross.

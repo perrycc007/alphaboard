@@ -13,6 +13,10 @@ const Simulate = lazy(() => import('@/pages/Simulate'))
 const SettingsPage = lazy(() => import('@/pages/Settings'))
 const LabelPage = lazy(() => import('@/pages/Label'))
 const MarketRegimes = lazy(() => import('@/pages/MarketRegimes'))
+const ResearchReport = lazy(() => import('@/pages/ResearchReport'))
+const FocusListPage = lazy(() => import('@/pages/FocusList'))
+const MarketCondition = lazy(() => import('@/pages/MarketCondition'))
+const Catalysts = lazy(() => import('@/pages/Catalysts'))
 
 function routeElement(Component: ComponentType) {
   return (
@@ -34,6 +38,10 @@ export const router = createBrowserRouter([
       { path: 'playbook', element: routeElement(Playbook) },
       { path: 'simulate', element: routeElement(Simulate) },
       { path: 'regimes', element: routeElement(MarketRegimes) },
+      { path: 'research', element: routeElement(ResearchReport) },
+      { path: 'focus-list', element: routeElement(FocusListPage) },
+      { path: 'market-condition', element: routeElement(MarketCondition) },
+      { path: 'catalysts', element: routeElement(Catalysts) },
       { path: 'label', element: routeElement(LabelPage) },
       { path: 'settings', element: routeElement(SettingsPage) },
     ],

@@ -15,6 +15,7 @@ import { WatchlistModule } from './modules/watchlist/watchlist.module';
 import { DataIngestionModule } from './modules/data-ingestion/data-ingestion.module';
 import { BrokerModule } from './modules/broker/broker.module';
 import { LabelModule } from './modules/label/label.module';
+import { ResearchModule } from './modules/research/research.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { LabelModule } from './modules/label/label.module';
     DataIngestionModule,
     BrokerModule,
     LabelModule,
+    ResearchModule,
   ],
 })
 export class AppModule {}

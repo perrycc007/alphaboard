@@ -1,4 +1,13 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { MarketService } from './market.service';
 import { BreadthService } from './breadth.service';
@@ -22,6 +31,16 @@ export class MarketController {
   @Get('breadth')
   getBreadthTimeSeries(@Query('range') range?: string) {
     return this.breadthService.getTimeSeries(range);
+  }
+
+  @Post('breadth/backfill-missing')
+  @HttpCode(HttpStatus.OK)
+  backfillMissingBreadth(@Query('years') years?: string) {
+    const parsedYears = years ? Number.parseInt(years, 10) : 5;
+    if (!Number.isFinite(parsedYears) || parsedYears <= 0) {
+      throw new BadRequestException('years must be a positive number');
+    }
+    return this.breadthService.backfillMissing(parsedYears);
   }
 
   @Get('indices/:ticker/daily')

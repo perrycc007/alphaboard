@@ -8,7 +8,7 @@ import {
 } from '../detector.interface';
 
 /**
- * Daily Base Detector (ref: setup-detector.md section 2)
+ * Daily Base Detector (ref: docs/setup-detection-plan.md)
  *
  * Pre-condition: stock must be Stage 2
  * - Find last Swing High as peak

@@ -17,3 +17,4 @@ __pycache__/
 *.pyc
 review-studio/vite.config.js
 review-studio/vite.config.d.ts
+.env

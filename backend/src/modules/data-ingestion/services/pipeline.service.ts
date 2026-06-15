@@ -8,6 +8,12 @@ import { StageRecalcJob } from '../jobs/stage-recalc.job';
 import { SetupScanJob } from '../jobs/setup-scan.job';
 import { BreadthSyncJob } from '../jobs/breadth-sync.job';
 import { MarketRegimeService } from '../../market/market-regime.service';
+import {
+  PIPELINE_STEP_IDS,
+  PipelineStepId,
+  PipelineStepStatus,
+  selectPipelineSteps,
+} from './pipeline-steps';
 
 export interface PipelineResult {
   synced: number;
@@ -16,6 +22,19 @@ export interface PipelineResult {
   rsRanked: number;
   completedAt: Date;
   durationMs: number;
+}
+
+export interface PipelineRunOptions {
+  /** Skip Yahoo daily + index backfill (use when bars are already fresh). */
+  skipBackfill?: boolean;
+  fromStep?: string;
+  toStep?: string;
+  onStepTiming?: (
+    stepId: PipelineStepId,
+    status: PipelineStepStatus,
+    durationMs: number,
+    reason?: string,
+  ) => void;
 }
 
 export interface PipelineStatus {
@@ -93,14 +112,60 @@ export class PipelineService implements OnModuleInit {
     await this.runFullPipeline();
   }
 
+  private shouldSkipBackfill(options?: PipelineRunOptions): boolean {
+    if (options?.skipBackfill) return true;
+    const raw = process.env.PIPELINE_SKIP_BACKFILL;
+    return raw != null && raw.toLowerCase() === 'true';
+  }
+
+  private recordStep(
+    options: PipelineRunOptions | undefined,
+    stepId: PipelineStepId,
+    status: PipelineStepStatus,
+    durationMs: number,
+    reason?: string,
+  ): void {
+    options?.onStepTiming?.(stepId, status, durationMs, reason);
+  }
+
+  private logMemory(label: string): void {
+    const usage = process.memoryUsage();
+    this.logger.log(
+      `${label} memory rss=${Math.round(usage.rss / 1024 / 1024)}MB heapUsed=${Math.round(usage.heapUsed / 1024 / 1024)}MB heapTotal=${Math.round(usage.heapTotal / 1024 / 1024)}MB`,
+    );
+  }
+
+  private async runSelectedStep<T>(
+    options: PipelineRunOptions | undefined,
+    selected: Set<PipelineStepId>,
+    stepId: PipelineStepId,
+    label: string,
+    work: () => Promise<T>,
+  ): Promise<T | undefined> {
+    if (!selected.has(stepId)) {
+      this.logger.log(`Step ${stepId}: Skipped (outside selected range)`);
+      this.recordStep(options, stepId, 'skipped', 0, 'outside selected range');
+      return undefined;
+    }
+
+    this.logger.log(`Step ${stepId}: ${label}...`);
+    const startedAt = Date.now();
+    const result = await work();
+    this.recordStep(options, stepId, 'ran', Date.now() - startedAt);
+    return result;
+  }
+
   /**
    * Execute the full data pipeline in sequence.
    */
-  async runFullPipeline(): Promise<PipelineResult> {
+  async runFullPipeline(options?: PipelineRunOptions): Promise<PipelineResult> {
     if (this.running) {
       throw new Error('Pipeline is already running');
     }
 
+    const selectedSteps = new Set(
+      selectPipelineSteps(options?.fromStep, options?.toStep, PIPELINE_STEP_IDS),
+    );
     this.running = true;
     const startTime = Date.now();
 
@@ -108,46 +173,111 @@ export class PipelineService implements OnModuleInit {
       this.logger.log('=== PIPELINE START ===');
 
       // 1. Discover new tickers if stock table is sparse
-      const stockCount = await this.prisma.stock.count();
-      if (stockCount < 1000) {
-        this.logger.log('Step 1: Discovering tickers...');
-        await this.tickerDiscovery.discoverTickers();
+      if (!selectedSteps.has('1')) {
+        this.logger.log('Step 1: Skipped (outside selected range)');
+        this.recordStep(options, '1', 'skipped', 0, 'outside selected range');
       } else {
-        this.logger.log(`Step 1: Skipped (${stockCount} stocks already in DB)`);
+        const stepStartedAt = Date.now();
+        const stockCount = await this.prisma.stock.count();
+        if (stockCount < 1000) {
+          this.logger.log('Step 1: Discovering tickers...');
+          await this.tickerDiscovery.discoverTickers();
+          this.recordStep(options, '1', 'ran', Date.now() - stepStartedAt);
+        } else {
+          this.logger.log(`Step 1: Skipped (${stockCount} stocks already in DB)`);
+          this.recordStep(
+            options,
+            '1',
+            'skipped',
+            Date.now() - stepStartedAt,
+            `${stockCount} stocks already in DB`,
+          );
+        }
       }
 
-      // 2. Backfill missing daily bars via Yahoo Finance
-      this.logger.log('Step 2: Backfilling daily bars...');
-      const { synced, failed } = await this.backfillService.backfillAll();
+      let synced = 0;
+      let failed = 0;
+      const skipBackfill = this.shouldSkipBackfill(options);
+      if (skipBackfill && selectedSteps.has('2')) {
+        this.logger.log('Step 2: Skipped (PIPELINE_SKIP_BACKFILL=true)');
+        this.recordStep(options, '2', 'skipped', 0, 'backfill skipped');
+      } else if (skipBackfill) {
+        this.logger.log('Step 2: Skipped (outside selected range)');
+        this.recordStep(options, '2', 'skipped', 0, 'outside selected range');
+      } else {
+        await this.runSelectedStep(
+          options,
+          selectedSteps,
+          '2',
+          'Backfilling daily bars',
+          async () => {
+            ({ synced, failed } = await this.backfillService.backfillAll());
+          },
+        );
+      }
 
-      // 3. Backfill index daily bars (SPY, QQQ, DIA, IWM)
-      this.logger.log('Step 3: Backfilling index bars...');
-      await this.backfillService.backfillIndices();
+      if (skipBackfill && selectedSteps.has('3')) {
+        this.logger.log('Step 3: Skipped (PIPELINE_SKIP_BACKFILL=true)');
+        this.recordStep(options, '3', 'skipped', 0, 'backfill skipped');
+      } else if (skipBackfill) {
+        this.logger.log('Step 3: Skipped (outside selected range)');
+        this.recordStep(options, '3', 'skipped', 0, 'outside selected range');
+      } else {
+        await this.runSelectedStep(
+          options,
+          selectedSteps,
+          '3',
+          'Backfilling index bars',
+          () => this.backfillService.backfillIndices(),
+        );
+      }
 
       // 4. Compute indicators for all stocks with new bars
-      this.logger.log('Step 4: Computing indicators...');
-      const { updated: indicatorsUpdated } =
-        await this.indicatorService.computeAllStocks();
+      const indicatorResult = await this.runSelectedStep(
+        options,
+        selectedSteps,
+        '4',
+        'Computing indicators',
+        () => this.indicatorService.computeAllStocks(),
+      );
+      const indicatorsUpdated = indicatorResult?.updated ?? 0;
 
       // 5. Compute RS Rank (needs all indicators + full universe)
-      this.logger.log('Step 5: Computing RS Ranks...');
-      const rsRanked = await this.rsRankService.computeRanks();
+      const rsRanked =
+        (await this.runSelectedStep(options, selectedSteps, '5', 'Computing RS Ranks', () =>
+          this.rsRankService.computeRanks(),
+        )) ?? 0;
 
       // 6. Classify stages for all stocks
-      this.logger.log('Step 6: Classifying stages...');
-      await this.stageRecalcJob.run();
+      await this.runSelectedStep(options, selectedSteps, '6', 'Classifying stages', () =>
+        this.stageRecalcJob.run(),
+      );
 
       // 7. Detect setups (filtered stocks only)
-      this.logger.log('Step 7: Detecting setups...');
-      await this.setupScanJob.run();
+      await this.runSelectedStep(options, selectedSteps, '7', 'Detecting setups', async () => {
+        this.logMemory('Before Step 7');
+        await this.setupScanJob.run();
+        this.logMemory('After Step 7');
+      });
 
       // 8. Compute breadth from universe
-      this.logger.log('Step 8: Computing breadth...');
-      await this.breadthSyncJob.run();
+      await this.runSelectedStep(options, selectedSteps, '8', 'Computing breadth', () =>
+        this.breadthSyncJob.run(),
+      );
 
       // 9. Rebuild market context artifacts
-      this.logger.log('Step 9: Rebuilding market context...');
-      await this.marketRegimeService.rebuildAll();
+      await this.runSelectedStep(options, selectedSteps, '9a', 'Rebuilding proxy snapshots', () =>
+        this.marketRegimeService.rebuildPipelineStep('9a'),
+      );
+      await this.runSelectedStep(options, selectedSteps, '9b', 'Rebuilding leader runs', () =>
+        this.marketRegimeService.rebuildPipelineStep('9b'),
+      );
+      await this.runSelectedStep(options, selectedSteps, '9c', 'Rebuilding setup outcomes', () =>
+        this.marketRegimeService.rebuildPipelineStep('9c'),
+      );
+      await this.runSelectedStep(options, selectedSteps, '9d', 'Rebuilding regime periods', () =>
+        this.marketRegimeService.rebuildPipelineStep('9d'),
+      );
 
       const durationMs = Date.now() - startTime;
       this.lastResult = {

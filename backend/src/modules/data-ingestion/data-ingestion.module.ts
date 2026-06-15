@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { YFinanceProvider } from './providers/yfinance.provider';
 import { PolygonProvider } from './providers/polygon.provider';
+import { MarketDataRouterService } from './providers/market-data-router.service';
 import { DailySyncJob } from './jobs/daily-sync.job';
 import { IntradaySyncJob } from './jobs/intraday-sync.job';
 import { StageRecalcJob } from './jobs/stage-recalc.job';
@@ -12,7 +13,10 @@ import { IndicatorService } from './services/indicator.service';
 import { RsRankService } from './services/rs-rank.service';
 import { BackfillService } from './services/backfill.service';
 import { PipelineService } from './services/pipeline.service';
-import { DataIngestionController } from './data-ingestion.controller';
+import {
+  DataIngestionController,
+  SetupScanController,
+} from './data-ingestion.controller';
 import { SetupModule } from '../setup/setup.module';
 import { AlertModule } from '../alert/alert.module';
 import { StockModule } from '../stock/stock.module';
@@ -20,11 +24,12 @@ import { MarketModule } from '../market/market.module';
 
 @Module({
   imports: [SetupModule, AlertModule, StockModule, MarketModule],
-  controllers: [DataIngestionController],
+  controllers: [DataIngestionController, SetupScanController],
   providers: [
     // Providers
     YFinanceProvider,
     PolygonProvider,
+    MarketDataRouterService,
     // New pipeline services
     TickerDiscoveryService,
     IndicatorService,
@@ -39,6 +44,12 @@ import { MarketModule } from '../market/market.module';
     SetupScanJob,
     CleanupJob,
   ],
-  exports: [YFinanceProvider, PolygonProvider, PipelineService],
+  exports: [
+    YFinanceProvider,
+    PolygonProvider,
+    MarketDataRouterService,
+    PipelineService,
+    BackfillService,
+  ],
 })
 export class DataIngestionModule {}

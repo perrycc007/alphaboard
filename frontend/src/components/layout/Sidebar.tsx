@@ -12,6 +12,10 @@ import {
   BarChart3,
   Tag,
   Globe2,
+  FlaskConical,
+  Target,
+  Activity,
+  Newspaper,
 } from 'lucide-react'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { cn } from '@/lib/utils'
@@ -27,6 +31,10 @@ const NAV_ITEMS = [
   { to: '/playbook', label: 'Playbook', icon: Trophy },
   { to: '/simulate', label: 'Simulator', icon: BarChart3 },
   { to: '/regimes', label: 'Regimes', icon: Globe2 },
+  { to: '/research', label: 'Research', icon: FlaskConical },
+  { to: '/focus-list', label: 'Focus List', icon: Target },
+  { to: '/market-condition', label: 'Condition', icon: Activity },
+  { to: '/catalysts', label: 'Catalysts', icon: Newspaper },
   { to: '/label', label: 'Labeling', icon: Tag },
 ] as const
 

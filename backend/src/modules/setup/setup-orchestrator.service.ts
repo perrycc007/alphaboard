@@ -36,6 +36,7 @@ import {
 } from './confirmation/confirmation-engine';
 import { appendJsonLog } from '../../common/utils/file-log.util';
 import { TimingSignalService } from './timing-signal.service';
+import { PythonSignalDetectorService } from './python-signal-detector.service';
 
 // ---------------------------------------------------------------------------
 // Scanner ranking scores
@@ -109,6 +110,7 @@ export class SetupOrchestratorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly timingSignalService: TimingSignalService,
+    private readonly pythonSignalDetector: PythonSignalDetectorService,
   ) {}
 
   async runDailyDetection(stockId: string, bars: Bar[]): Promise<void> {
@@ -116,16 +118,37 @@ export class SetupOrchestratorService {
     const context = await this.buildDailyContext(stockId, bars);
     const detectedAt = bars[bars.length - 1]?.date ?? new Date();
 
-    for (const detector of this.dailyDetectors) {
-      const result = detector.detect(bars, swingPoints, context);
-      if (result && !(result.direction === 'SHORT' && !context.canShortLeader)) {
+    let pythonResults: DetectedSetup[] | null = null;
+    try {
+      pythonResults = await this.pythonSignalDetector.detectDailySignals(bars);
+    } catch (error) {
+      this.logger.warn(
+        `Python signal detector failed for stock ${stockId}; falling back to TypeScript detectors: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    if (pythonResults) {
+      for (const result of pythonResults) {
+        if (result.direction === 'SHORT' && !context.canShortLeader) continue;
         await this.persistSetup(stockId, result, detectedAt);
-        this.logger.log(`Detected ${result.type} for stock ${stockId}`);
+        this.logger.log(
+          `Detected ${result.type} via Python signal logic for stock ${stockId}`,
+        );
+      }
+    } else {
+      for (const detector of this.dailyDetectors) {
+        const result = detector.detect(bars, swingPoints, context);
+        if (result && !(result.direction === 'SHORT' && !context.canShortLeader)) {
+          await this.persistSetup(stockId, result, detectedAt);
+          this.logger.log(`Detected ${result.type} for stock ${stockId}`);
+        }
       }
     }
 
     await this.updateDailySetupStates(stockId, bars);
-    await this.expireStaleSetups(stockId);
+    await this.expireStaleSetups(stockId, detectedAt);
   }
 
   async processIntradayBar(
@@ -515,6 +538,10 @@ export class SetupOrchestratorService {
     for (const setup of pendingSetups) {
       let newState: SetupState | null = null;
       let stateReason: string | undefined;
+      const sameDetectionBar =
+        !!latestBar.date &&
+        setup.detectedAt.toISOString().slice(0, 10) ===
+          latestBar.date.toISOString().slice(0, 10);
 
       // --- Per-type state transitions for DOUBLE_TOP ---
       if (
@@ -598,7 +625,7 @@ export class SetupOrchestratorService {
       }
 
       // VIOLATED: price closed beyond stop price with ABS buffer
-      if (!newState && setup.stopPrice) {
+      if (!newState && !sameDetectionBar && setup.stopPrice) {
         const stop = Number(setup.stopPrice);
         if (setup.direction === 'LONG' && latestBar.close < stop - abs) {
           newState = SetupState.VIOLATED;
@@ -615,6 +642,7 @@ export class SetupOrchestratorService {
       // EXPIRED: price moved too far from pivot (beyond 1.5 * ABS)
       if (
         !newState &&
+        !sameDetectionBar &&
         setup.pivotPrice &&
         (setup.state === SetupState.BUILDING ||
           setup.state === SetupState.READY)
@@ -732,12 +760,15 @@ export class SetupOrchestratorService {
     }
   }
 
-  private async expireStaleSetups(stockId: string): Promise<void> {
+  private async expireStaleSetups(
+    stockId: string,
+    asOfDate = new Date(),
+  ): Promise<void> {
     await this.prisma.setup.updateMany({
       where: {
         stockId,
         state: { in: [SetupState.BUILDING, SetupState.READY] },
-        expiresAt: { lt: new Date() },
+        expiresAt: { lt: asOfDate },
       },
       data: { state: SetupState.EXPIRED, lastStateAt: new Date() },
     });
@@ -992,6 +1023,12 @@ export class SetupOrchestratorService {
             finalR: null,
             finalPct: null,
             holdingDays: null,
+            rTargets: initializeRTargets(),
+            stopHit: {
+              hit: false,
+              hitDate: null,
+              daysToHit: null,
+            },
           };
 
           if (simSetup.pivotPrice) {
@@ -1145,21 +1182,21 @@ export class SetupOrchestratorService {
           setup.riskAmount != null &&
           setup.riskAmount > 0
         ) {
+          let barMaxR: number;
           if (setup.direction === 'LONG') {
-            const barMaxR =
-              (latestBar.high - setup.entryPrice) / setup.riskAmount;
+            barMaxR = (latestBar.high - setup.entryPrice) / setup.riskAmount;
             const barMaxPct =
               ((latestBar.high - setup.entryPrice) / setup.entryPrice) * 100;
             setup.maxR = Math.max(setup.maxR ?? 0, barMaxR);
             setup.maxPct = Math.max(setup.maxPct ?? 0, barMaxPct);
           } else {
-            const barMaxR =
-              (setup.entryPrice - latestBar.low) / setup.riskAmount;
+            barMaxR = (setup.entryPrice - latestBar.low) / setup.riskAmount;
             const barMaxPct =
               ((setup.entryPrice - latestBar.low) / setup.entryPrice) * 100;
             setup.maxR = Math.max(setup.maxR ?? 0, barMaxR);
             setup.maxPct = Math.max(setup.maxPct ?? 0, barMaxPct);
           }
+          recordFixedRTargets(setup, barMaxR, dateStr);
 
           // Check stop hit using actualStopPrice
           let exited = false;
@@ -1171,6 +1208,13 @@ export class SetupOrchestratorService {
                 latestBar.close > setup.actualStopPrice);
             if (stopHit) {
               setup.state = 'VIOLATED';
+              setup.stopHit = {
+                hit: true,
+                hitDate: dateStr,
+                daysToHit: setup.entryDate
+                  ? daysBetween(setup.entryDate, dateStr)
+                  : null,
+              };
               exited = true;
             }
           }
@@ -1267,4 +1311,57 @@ export interface SimulatedSetup {
   finalR: number | null;
   finalPct: number | null;
   holdingDays: number | null;
+  rTargets: Record<string, FixedRTargetResult>;
+  stopHit: {
+    hit: boolean;
+    hitDate: string | null;
+    daysToHit: number | null;
+  };
+}
+
+interface FixedRTargetResult {
+  hit: boolean;
+  hitDate: string | null;
+  daysToHit: number | null;
+  pctMove: number | null;
+}
+
+function initializeRTargets(): Record<string, FixedRTargetResult> {
+  return {
+    '2': { hit: false, hitDate: null, daysToHit: null, pctMove: null },
+    '3': { hit: false, hitDate: null, daysToHit: null, pctMove: null },
+    '4': { hit: false, hitDate: null, daysToHit: null, pctMove: null },
+  };
+}
+
+function recordFixedRTargets(
+  setup: SimulatedSetup,
+  barMaxR: number,
+  dateStr: string,
+): void {
+  if (
+    setup.entryPrice == null ||
+    setup.riskAmount == null ||
+    setup.riskAmount <= 0
+  ) {
+    return;
+  }
+
+  for (const target of [2, 3, 4]) {
+    const existing = setup.rTargets[String(target)];
+    if (existing.hit || barMaxR < target) continue;
+    existing.hit = true;
+    existing.hitDate = dateStr;
+    existing.daysToHit = setup.entryDate ? daysBetween(setup.entryDate, dateStr) : null;
+    existing.pctMove = Number(
+      (((setup.riskAmount * target) / setup.entryPrice) * 100).toFixed(2),
+    );
+  }
+}
+
+function daysBetween(start: string, end: string): number {
+  return Math.round(
+    (new Date(end).getTime() - new Date(start).getTime()) /
+      (1000 * 60 * 60 * 24),
+  );
 }

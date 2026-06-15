@@ -14,7 +14,7 @@ import {
 } from '../detector.interface';
 
 /**
- * Tiring Down Detector (ref: setup-detector.md section 4)
+ * Tiring Down Detector (ref: docs/setup-detection-plan.md)
  *
  * Pre-condition: stock = HOT / FORMER_HOT, price at intraday high zone
  * Scores 4 evidence signals (must satisfy >= 3/4):

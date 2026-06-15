@@ -30,11 +30,6 @@ export class SetupController {
     return this.orchestrator.getActiveSetups({ type, direction, timeframe });
   }
 
-  @Post('setups/scan')
-  async triggerScan() {
-    return { message: 'Scan triggered' };
-  }
-
   @Get('setups/simulate/:ticker')
   async simulateSetups(
     @Param('ticker') ticker: string,

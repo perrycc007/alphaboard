@@ -14,19 +14,22 @@ datasource db {
 // ─────────────────────────────────────────────────────────
 
 model Stock {
-  id           String    @id @default(cuid())
-  ticker       String    @unique
-  name         String
-  sector       String?
-  industry     String?
-  exchange     String?
-  avgVolume    BigInt?
-  marketCap    BigInt?
-  isCurated    Boolean   @default(false)
-  lastSyncDate DateTime? @db.Date
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id               String        @id @default(cuid())
+  ticker           String        @unique
+  name             String
+  briefDescription String?
+  sector           String?
+  industry         String?
+  exchange         String?
+  avgVolume        BigInt?
+  marketCap        BigInt?
+  tradableType     TradableType?
+  isTradable       Boolean       @default(true)
+  isCurated        Boolean       @default(false)
+  lastSyncDate     DateTime?     @db.Date
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   dailyBars             StockDaily[]
   intradayBars          StockIntraday[]
@@ -42,6 +45,16 @@ model Stock {
   setupOutcomes         SetupOutcome[]
   timingSignals         IntradayTimingSignal[]
   leaderPeriodSnapshots MarketLeaderPeriodSnapshot[]
+  focusListItems        FocusListItem[]
+  themeMemberships      TickerThemeMembership[]
+  recommendations       StrategyRecommendation[]
+}
+
+enum TradableType {
+  STOCK
+  ETF
+  INDEX
+  COMMODITY_PROXY
 }
 
 model StockDaily {
@@ -169,7 +182,11 @@ model Theme {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  groups SupplyChainGroup[]
+  groups           SupplyChainGroup[]
+  focusListItems   FocusListItem[]
+  themeMemberships TickerThemeMembership[]
+  catalysts        CatalystHypothesis[]
+  recommendations  StrategyRecommendation[]
 }
 
 model SupplyChainGroup {
@@ -178,8 +195,13 @@ model SupplyChainGroup {
   name      String
   sortOrder Int    @default(0)
 
-  theme       Theme        @relation(fields: [themeId], references: [id])
-  themeStocks ThemeStock[]
+  theme            Theme                   @relation(fields: [themeId], references: [id])
+  themeStocks      ThemeStock[]
+  focusListItems   FocusListItem[]
+  themeMemberships TickerThemeMembership[]
+  catalysts        CatalystHypothesis[]
+  relationshipsOut GroupRelationship[]      @relation("SourceGroup")
+  relationshipsIn  GroupRelationship[]      @relation("TargetGroup")
 
   @@unique([themeId, name])
 }
@@ -799,6 +821,131 @@ model MarketRegimePeriod {
   @@index([label, startDate])
 }
 
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Scan Runs (timing + cost instrumentation)
+// ─────────────────────────────────────────────────────────
+
+model ScanRun {
+  id                String        @id @default(cuid())
+  type              ScanRunType
+  status            ScanRunStatus @default(RUNNING)
+  startedAt         DateTime      @default(now())
+  finishedAt        DateTime?
+  durationMs        Int?
+  stockCount        Int?
+  candidateCount    Int?
+  focusListCount    Int?
+  modelInputTokens  Int?
+  modelOutputTokens Int?
+  modelCostEstimate Decimal?      @db.Decimal(12, 6)
+  stepTimingsJson   Json?
+  error             String?
+  notes             String?
+  createdAt         DateTime      @default(now())
+
+  focusLists FocusList[]
+
+  @@index([type, startedAt(sort: Desc)])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Focus Lists
+// ─────────────────────────────────────────────────────────
+
+model FocusList {
+  id                        String        @id @default(cuid())
+  name                      String
+  type                      FocusListType
+  createdAt                 DateTime      @default(now())
+  expiresAt                 DateTime?
+  sourceScanRunId           String?
+  // Forward references (tables added in later phases). Plain ids for now.
+  marketConditionSnapshotId String?
+  notes                     String?
+
+  sourceScanRun ScanRun?        @relation(fields: [sourceScanRunId], references: [id])
+  items         FocusListItem[]
+
+  @@index([type, createdAt(sort: Desc)])
+}
+
+model FocusListItem {
+  id                     String              @id @default(cuid())
+  focusListId            String
+  stockId                String
+  themeId                String?
+  groupId                String?
+  reason                 FocusReason
+  priorityScore          Decimal?            @db.Decimal(6, 2)
+  setupBias              SetupBias           @default(WATCH)
+  expectedSetupTypesJson Json?
+  keyLevelsJson          Json?
+  invalidationLevelsJson Json?
+  identifiedSetupJson    Json?
+  // Forward reference (CatalystHypothesis added in a later phase).
+  catalystHypothesisId   String?
+  focusToday             Boolean             @default(false)
+  focusTodayReason       String?
+  status                 FocusListItemStatus @default(ACTIVE)
+  addedAt                DateTime            @default(now())
+  lastReviewedAt         DateTime?
+
+  focusList FocusList         @relation(fields: [focusListId], references: [id], onDelete: Cascade)
+  stock     Stock             @relation(fields: [stockId], references: [id])
+  theme     Theme?            @relation(fields: [themeId], references: [id])
+  group     SupplyChainGroup? @relation(fields: [groupId], references: [id])
+
+  @@unique([focusListId, stockId])
+  @@index([status])
+  @@index([focusToday])
+}
+
+enum FocusListType {
+  WEEKLY
+  MIDWEEK
+  THEME
+  MANUAL
+}
+
+enum SetupBias {
+  LONG
+  SHORT
+  BOTH
+  WATCH
+}
+
+enum FocusListItemStatus {
+  ACTIVE
+  TRIGGERED
+  VIOLATED
+  EXPIRED
+  REMOVED
+}
+
+enum FocusReason {
+  STRONG_DAILY_SETUP
+  GROUP_SYNCHRONIZED
+  CATALYST_HYPOTHESIS
+  CURRENT_LEADER
+  PREVIOUS_LEADER_KEY_LEVEL
+  REVERSAL_620_ZONE
+  MANUAL_PIN
+}
+
+enum ScanRunType {
+  FULL_SCAN
+  FOCUS_UPDATE
+  MODEL_REVIEW
+  VISUAL_REVIEW
+}
+
+enum ScanRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model MarketLeaderPeriodSnapshot {
   id                    String               @id @default(cuid())
   marketRegimePeriodId  String
@@ -832,4 +979,282 @@ model MarketLeaderPeriodSnapshot {
   @@unique([marketRegimePeriodId, leaderRunId])
   @@index([stockId, periodStartDate])
   @@index([activity, periodStartDate])
+}
+
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Ticker/Theme Metadata & Group Relationships
+// ─────────────────────────────────────────────────────────
+
+model TickerThemeMembership {
+  id              String   @id @default(cuid())
+  stockId         String
+  themeId         String
+  groupId         String?
+  roleDescription String?
+  importanceScore Decimal? @db.Decimal(4, 3)
+  isPrimaryTheme  Boolean  @default(false)
+  source          String?
+  reviewedAt      DateTime @default(now())
+
+  stock Stock             @relation(fields: [stockId], references: [id])
+  theme Theme             @relation(fields: [themeId], references: [id])
+  group SupplyChainGroup? @relation(fields: [groupId], references: [id])
+
+  @@unique([stockId, themeId])
+  @@index([themeId])
+}
+
+model GroupRelationship {
+  id               String              @id @default(cuid())
+  sourceGroupId    String
+  targetGroupId    String
+  relationshipType RelationshipType
+  macroSensitivity MacroSensitivity?
+  strengthScore    Decimal?            @db.Decimal(4, 3)
+  lagDaysEstimate  Int?
+  source           String?
+  notes            String?
+  createdAt        DateTime            @default(now())
+
+  sourceGroup SupplyChainGroup @relation("SourceGroup", fields: [sourceGroupId], references: [id])
+  targetGroup SupplyChainGroup @relation("TargetGroup", fields: [targetGroupId], references: [id])
+
+  @@unique([sourceGroupId, targetGroupId, relationshipType])
+  @@index([sourceGroupId])
+  @@index([targetGroupId])
+}
+
+enum RelationshipType {
+  LEADS
+  LAGS
+  BENEFITS
+  HURTS
+  COMPETES
+  SUPPLIER_TO
+}
+
+enum MacroSensitivity {
+  RATES
+  DOLLAR
+  OIL
+  COPPER
+  GOLD
+  YIELDS
+  INFLATION
+}
+
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Catalyst Hypotheses
+// ─────────────────────────────────────────────────────────
+
+model CatalystHypothesis {
+  id                       String         @id @default(cuid())
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+  themeId                  String?
+  groupId                  String?
+  title                    String
+  hypothesis               String
+  sourceUrlsJson           Json?
+  expectedBeneficiariesJson Json?
+  expectedLosersJson       Json?
+  technicalVerificationJson Json?
+  status                   CatalystStatus @default(WATCHING)
+  confidenceScore          Decimal?       @db.Decimal(4, 3)
+
+  theme           Theme?                   @relation(fields: [themeId], references: [id])
+  group           SupplyChainGroup?        @relation(fields: [groupId], references: [id])
+  recommendations StrategyRecommendation[]
+
+  @@index([status, createdAt(sort: Desc)])
+}
+
+enum CatalystStatus {
+  WATCHING
+  CONFIRMED
+  REJECTED
+  STALE
+}
+
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Market Condition Snapshot
+// ─────────────────────────────────────────────────────────
+
+model MarketConditionSnapshot {
+  id        String          @id @default(cuid())
+  date      DateTime        @db.Date
+  scopeType MarketScopeType
+  scopeKey  String
+
+  // Long-term trend
+  longTermTrendingUp   Boolean @default(false)
+  longTermTrendingDown Boolean @default(false)
+  longTermRanging      Boolean @default(false)
+  longTermRangeHigh    Decimal? @db.Decimal(12, 4)
+  longTermRangeLow     Decimal? @db.Decimal(12, 4)
+
+  // Mid-term trend
+  midTermTrendingUp   Boolean @default(false)
+  midTermTrendingDown Boolean @default(false)
+  midTermRanging      Boolean @default(false)
+  midTermExtended     Boolean @default(false)
+  midTermPullback     Boolean @default(false)
+
+  // Short-term trend
+  shortTermTrendingUp   Boolean @default(false)
+  shortTermTrendingDown Boolean @default(false)
+  shortTermRanging      Boolean @default(false)
+  shortTermExtended     Boolean @default(false)
+  shortTermOversold     Boolean @default(false)
+
+  // Breadth
+  breadthConfirming    Boolean @default(false)
+  breadthDiverging     Boolean @default(false)
+  breadthImproving     Boolean @default(false)
+  breadthDeteriorating Boolean @default(false)
+
+  // Leaders
+  leadersAdvancing Boolean @default(false)
+  leadersBasing    Boolean @default(false)
+  leadersFailing   Boolean @default(false)
+  leadersExtended  Boolean @default(false)
+  leadersRotating  Boolean @default(false)
+
+  // Regime character
+  easyMoney     Boolean @default(false)
+  quickRotation Boolean @default(false)
+  hardPenny     Boolean @default(false)
+  distribution  Boolean @default(false)
+  earlyRecovery Boolean @default(false)
+
+  // Favorable setup families
+  breakoutFavorable   Boolean @default(false)
+  pullbackFavorable   Boolean @default(false)
+  reversalFavorable   Boolean @default(false)
+  shortFavorable      Boolean @default(false)
+  holdLongerFavorable Boolean @default(false)
+  scalpOnly           Boolean @default(false)
+  stayOut             Boolean @default(false)
+
+  // Exposure
+  waterTest          Boolean @default(false)
+  normalExposure     Boolean @default(false)
+  aggressiveExposure Boolean @default(false)
+  marginAllowed      Boolean @default(false)
+
+  // Scores
+  trendScore         Decimal? @db.Decimal(5, 2)
+  breadthScore       Decimal? @db.Decimal(5, 2)
+  leaderScore        Decimal? @db.Decimal(5, 2)
+  followThroughScore Decimal? @db.Decimal(5, 2)
+  riskScore          Decimal? @db.Decimal(5, 2)
+  confidenceScore    Decimal? @db.Decimal(5, 2)
+
+  trendDetailJson          Json?
+  breadthStructureJson     Json?
+  equalWeightStructureJson Json?
+  setupPerformanceJson     Json?
+  evidenceJson Json?
+  summary      String?
+  createdAt    DateTime @default(now())
+
+  @@unique([date, scopeType, scopeKey])
+  @@index([scopeType, date(sort: Desc)])
+}
+
+enum MarketScopeType {
+  INDEX
+  LEADER_UNIVERSE
+  TRADABLE_UNIVERSE
+  THEME
+  GROUP
+}
+
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Model Reviews (LLM/vision provider calls)
+// ─────────────────────────────────────────────────────────
+
+model ModelReview {
+  id            String          @id @default(cuid())
+  scanRunId     String?
+  reviewType    ModelReviewType
+  provider      String
+  model         String
+  inputTokens   Int?
+  outputTokens  Int?
+  costEstimate  Decimal?        @db.Decimal(12, 6)
+  targetType    String?
+  targetId      String?
+  resultJson    Json?
+  createdAt     DateTime        @default(now())
+
+  @@index([reviewType, createdAt(sort: Desc)])
+  @@index([scanRunId])
+}
+
+enum ModelReviewType {
+  DATAFRAME_REVIEW
+  METADATA_ENRICHMENT
+  CATALYST_SEARCH
+  GROUP_GALLERY
+  CHART_REVIEW
+  STRATEGY_REPORT
+}
+
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Strategy Recommendations & Outcomes
+// ─────────────────────────────────────────────────────────
+
+model StrategyRecommendation {
+  id                        String       @id @default(cuid())
+  date                      DateTime     @db.Date
+  stockId                   String
+  themeId                   String?
+  groupId                   String?
+  setupType                 SetupType?
+  direction                 Direction
+  entryZoneJson             Json?
+  stopLevel                 Decimal?     @db.Decimal(12, 4)
+  targetLevelsJson          Json?
+  exitPlanJson              Json?
+  thesis                    String?
+  catalystHypothesisId      String?
+  marketConditionSnapshotId String?
+  confidenceScore           Decimal?     @db.Decimal(5, 2)
+  exposureMode              ExposureMode @default(NORMAL)
+  createdAt                 DateTime     @default(now())
+
+  stock     Stock               @relation(fields: [stockId], references: [id])
+  theme     Theme?              @relation(fields: [themeId], references: [id])
+  catalyst  CatalystHypothesis? @relation(fields: [catalystHypothesisId], references: [id])
+  outcome   RecommendationOutcome?
+
+  @@index([date(sort: Desc)])
+  @@index([stockId, date(sort: Desc)])
+}
+
+model RecommendationOutcome {
+  id               String   @id @default(cuid())
+  recommendationId String   @unique
+  maxR             Decimal? @db.Decimal(8, 2)
+  maxPctMove       Decimal? @db.Decimal(8, 2)
+  finalR           Decimal? @db.Decimal(8, 2)
+  daysToMaxR       Int?
+  stoppedOut       Boolean  @default(false)
+  targetHit        Boolean  @default(false)
+  setupViolated    Boolean  @default(false)
+  bestExitSignal   String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  recommendation StrategyRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+}
+
+enum ExposureMode {
+  STAY_OUT
+  WATER_TEST
+  NORMAL
+  AGGRESSIVE
+  MARGIN_ALLOWED
 }

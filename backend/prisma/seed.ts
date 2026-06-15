@@ -14,7 +14,9 @@ async function main() {
   // ── 1. Indices ──
   const indices = [
     { ticker: 'SPY', name: 'S&P 500 ETF' },
+    { ticker: 'RSP', name: 'Invesco S&P 500 Equal Weight ETF' },
     { ticker: 'QQQ', name: 'Nasdaq 100 ETF' },
+    { ticker: 'QQQE', name: 'Direxion Nasdaq-100 Equal Weighted Index Shares' },
     { ticker: 'DIA', name: 'Dow Jones ETF' },
     { ticker: 'IWM', name: 'Russell 2000 ETF' },
     { ticker: 'GLD', name: 'SPDR Gold Shares' },

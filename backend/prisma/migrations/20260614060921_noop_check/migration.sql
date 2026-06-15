@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "GroupRelationship_sourceGroupId_targetGroupId_relationshipType_" RENAME TO "GroupRelationship_sourceGroupId_targetGroupId_relationshipT_key";

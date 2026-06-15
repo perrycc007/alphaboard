@@ -25,6 +25,7 @@ import {
   classifyMarketRegime,
   extractLeaderRunsFromSeries,
 } from './market-regime.helpers';
+import type { PipelineStepId } from '../data-ingestion/services/pipeline-steps';
 import type {
   ComputedPeriodView,
   LeaderMarkdownSummary,
@@ -34,9 +35,13 @@ import type {
   SetupOutcomeRow,
 } from './market-regime.types';
 
-const PROXY_TICKERS = ['SPY', 'QQQ', 'IWM', 'GLD', 'UUP'] as const;
-const EQUITY_PROXY_TICKERS = ['SPY', 'QQQ', 'IWM'] as const;
+const PROXY_TICKERS = ['SPY', 'RSP', 'QQQ', 'QQQE', 'IWM', 'GLD', 'UUP'] as const;
+const EQUITY_PROXY_TICKERS = ['SPY', 'RSP', 'QQQ', 'QQQE', 'IWM'] as const;
 const ROLLING_WINDOW_DAYS = 60;
+const LEADER_RUN_STOCK_CHUNK_SIZE = 250;
+const SETUP_OUTCOME_STOCK_CHUNK_SIZE = 100;
+const SETUP_OUTCOME_CONCURRENCY = 4;
+type MarketRebuildPipelineStep = Extract<PipelineStepId, '9a' | '9b' | '9c' | '9d'>;
 
 @Injectable()
 export class MarketRegimeService {
@@ -76,6 +81,29 @@ export class MarketRegimeService {
       `Market rebuild completed in ${Date.now() - startedAt}ms (proxies=${proxies}, leaderRuns=${leaderRuns}, outcomes=${outcomes}, periods=${periods})`,
     );
     return { proxies, leaderRuns, outcomes, periods };
+  }
+
+  async rebuildPipelineStep(stepId: MarketRebuildPipelineStep): Promise<number> {
+    await this.verifyRebuildSchema();
+
+    switch (stepId) {
+      case '9a':
+        return this.runRebuildStep('proxy snapshots', () =>
+          this.rebuildProxySnapshots(),
+        );
+      case '9b':
+        return this.runRebuildStep('leader runs', () =>
+          this.rebuildLeaderRuns(),
+        );
+      case '9c':
+        return this.runRebuildStep('setup outcomes', () =>
+          this.rebuildSetupOutcomes(),
+        );
+      case '9d':
+        return this.runRebuildStep('regime periods', () =>
+          this.rebuildRegimePeriods(),
+        );
+    }
   }
 
   async rebuildProxySnapshots(): Promise<number> {
@@ -191,73 +219,82 @@ export class MarketRegimeService {
       return 0;
     }
 
-    const stockIds = stocks.map((stock) => stock.id);
-    const [allStages, allBars] = await Promise.all([
-      this.prisma.stockStage.findMany({
-        where: { stockId: { in: stockIds } },
-        orderBy: [{ stockId: 'asc' }, { date: 'asc' }],
-      }),
-      this.prisma.stockDaily.findMany({
-        where: { stockId: { in: stockIds } },
-        orderBy: [{ stockId: 'asc' }, { date: 'asc' }],
-        select: { stockId: true, date: true, close: true, high: true },
-      }),
-    ]);
+    let totalRows = 0;
+    for (let i = 0; i < stocks.length; i += LEADER_RUN_STOCK_CHUNK_SIZE) {
+      const stockChunk = stocks.slice(i, i + LEADER_RUN_STOCK_CHUNK_SIZE);
+      const stockIds = stockChunk.map((stock) => stock.id);
+      const [allStages, allBars] = await Promise.all([
+        this.prisma.stockStage.findMany({
+          where: { stockId: { in: stockIds } },
+          orderBy: [{ stockId: 'asc' }, { date: 'asc' }],
+        }),
+        this.prisma.stockDaily.findMany({
+          where: { stockId: { in: stockIds } },
+          orderBy: [{ stockId: 'asc' }, { date: 'asc' }],
+          select: { stockId: true, date: true, close: true, high: true },
+        }),
+      ]);
 
-    const stagesByStock = this.groupBy(allStages, (item) => item.stockId);
-    const barsByStock = this.groupBy(allBars, (item) => item.stockId);
-    const rows: Prisma.LeaderRunCreateManyInput[] = [];
+      const stagesByStock = this.groupBy(allStages, (item) => item.stockId);
+      const barsByStock = this.groupBy(allBars, (item) => item.stockId);
+      const rows: Prisma.LeaderRunCreateManyInput[] = [];
 
-    for (const stock of stocks) {
-      const stages = stagesByStock.get(stock.id) ?? [];
-      const bars = barsByStock.get(stock.id) ?? [];
+      for (const stock of stockChunk) {
+        const stages = stagesByStock.get(stock.id) ?? [];
+        const bars = barsByStock.get(stock.id) ?? [];
 
-      if (stages.length === 0 || bars.length === 0) continue;
+        if (stages.length === 0 || bars.length === 0) continue;
 
-      const runs = extractLeaderRunsFromSeries(
-        stages.map((stage) => ({
-          date: stage.date,
-          stage: stage.stage,
-        })),
-        bars.map((bar) => ({
-          date: bar.date,
-          close: Number(bar.close),
-          high: Number(bar.high),
-        })),
+        const runs = extractLeaderRunsFromSeries(
+          stages.map((stage) => ({
+            date: stage.date,
+            stage: stage.stage,
+          })),
+          bars.map((bar) => ({
+            date: bar.date,
+            close: Number(bar.close),
+            high: Number(bar.high),
+          })),
+        );
+
+        for (const run of runs) {
+          rows.push({
+            stockId: stock.id,
+            stage2StartDate: run.stage2StartDate,
+            stage2EndDate: run.stage2EndDate,
+            entryPrice: run.entryPrice,
+            peakPrice: run.peakPrice,
+            peakGainPct: run.peakGainPct,
+            isQualified: run.isQualified,
+          });
+        }
+      }
+
+      if (rows.length > 0) {
+        await this.createManyInChunks(rows, (data) =>
+          this.prisma.leaderRun.createMany({ data }),
+        );
+        totalRows += rows.length;
+      }
+
+      this.logger.log(
+        `[market-rebuild] leader runs chunk ${Math.min(i + stockChunk.length, stocks.length)}/${stocks.length}, rows=${totalRows}`,
       );
-
-      rows.push(
-        ...runs.map((run) => ({
-          stockId: stock.id,
-          stage2StartDate: run.stage2StartDate,
-          stage2EndDate: run.stage2EndDate,
-          entryPrice: run.entryPrice,
-          peakPrice: run.peakPrice,
-          peakGainPct: run.peakGainPct,
-          isQualified: run.isQualified,
-        })),
-      );
+      this.logMemory('[market-rebuild] leader runs');
     }
 
-    if (rows.length > 0) {
-      await this.createManyInChunks(rows, (data) =>
-        this.prisma.leaderRun.createMany({ data }),
-      );
-    }
-
-    return rows.length;
+    return totalRows;
   }
 
   async rebuildSetupOutcomes(): Promise<number> {
     await this.prisma.setupOutcome.deleteMany();
-
-    const outcomeRows: SetupOutcomeRow[] = [];
 
     const liveSetups = await this.prisma.setup.findMany({
       where: { timeframe: 'DAILY' },
       include: { stock: { select: { id: true } } },
     });
 
+    const liveRows: SetupOutcomeRow[] = [];
     for (const setup of liveSetups) {
       const family = getSetupFamily(setup.type);
       if (!family) continue;
@@ -267,7 +304,7 @@ export class MarketRegimeService {
       const finalR =
         isWin === true ? Number(setup.riskReward ?? 1) : isWin === false ? -1 : null;
 
-      outcomeRows.push({
+      liveRows.push({
           setupId: setup.id,
           stockId: setup.stockId,
           source: SetupOutcomeSource.LIVE,
@@ -284,11 +321,27 @@ export class MarketRegimeService {
           maxR: finalR ?? undefined,
           finalR: finalR ?? undefined,
           isWin,
-          metadata: {
+          metadata: this.toInputJson({
             setupState: setup.state,
             stateReason,
-          },
+            rTargets: {},
+            stopHit: {
+              hit: isWin === false,
+              hitDate:
+                isWin === false && setup.lastStateAt
+                  ? setup.lastStateAt.toISOString()
+                  : null,
+              daysToHit: null,
+            },
+          }),
       });
+    }
+
+    let outcomeCount = liveRows.length;
+    if (liveRows.length > 0) {
+      await this.createManyInChunks(liveRows, (data) =>
+        this.prisma.setupOutcome.createMany({ data }),
+      );
     }
 
     const stocks = await this.prisma.stock.findMany({
@@ -296,62 +349,35 @@ export class MarketRegimeService {
       select: { ticker: true, id: true },
     });
 
-    const simulatedRows = await this.runWithConcurrency(stocks, 4, async (stock) => {
-      try {
-        const simulated = await this.orchestrator.simulateDetection(stock.ticker);
-        const rows: SetupOutcomeRow[] = [];
-        for (const setup of simulated) {
-          const family = getSetupFamily(setup.type);
-          if (!family) continue;
-
-          const effectiveDate = this.asDateOnly(new Date(setup.exitDate ?? setup.detectedAt));
-          const isWin =
-            setup.finalR != null
-              ? setup.finalR > 0
-              : setup.maxR != null
-                ? setup.maxR >= 2
-                : null;
-
-          rows.push({
-            stockId: stock.id,
-            source: SetupOutcomeSource.SIMULATED,
-            family,
-            setupType: setup.type,
-            direction: setup.direction as Direction,
-            effectiveDate,
-            detectedAt: new Date(setup.detectedAt),
-            entryDate: setup.entryDate ? new Date(setup.entryDate) : null,
-            exitDate: setup.exitDate ? new Date(setup.exitDate) : null,
-            actualStopPrice: setup.actualStopPrice ?? undefined,
-            entryPrice: setup.entryPrice ?? undefined,
-            exitPrice: setup.exitPrice ?? undefined,
-            maxR: setup.maxR ?? undefined,
-            finalR: setup.finalR ?? undefined,
-            isWin,
-            metadata: {
-              state: setup.state,
-              holdingDays: setup.holdingDays,
-            },
-          });
-        }
-        return rows;
-      } catch (error) {
-        this.logger.warn(
-          `Simulation outcome rebuild failed for ${stock.ticker}: ${String(error)}`,
-        );
-        return [];
-      }
-    });
-
-    outcomeRows.push(...simulatedRows.flat());
-
-    if (outcomeRows.length > 0) {
-      await this.createManyInChunks(outcomeRows, (data) =>
-        this.prisma.setupOutcome.createMany({ data }),
+    for (let i = 0; i < stocks.length; i += SETUP_OUTCOME_STOCK_CHUNK_SIZE) {
+      const stockChunk = stocks.slice(i, i + SETUP_OUTCOME_STOCK_CHUNK_SIZE);
+      const simulatedRows = await this.runWithConcurrency(
+        stockChunk,
+        SETUP_OUTCOME_CONCURRENCY,
+        (stock) => this.buildSimulatedOutcomeRows(stock),
       );
+
+      const chunkRows: SetupOutcomeRow[] = [];
+      for (const rows of simulatedRows) {
+        for (const row of rows) {
+          chunkRows.push(row);
+        }
+      }
+
+      if (chunkRows.length > 0) {
+        await this.createManyInChunks(chunkRows, (data) =>
+          this.prisma.setupOutcome.createMany({ data }),
+        );
+        outcomeCount += chunkRows.length;
+      }
+
+      this.logger.log(
+        `[market-rebuild] setup outcomes chunk ${Math.min(i + stockChunk.length, stocks.length)}/${stocks.length}, rows=${outcomeCount}`,
+      );
+      this.logMemory('[market-rebuild] setup outcomes');
     }
 
-    return outcomeRows.length;
+    return outcomeCount;
   }
 
   async rebuildRegimePeriods(): Promise<number> {
@@ -528,12 +554,12 @@ export class MarketRegimeService {
           continue;
         }
 
-        snapshotRows.push(
-          ...payload.snapshots.map((snapshot) => ({
+        for (const snapshot of payload.snapshots) {
+          snapshotRows.push({
             marketRegimePeriodId: periodId,
             ...snapshot,
-          })),
-        );
+          });
+        }
       }
 
       if (snapshotRows.length > 0) {
@@ -1026,6 +1052,67 @@ export class MarketRegimeService {
     return typeof value === 'number' && Number.isFinite(value)
       ? value
       : Number(value ?? 0) || 0;
+  }
+
+  private async buildSimulatedOutcomeRows(stock: {
+    id: string;
+    ticker: string;
+  }): Promise<SetupOutcomeRow[]> {
+    try {
+      const simulated = await this.orchestrator.simulateDetection(stock.ticker);
+      const rows: SetupOutcomeRow[] = [];
+      for (const setup of simulated) {
+        const family = getSetupFamily(setup.type);
+        if (!family) continue;
+
+        const effectiveDate = this.asDateOnly(
+          new Date(setup.exitDate ?? setup.detectedAt),
+        );
+        const isWin =
+          setup.finalR != null
+            ? setup.finalR > 0
+            : setup.maxR != null
+              ? setup.maxR >= 2
+              : null;
+
+        rows.push({
+          stockId: stock.id,
+          source: SetupOutcomeSource.SIMULATED,
+          family,
+          setupType: setup.type,
+          direction: setup.direction as Direction,
+          effectiveDate,
+          detectedAt: new Date(setup.detectedAt),
+          entryDate: setup.entryDate ? new Date(setup.entryDate) : null,
+          exitDate: setup.exitDate ? new Date(setup.exitDate) : null,
+          actualStopPrice: setup.actualStopPrice ?? undefined,
+          entryPrice: setup.entryPrice ?? undefined,
+          exitPrice: setup.exitPrice ?? undefined,
+          maxR: setup.maxR ?? undefined,
+          finalR: setup.finalR ?? undefined,
+          isWin,
+          metadata: this.toInputJson({
+            state: setup.state,
+            holdingDays: setup.holdingDays,
+            rTargets: setup.rTargets,
+            stopHit: setup.stopHit,
+          }),
+        });
+      }
+      return rows;
+    } catch (error) {
+      this.logger.warn(
+        `Simulation outcome rebuild failed for ${stock.ticker}: ${String(error)}`,
+      );
+      return [];
+    }
+  }
+
+  private logMemory(label: string): void {
+    const usage = process.memoryUsage();
+    this.logger.log(
+      `${label} memory rss=${Math.round(usage.rss / 1024 / 1024)}MB heapUsed=${Math.round(usage.heapUsed / 1024 / 1024)}MB heapTotal=${Math.round(usage.heapTotal / 1024 / 1024)}MB`,
+    );
   }
 
   private isSetupFamily(value: unknown): value is SetupFamily {

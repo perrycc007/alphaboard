@@ -105,9 +105,56 @@ export class BackfillService {
       `Backfilling ${ordered.length} stocks (${tasks.filter((s) => s.isCurated).length} curated first)`,
     );
 
+    return this.runTasks(ordered, today);
+  }
+
+  /**
+   * Sync only the given stocks up to the last trading day. Used by the
+   * normal-day focus update so the whole universe is not refetched.
+   */
+  async syncStocksByIds(
+    stockIds: string[],
+  ): Promise<{ synced: number; failed: number }> {
+    if (stockIds.length === 0) return { synced: 0, failed: 0 };
+
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    twoYearsAgo.setUTCHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const lastTradingDay = getLastTradingDay();
+
+    const stocks = await this.prisma.stock.findMany({
+      where: { id: { in: stockIds }, isActive: true },
+      select: { id: true, ticker: true, isCurated: true, lastSyncDate: true },
+    });
+
+    const tasks: StockSyncTask[] = stocks
+      .filter((s) => !s.lastSyncDate || s.lastSyncDate < lastTradingDay)
+      .map((s) => ({
+        stockId: s.id,
+        ticker: s.ticker,
+        isCurated: s.isCurated,
+        from: s.lastSyncDate ? addDays(s.lastSyncDate, 1) : twoYearsAgo,
+      }));
+
+    if (tasks.length === 0) {
+      this.logger.log('Focus-list stocks already up to date');
+      return { synced: 0, failed: 0 };
+    }
+
+    this.logger.log(`Syncing ${tasks.length} focus-list stocks`);
+    return this.runTasks(tasks, today);
+  }
+
+  /** Run sync tasks in concurrency-limited batches with rate limiting. */
+  private async runTasks(
+    tasks: StockSyncTask[],
+    today: Date,
+  ): Promise<{ synced: number; failed: number }> {
     let synced = 0;
     let failed = 0;
-    const batches = chunk(ordered, 5);
+    const batches = chunk(tasks, 5);
 
     for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
       const batch = batches[batchIdx];
@@ -125,7 +172,7 @@ export class BackfillService {
 
       if ((batchIdx + 1) % 50 === 0) {
         this.logger.log(
-          `Backfill progress: ${synced + failed}/${ordered.length} (${synced} synced, ${failed} failed)`,
+          `Backfill progress: ${synced + failed}/${tasks.length} (${synced} synced, ${failed} failed)`,
         );
       }
 
@@ -136,7 +183,7 @@ export class BackfillService {
     }
 
     this.logger.log(
-      `Backfill complete: ${synced} synced, ${failed} failed out of ${ordered.length}`,
+      `Backfill complete: ${synced} synced, ${failed} failed out of ${tasks.length}`,
     );
     return { synced, failed };
   }

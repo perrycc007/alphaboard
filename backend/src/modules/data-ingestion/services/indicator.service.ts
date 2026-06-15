@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 interface IndicatorRow {
@@ -167,21 +168,45 @@ export class IndicatorService {
       }
     }
 
-    // Batch update in chunks
-    const BATCH_SIZE = 500;
+    // Bulk-update in chunks: one `UPDATE ... FROM (VALUES ...)` statement per
+    // chunk instead of one statement per bar. A freshly backfilled stock has
+    // ~500 bars to fill; the per-row approach issued ~500 round-trips per stock
+    // (millions across the universe) and dominated full-scan time.
+    const BATCH_SIZE = 1000;
     for (let i = 0; i < updates.length; i += BATCH_SIZE) {
       const batch = updates.slice(i, i + BATCH_SIZE);
-      await this.prisma.$transaction(
-        batch.map((u) =>
-          this.prisma.stockDaily.update({
-            where: { id: u.id },
-            data: u.data,
-          }),
-        ),
-      );
+      await this.bulkUpdateIndicators(batch);
     }
 
     return updates.length;
+  }
+
+  /** Apply a batch of per-bar indicator values in a single SQL statement. */
+  private async bulkUpdateIndicators(
+    batch: { id: string; data: Record<string, number | null> }[],
+  ): Promise<void> {
+    if (batch.length === 0) return;
+
+    const rows = batch.map(
+      (u) =>
+        Prisma.sql`(${u.id}::text, ${u.data.sma20}::decimal, ${u.data.sma50}::decimal, ${u.data.sma150}::decimal, ${u.data.sma200}::decimal, ${u.data.ema6}::decimal, ${u.data.ema20}::decimal, ${u.data.atr14}::decimal)`,
+    );
+
+    await this.prisma.$executeRaw(
+      Prisma.sql`
+        UPDATE "StockDaily" AS s SET
+          "sma20" = v.sma20,
+          "sma50" = v.sma50,
+          "sma150" = v.sma150,
+          "sma200" = v.sma200,
+          "ema6" = v.ema6,
+          "ema20" = v.ema20,
+          "atr14" = v.atr14
+        FROM (VALUES ${Prisma.join(rows)})
+          AS v(id, sma20, sma50, sma150, sma200, ema6, ema20, atr14)
+        WHERE s.id = v.id
+      `,
+    );
   }
 
   /**

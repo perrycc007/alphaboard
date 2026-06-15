@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alphaboard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: alphaboard
+      POSTGRES_USER: alphaboard
+      POSTGRES_PASSWORD: alphaboard
+    ports:
+      - "7777:5432"
+    volumes:
+      - alphaboard-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alphaboard -d alphaboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  alphaboard-postgres-data:
