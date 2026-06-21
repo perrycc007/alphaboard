@@ -1,10 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
+import { Prisma, ScanRunStatus } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SetupOrchestratorService } from '../../setup/setup-orchestrator.service';
 import { Bar } from '../../../common/types';
 import { MarketRegimeService } from '../../market/market-regime.service';
+import {
+  classifySetupAuditInput,
+  SetupAuditInputSnapshot,
+  SetupAuditService,
+} from '../../setup/setup-audit.service';
+
+const SETUP_SCAN_MIN_VOLUME = 200_000;
+const SETUP_SCAN_MIN_PRICE = 5.0;
 
 /**
  * Setup scan job: runs after stage recalculation.
@@ -24,21 +32,27 @@ export class SetupScanJob {
     private readonly prisma: PrismaService,
     private readonly orchestrator: SetupOrchestratorService,
     private readonly marketRegimeService: MarketRegimeService,
+    private readonly setupAuditService: SetupAuditService,
   ) {}
 
   @Cron('0 18 * * 1-5') // 6:00 PM EST, after stage recalc
-  async run(): Promise<void> {
+  async run(scanRunId?: string | null): Promise<void> {
     if (this.running) {
       throw new Error('Setup scan is already running');
     }
 
     this.running = true;
+    const auditRun = await this.setupAuditService.createRun(scanRunId);
     try {
       this.logger.log('Starting setup scan...');
       this.logMemory('Setup scan start');
       await this.marketRegimeService.rebuildLeaderRuns();
 
-      const candidates = await this.getSetupCandidates();
+      const inputs = await this.getSetupScanInputs();
+      await this.setupAuditService.seedItems(auditRun.id, inputs);
+      const candidates = inputs
+        .filter((input) => classifySetupAuditInput(input).isCandidate)
+        .map((input) => ({ id: input.stockId, ticker: input.ticker }));
       this.logger.log(`Found ${candidates.length} setup candidates after filtering`);
 
       for (let i = 0; i < candidates.length; i++) {
@@ -50,7 +64,14 @@ export class SetupScanJob {
             take: 252,
           });
 
-          if (dailyBars.length < 50) continue;
+          if (dailyBars.length < 50) {
+            await this.setupAuditService.markInsufficientData(
+              auditRun.id,
+              stock.id,
+              dailyBars.length,
+            );
+            continue;
+          }
 
           const bars: Bar[] = dailyBars.reverse().map((b) => ({
             open: Number(b.open),
@@ -61,9 +82,19 @@ export class SetupScanJob {
             date: b.date,
           }));
 
-          await this.orchestrator.runDailyDetection(stock.id, bars);
+          const detectionResult = await this.orchestrator.runDailyDetection(stock.id, bars);
+          await this.setupAuditService.markDetectionResult(
+            auditRun.id,
+            stock.id,
+            detectionResult,
+          );
         } catch (err) {
           this.logger.error(`Failed setup scan for ${stock.ticker}`, err);
+          await this.setupAuditService.markScanError(
+            auditRun.id,
+            stock.id,
+            err instanceof Error ? err.message : String(err),
+          );
         }
 
         if ((i + 1) % 100 === 0) {
@@ -74,6 +105,19 @@ export class SetupScanJob {
 
       this.logger.log('Setup scan complete');
       this.logMemory('Setup scan complete');
+      await this.setupAuditService.completeRun(
+        auditRun.id,
+        ScanRunStatus.COMPLETED,
+        auditRun.startedAt,
+      );
+    } catch (err) {
+      await this.setupAuditService.completeRun(
+        auditRun.id,
+        ScanRunStatus.FAILED,
+        auditRun.startedAt,
+        err instanceof Error ? err.message : String(err),
+      );
+      throw err;
     } finally {
       this.running = false;
     }
@@ -88,17 +132,28 @@ export class SetupScanJob {
    * Filters: volume >= 200K, price >= $5, and one of:
    * Stage 2, Past Leader, Commodity/Mining sector, or Biotech/Pharma industry.
    */
-  private async getSetupCandidates(): Promise<
-    { id: string; ticker: string }[]
-  > {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Get all active stocks with sufficient volume
-    const candidates = await this.prisma.stock.findMany({
+  private async getSetupScanInputs(): Promise<SetupAuditInputSnapshot[]> {
+    const [activeStocks, eligibleStocks] = await Promise.all([
+      this.prisma.stock.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          ticker: true,
+          name: true,
+          sector: true,
+          industry: true,
+          avgVolume: true,
+          stages: {
+            orderBy: { date: 'desc' },
+            take: 1,
+            select: { stage: true, category: true },
+          },
+        },
+      }),
+      this.prisma.stock.findMany({
       where: {
         isActive: true,
-        avgVolume: { gte: 200_000 },
+        avgVolume: { gte: SETUP_SCAN_MIN_VOLUME },
         OR: [
           // Stage 2 stocks (most recent stage record)
           {
@@ -124,22 +179,31 @@ export class SetupScanJob {
         ],
       },
       select: { id: true, ticker: true },
-    });
+      }),
+    ]);
 
-    // Additional price filter: check latest bar close >= $5 without one query
-    // per candidate.
+    const eligibleIds = new Set(eligibleStocks.map((stock) => stock.id));
     const latestCloseByStock = await this.getLatestClosesByStock(
-      candidates.map((stock) => stock.id),
+      activeStocks.map((stock) => stock.id),
     );
-    const filtered: { id: string; ticker: string }[] = [];
-    for (const stock of candidates) {
-      const latestClose = latestCloseByStock.get(stock.id);
-      if (latestClose != null && latestClose >= 5.0) {
-        filtered.push(stock);
-      }
-    }
 
-    return filtered;
+    return activeStocks.map((stock) => {
+      const latestStage = stock.stages[0];
+      return {
+        stockId: stock.id,
+        ticker: stock.ticker,
+        name: stock.name,
+        sector: stock.sector,
+        industry: stock.industry,
+        stage: latestStage?.stage ?? null,
+        category: latestStage?.category ?? null,
+        latestClose: latestCloseByStock.get(stock.id) ?? null,
+        avgVolume: stock.avgVolume,
+        eligibleByScanFilter: eligibleIds.has(stock.id),
+        minPrice: SETUP_SCAN_MIN_PRICE,
+        minAvgVolume: SETUP_SCAN_MIN_VOLUME,
+      };
+    });
   }
 
   private async getLatestClosesByStock(

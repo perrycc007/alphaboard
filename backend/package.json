@@ -23,6 +23,8 @@
     "setup-review:compare": "node ../scripts/setup-review-compare.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:validate-seed": "ts-node prisma/validate-seed-data.ts",
+    "prisma:bootstrap-relationships": "ts-node prisma/bootstrap-relationship-import.ts",
     "prisma:seed": "ts-node prisma/seed.ts",
     "db:reset": "prisma migrate reset"
   },

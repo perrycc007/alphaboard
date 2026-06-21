@@ -16,6 +16,8 @@ import { StrategyReportService } from './strategy-report.service';
 import { OpportunityHypothesisService } from './opportunity-hypothesis.service';
 import { TechnicalReviewService } from './technical-review.service';
 import { StrategyEffectivenessService } from './strategy-effectiveness.service';
+import { AlmanacKnowledgeService } from './almanac-knowledge.service';
+import { RelationshipGraphService } from './relationship-graph.service';
 import { ModelReviewService } from './model/model-review.service';
 import { MockModelProvider } from './model/mock-model.provider';
 import { QwenModelProvider } from './model/qwen-model.provider';
@@ -53,6 +55,8 @@ import {
     OpportunityHypothesisService,
     TechnicalReviewService,
     StrategyEffectivenessService,
+    AlmanacKnowledgeService,
+    RelationshipGraphService,
     ModelReviewService,
     {
       provide: MODEL_PROVIDER,
@@ -87,6 +91,8 @@ import {
     OpportunityHypothesisService,
     TechnicalReviewService,
     StrategyEffectivenessService,
+    AlmanacKnowledgeService,
+    RelationshipGraphService,
     ModelReviewService,
   ],
 })

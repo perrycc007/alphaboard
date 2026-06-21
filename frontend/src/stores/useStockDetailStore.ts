@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import type { ApiStockDaily, ApiBarEvidence, ApiStageHistory } from '@/types'
+import type { ApiStockDaily, ApiBarEvidence, ApiStageHistory, ApiActiveSwingLevel } from '@/types'
 import type { ApiStockWithStage } from '@/lib/api/stocks'
-import { fetchStock, fetchStockDaily, fetchStockStageHistory } from '@/lib/api/stocks'
+import { fetchStock, fetchStockActiveLevels, fetchStockDaily, fetchStockStageHistory } from '@/lib/api/stocks'
 import { fetchIndexDaily } from '@/lib/api/market'
 import { fetchStockEvidence } from '@/lib/api/setups'
 
@@ -10,6 +10,7 @@ interface StockDetailStore {
   stock: ApiStockWithStage | null
   dailyBars: ApiStockDaily[]
   spyBars: ApiStockDaily[]
+  activeLevels: ApiActiveSwingLevel[]
   evidence: ApiBarEvidence[]
   stageHistory: ApiStageHistory[]
   loading: boolean
@@ -25,6 +26,7 @@ const INITIAL_STATE = {
   stock: null,
   dailyBars: [],
   spyBars: [],
+  activeLevels: [],
   evidence: [],
   stageHistory: [],
   loading: false,
@@ -43,9 +45,10 @@ export const useStockDetailStore = create<StockDetailStore>((set, get) => ({
     try {
       // Fetch all data in parallel -- avoids waterfall (async-parallel rule)
       // SPY is an index entity, not a stock -- fetch from index endpoint
-      const [stock, dailyBars, spyIndexBars, evidence, stageHistory] = await Promise.all([
+      const [stock, dailyBars, activeLevels, spyIndexBars, evidence, stageHistory] = await Promise.all([
         fetchStock(ticker),
         fetchStockDaily(ticker, 250),
+        fetchStockActiveLevels(ticker, 250),
         fetchIndexDaily('SPY', '250'),
         fetchStockEvidence(ticker),
         fetchStockStageHistory(ticker),
@@ -73,7 +76,7 @@ export const useStockDetailStore = create<StockDetailStore>((set, get) => ({
 
       // Only update if the ticker hasn't changed while fetching
       if (get().ticker === ticker) {
-        set({ stock, dailyBars, spyBars, evidence, stageHistory, loading: false })
+        set({ stock, dailyBars, activeLevels, spyBars, evidence, stageHistory, loading: false })
       }
     } catch (err) {
       if (get().ticker === ticker) {

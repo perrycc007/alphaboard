@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { LoadingSkeleton } from '@/components/shared'
 import { formatPrice } from '@/lib/utils'
-import type { ApiStockDaily, ApiSetup } from '@/types'
+import type { ApiStockDaily, ApiSetup, ApiActiveSwingLevel } from '@/types'
 
 const LazyStockChartInner = lazy(() => import('./StockChartInner'))
 
@@ -11,6 +11,7 @@ export interface StockChartProps {
   dailyBars: ApiStockDaily[]
   spyBars?: ApiStockDaily[]
   setups?: ApiSetup[]
+  activeLevels?: ApiActiveSwingLevel[]
   height?: number
   showMAs?: boolean
   showSpy?: boolean
@@ -106,6 +107,7 @@ export function StockChart({
   dailyBars,
   spyBars,
   setups,
+  activeLevels,
   height = 360,
   showMAs = true,
   showSpy = false,
@@ -157,6 +159,7 @@ export function StockChart({
             dailyBars={dailyBars}
             spyBars={spyBars}
             setups={setups}
+            activeLevels={activeLevels}
             height={height}
             showMAs={showMAs}
             showSpy={showSpy}

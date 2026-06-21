@@ -10,16 +10,26 @@ import {
   BadRequestException,
   Inject,
   NotFoundException,
+  Res,
 } from '@nestjs/common';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { existsSync } from 'fs';
+import * as path from 'path';
+import type { Response } from 'express';
 import {
+  AlmanacSetupPhase,
+  AlmanacTradeLabel,
   CatalystStatus,
   Direction,
   MarketScopeType,
   ModelReviewType,
+  RelationshipType,
   ScanRun,
   SetupBias,
+  SetupScanAuditStatus,
+  SetupScanFocusStatus,
   SetupType,
+  SupplyChainLayer,
 } from '@prisma/client';
 import { FullScanService } from './full-scan.service';
 import { ScanRunService } from './scan-run.service';
@@ -43,11 +53,18 @@ import type { OpportunityHypothesisInput } from './opportunity-hypothesis.servic
 import { TechnicalReviewService } from './technical-review.service';
 import type { TechnicalReviewInput } from './technical-review.service';
 import { StrategyEffectivenessService } from './strategy-effectiveness.service';
+import { AlmanacKnowledgeService } from './almanac-knowledge.service';
+import type {
+  AlmanacFilters,
+  AlmanacImportOptions,
+} from './almanac-knowledge.service';
+import { RelationshipGraphService } from './relationship-graph.service';
 import { ModelReviewService } from './model/model-review.service';
 import {
   MODEL_PROVIDER,
 } from './model/model-provider.interface';
 import type { ModelProvider } from './model/model-provider.interface';
+import { SetupAuditService } from '../setup/setup-audit.service';
 
 interface ManualAddBody {
   stockId: string;
@@ -96,7 +113,10 @@ export class ResearchController {
     private readonly opportunityHypothesisService: OpportunityHypothesisService,
     private readonly technicalReviewService: TechnicalReviewService,
     private readonly strategyEffectivenessService: StrategyEffectivenessService,
+    private readonly almanacKnowledgeService: AlmanacKnowledgeService,
+    private readonly relationshipGraphService: RelationshipGraphService,
     private readonly modelReviewService: ModelReviewService,
+    private readonly setupAuditService: SetupAuditService,
     @Inject(MODEL_PROVIDER) private readonly modelProvider: ModelProvider,
   ) {}
 
@@ -151,6 +171,112 @@ export class ResearchController {
     const run = await this.scanRunService.get(id);
     if (!run) throw new NotFoundException(`Scan run ${id} not found`);
     return run;
+  }
+
+  @Get('setup-audit/runs')
+  listSetupAuditRuns(@Query('limit') limit?: string) {
+    return this.setupAuditService.listRuns(limit ? Number(limit) : undefined);
+  }
+
+  @Get('setup-audit/runs/:id/summary')
+  getSetupAuditSummary(@Param('id') id: string) {
+    return this.setupAuditService.getSummary(id);
+  }
+
+  @Get('setup-audit/runs/:id/items')
+  getSetupAuditItems(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('scanStatus') scanStatus?: SetupScanAuditStatus,
+    @Query('focusStatus') focusStatus?: SetupScanFocusStatus,
+    @Query('setupType') setupType?: string,
+    @Query('ticker') ticker?: string,
+    @Query('q') q?: string,
+  ) {
+    return this.setupAuditService.listItems(id, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      scanStatus,
+      focusStatus,
+      setupType,
+      ticker,
+      q,
+    });
+  }
+
+  @Get('setup-audit/items/:itemId/model-reviews')
+  getSetupAuditModelReviews(@Param('itemId') itemId: string) {
+    return this.setupAuditService.getModelReviews(itemId);
+  }
+
+  // ── Gilmo Almanac knowledge base ──
+
+  @Post('almanac/import')
+  @HttpCode(HttpStatus.ACCEPTED)
+  importAlmanac(@Body() body: AlmanacImportOptions) {
+    this.almanacKnowledgeService
+      .importLibrary(body ?? {})
+      .catch(() => undefined);
+    return { message: 'Almanac import started' };
+  }
+
+  @Get('almanac')
+  getAlmanacExplorer(
+    @Query('q') q?: string,
+    @Query('ticker') ticker?: string,
+    @Query('setupTag') setupTag?: string,
+    @Query('catalystTag') catalystTag?: string,
+    @Query('mindsetTag') mindsetTag?: string,
+    @Query('year') year?: string,
+    @Query('quarter') quarter?: string,
+    @Query('label') label?: AlmanacTradeLabel,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const filters: AlmanacFilters = {
+      q,
+      ticker,
+      setupTag,
+      catalystTag,
+      mindsetTag,
+      year: year ? Number(year) : undefined,
+      quarter: quarter ? Number(quarter) : undefined,
+      label,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    };
+    return this.almanacKnowledgeService.getExplorer(filters);
+  }
+
+  @Get('almanac/assets/*')
+  serveAlmanacAsset(
+    @Param() params: Record<string, string>,
+    @Res() res: Response,
+  ) {
+    const wildcardPath = (params as any)[0] || params['0'] || '';
+    const repoRoot = path.resolve(process.cwd(), '..');
+    const artifactRoot = path.resolve(repoRoot, 'artifacts', 'almanac');
+    const resolved = path.resolve(artifactRoot, wildcardPath);
+    if (!resolved.startsWith(artifactRoot) || !existsSync(resolved)) {
+      throw new NotFoundException('Almanac asset not found');
+    }
+    res.sendFile(resolved);
+  }
+
+  @Post('almanac/trade-cases/:id/review')
+  @HttpCode(HttpStatus.OK)
+  reviewAlmanacTradeCase(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      label?: AlmanacTradeLabel;
+      reviewNotes?: string | null;
+      phase?: AlmanacSetupPhase;
+      direction?: Direction | null;
+    },
+  ) {
+    return this.almanacKnowledgeService.updateTradeCase(id, body ?? {});
   }
 
   // ── Universe ──
@@ -241,6 +367,28 @@ export class ResearchController {
     return this.marketConditionService.getHistory(scopeType, scopeKey);
   }
 
+  // ── Relationship graph ──
+
+  /** GET /api/research/relationship-graph -- Supply-chain relationship graph/table data. */
+  @Get('relationship-graph')
+  getRelationshipGraph(
+    @Query('theme') theme?: string,
+    @Query('group') group?: string,
+    @Query('layer') layer?: SupplyChainLayer,
+    @Query('eventCategory') eventCategory?: string,
+    @Query('relationshipType') relationshipType?: RelationshipType,
+    @Query('q') q?: string,
+  ) {
+    return this.relationshipGraphService.getGraph({
+      theme,
+      group,
+      layer,
+      eventCategory,
+      relationshipType,
+      q,
+    });
+  }
+
   // ── Metadata enrichment ──
 
   /** POST /api/research/metadata/enrich -- Enrich tickers missing metadata (mock until key set). */
@@ -273,6 +421,13 @@ export class ResearchController {
   @HttpCode(HttpStatus.OK)
   generateCatalyst(@Param('themeId') themeId: string) {
     return this.catalystService.generateForTheme(themeId);
+  }
+
+  /** POST /api/research/catalysts/:id/verify -- Re-check catalyst against active daily setups. */
+  @Post('catalysts/:id/verify')
+  @HttpCode(HttpStatus.OK)
+  verifyCatalyst(@Param('id') id: string) {
+    return this.catalystService.verify(id);
   }
 
   /** PATCH-like: POST /api/research/catalysts/:id/status -- Update catalyst status. */

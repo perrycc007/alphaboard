@@ -487,12 +487,14 @@ interface SetupPerformanceGroup {
   sampleCount: number;
   stopLossRate: number | null;
   targets: SetupPerformanceTargetSummary[];
+  outcomeDistribution: DistributionBin[];
   maxRDistribution: DistributionBin[];
 }
 
 interface SetupPerformanceSummary {
   windowDays: number;
   sampleCount: number;
+  periods: SetupPerformancePeriodSummary[];
   groups: SetupPerformanceGroup[];
 }
 
@@ -500,6 +502,15 @@ interface DistributionBin {
   label: string;
   count: number;
   pct: number;
+}
+
+interface SetupPerformancePeriodSummary {
+  key: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  sampleCount: number;
+  outcomeDistribution: DistributionBin[];
 }
 
 type RTargetMetadata = Record<
@@ -516,6 +527,7 @@ type SetupOutcomeForAggregation = {
   family: string;
   setupType: string;
   direction: string;
+  effectiveDate: Date;
   maxR: Prisma.Decimal | number | null;
   finalR: Prisma.Decimal | number | null;
   metadata: Prisma.JsonValue | null;
@@ -549,6 +561,7 @@ export function buildSetupPerformanceSummary(
         sampleCount: bucket.length,
         stopLossRate: bucket.length > 0 ? round(stopCount / bucket.length, 3) : null,
         targets: R_TARGETS.map((targetR) => summarizeTarget(bucket, targetR)),
+        outcomeDistribution: buildOutcomeDistribution(bucket),
         maxRDistribution: buildDistribution(maxRValues, [
           { label: '<0R', max: 0 },
           { label: '0-1R', max: 1 },
@@ -564,6 +577,7 @@ export function buildSetupPerformanceSummary(
   return {
     windowDays,
     sampleCount: rows.length,
+    periods: buildPeriodSummaries(rows),
     groups: groupSummaries,
   };
 }
@@ -626,6 +640,79 @@ function didStopOut(row: SetupOutcomeForAggregation): boolean {
   if (stopHit && stopHit.hit === true) return true;
   const finalR = toFiniteNumber(row.finalR);
   return finalR != null && finalR <= -0.95;
+}
+
+function buildOutcomeDistribution(rows: SetupOutcomeForAggregation[]): DistributionBin[] {
+  const counts = [
+    { label: 'Stop', count: 0, pct: 0 },
+    { label: '<2R', count: 0, pct: 0 },
+    { label: '2-3R', count: 0, pct: 0 },
+    { label: '3-4R', count: 0, pct: 0 },
+    { label: '4R+', count: 0, pct: 0 },
+  ];
+
+  for (const row of rows) {
+    const maxR = toFiniteNumber(row.maxR) ?? 0;
+    const stoppedBeforeTakingProfit = didStopOut(row) && maxR < 2;
+    if (stoppedBeforeTakingProfit) {
+      counts[0].count++;
+    } else if (maxR < 2) {
+      counts[1].count++;
+    } else if (maxR < 3) {
+      counts[2].count++;
+    } else if (maxR < 4) {
+      counts[3].count++;
+    } else {
+      counts[4].count++;
+    }
+  }
+
+  return counts.map((bin) => ({
+    ...bin,
+    pct: rows.length > 0 ? round(bin.count / rows.length, 3) : 0,
+  }));
+}
+
+function buildPeriodSummaries(
+  rows: SetupOutcomeForAggregation[],
+): SetupPerformancePeriodSummary[] {
+  const grouped = new Map<string, SetupOutcomeForAggregation[]>();
+  for (const row of rows) {
+    const start = startOfUtcWeek(row.effectiveDate);
+    const key = formatDate(start);
+    const bucket = grouped.get(key) ?? [];
+    bucket.push(row);
+    grouped.set(key, bucket);
+  }
+
+  return Array.from(grouped.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, bucket]) => {
+      const start = new Date(`${key}T00:00:00.000Z`);
+      const end = new Date(start);
+      end.setUTCDate(start.getUTCDate() + 6);
+      return {
+        key,
+        label: key,
+        startDate: key,
+        endDate: formatDate(end),
+        sampleCount: bucket.length,
+        outcomeDistribution: buildOutcomeDistribution(bucket),
+      };
+    });
+}
+
+function startOfUtcWeek(date: Date): Date {
+  const value = new Date(date);
+  value.setUTCHours(0, 0, 0, 0);
+  const day = value.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  value.setUTCDate(value.getUTCDate() + diff);
+  return value;
+}
+
+function formatDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 function buildDistribution(
@@ -1023,6 +1110,7 @@ export class MarketConditionService {
         family: true,
         setupType: true,
         direction: true,
+        effectiveDate: true,
         maxR: true,
         finalR: true,
         metadata: true,
@@ -1035,6 +1123,7 @@ export class MarketConditionService {
           family: row.family,
           setupType: row.setupType,
           direction: row.direction,
+          effectiveDate: row.effectiveDate,
           maxR: row.maxR,
           finalR: row.finalR,
           metadata: row.metadata,

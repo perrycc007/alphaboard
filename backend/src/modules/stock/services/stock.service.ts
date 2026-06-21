@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { Bar } from '../../../common/types';
+import {
+  ActiveSwingLevel,
+  getActiveSwingLevelsFromBars,
+} from './active-swing-levels';
 
 @Injectable()
 export class StockService {
@@ -50,6 +55,29 @@ export class StockService {
       orderBy: { date: 'desc' },
       take: limit,
     });
+  }
+
+  async getActiveLevels(
+    ticker: string,
+    limit = 250,
+  ): Promise<ActiveSwingLevel[]> {
+    const dailyBars = await this.getDailyBars(ticker, limit);
+    const bars: Bar[] = dailyBars
+      .map((bar) => ({
+        open: Number(bar.open),
+        high: Number(bar.high),
+        low: Number(bar.low),
+        close: Number(bar.close),
+        volume: Number(bar.volume),
+        date: bar.date,
+      }))
+      .sort((a, b) => {
+        const aTime = a.date?.getTime() ?? 0;
+        const bTime = b.date?.getTime() ?? 0;
+        return aTime - bTime;
+      });
+
+    return getActiveSwingLevelsFromBars(bars, 2);
   }
 
   async getIntradayBars(ticker: string) {

@@ -1,5 +1,5 @@
 import { api } from '@/lib/api-client'
-import type { ApiStock, ApiStockDaily, ApiStageHistory, ApiLeader } from '@/types'
+import type { ApiStock, ApiStockDaily, ApiStageHistory, ApiLeader, ApiActiveSwingLevel } from '@/types'
 
 /** Stock with latest stage */
 export interface ApiStockWithStage extends ApiStock {
@@ -12,6 +12,10 @@ export function fetchStock(ticker: string): Promise<ApiStockWithStage> {
 
 export function fetchStockDaily(ticker: string, limit = 252): Promise<ApiStockDaily[]> {
   return api.get<ApiStockDaily[]>(`/stocks/${ticker}/daily?limit=${limit}`)
+}
+
+export function fetchStockActiveLevels(ticker: string, limit = 250): Promise<ApiActiveSwingLevel[]> {
+  return api.get<ApiActiveSwingLevel[]>(`/stocks/${ticker}/active-levels?limit=${limit}`)
 }
 
 export function fetchStockStageHistory(ticker: string): Promise<ApiStageHistory[]> {

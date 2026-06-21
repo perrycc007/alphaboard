@@ -80,6 +80,17 @@ export class StockController {
     );
   }
 
+  @Get(':ticker/active-levels')
+  getActiveLevels(
+    @Param('ticker') ticker: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.stockService.getActiveLevels(
+      ticker,
+      limit ? parseInt(limit, 10) : undefined,
+    );
+  }
+
   @Get(':ticker/intraday')
   getIntradayBars(@Param('ticker') ticker: string) {
     return this.stockService.getIntradayBars(ticker);

@@ -18,6 +18,7 @@ model Stock {
   ticker           String        @unique
   name             String
   briefDescription String?
+  metadataEvidenceJson Json?
   sector           String?
   industry         String?
   exchange         String?
@@ -48,6 +49,7 @@ model Stock {
   focusListItems        FocusListItem[]
   themeMemberships      TickerThemeMembership[]
   recommendations       StrategyRecommendation[]
+  setupScanAuditItems   SetupScanAuditItem[]
 }
 
 enum TradableType {
@@ -194,6 +196,8 @@ model SupplyChainGroup {
   themeId   String
   name      String
   sortOrder Int    @default(0)
+  layer     SupplyChainLayer?
+  evidenceJson Json?
 
   theme            Theme                   @relation(fields: [themeId], references: [id])
   themeStocks      ThemeStock[]
@@ -843,10 +847,74 @@ model ScanRun {
   notes             String?
   createdAt         DateTime      @default(now())
 
-  focusLists FocusList[]
+  focusLists      FocusList[]
+  setupAuditRuns  SetupScanAuditRun[]
 
   @@index([type, startedAt(sort: Desc)])
   @@index([status])
+}
+
+model SetupScanAuditRun {
+  id          String             @id @default(cuid())
+  scanRunId   String?
+  status      ScanRunStatus      @default(RUNNING)
+  startedAt   DateTime           @default(now())
+  finishedAt  DateTime?
+  durationMs  Int?
+  stockCount  Int                @default(0)
+  inputCount  Int                @default(0)
+  candidateCount Int             @default(0)
+  detectedCount  Int             @default(0)
+  focusIncludedCount Int         @default(0)
+  error       String?
+  notes       String?
+  createdAt   DateTime           @default(now())
+
+  scanRun ScanRun?              @relation(fields: [scanRunId], references: [id])
+  items   SetupScanAuditItem[]
+
+  @@index([startedAt(sort: Desc)])
+  @@index([scanRunId])
+  @@index([status])
+}
+
+model SetupScanAuditItem {
+  id              String               @id @default(cuid())
+  auditRunId      String
+  stockId         String
+  ticker          String
+  name            String?
+  sector          String?
+  industry        String?
+  stage           StageEnum?
+  category        StockCategory?
+  latestClose     Decimal?             @db.Decimal(12, 4)
+  avgVolume       BigInt?
+  scanStatus      SetupScanAuditStatus
+  focusStatus     SetupScanFocusStatus @default(NOT_EVALUATED)
+  reasonCodesJson Json
+  reasonText      String?
+  setupTypesText  String?
+  detectedSetupsJson Json?
+  modelReviewIdsJson Json?
+  focusReason     FocusReason?
+  setupBias       SetupBias?
+  priorityScore   Decimal?             @db.Decimal(6, 2)
+  identifiedSetupJson Json?
+  error           String?
+  scannedAt       DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  auditRun SetupScanAuditRun @relation(fields: [auditRunId], references: [id], onDelete: Cascade)
+  stock    Stock             @relation(fields: [stockId], references: [id])
+
+  @@unique([auditRunId, stockId])
+  @@index([auditRunId, scanStatus])
+  @@index([auditRunId, focusStatus])
+  @@index([ticker])
+  @@index([setupTypesText])
+  @@index([stockId])
 }
 
 // ─────────────────────────────────────────────────────────
@@ -946,6 +1014,23 @@ enum ScanRunStatus {
   FAILED
 }
 
+enum SetupScanAuditStatus {
+  INPUT_FILTERED
+  CANDIDATE
+  INSUFFICIENT_DATA
+  NO_SETUP
+  DETECTED
+  DEDUPED
+  SUPPRESSED
+  ERROR
+}
+
+enum SetupScanFocusStatus {
+  NOT_EVALUATED
+  INCLUDED
+  EXCLUDED
+}
+
 model MarketLeaderPeriodSnapshot {
   id                    String               @id @default(cuid())
   marketRegimePeriodId  String
@@ -994,6 +1079,7 @@ model TickerThemeMembership {
   importanceScore Decimal? @db.Decimal(4, 3)
   isPrimaryTheme  Boolean  @default(false)
   source          String?
+  evidenceJson    Json?
   reviewedAt      DateTime @default(now())
 
   stock Stock             @relation(fields: [stockId], references: [id])
@@ -1010,10 +1096,12 @@ model GroupRelationship {
   targetGroupId    String
   relationshipType RelationshipType
   macroSensitivity MacroSensitivity?
+  eventCategory    String?
   strengthScore    Decimal?            @db.Decimal(4, 3)
   lagDaysEstimate  Int?
   source           String?
   notes            String?
+  evidenceJson     Json?
   createdAt        DateTime            @default(now())
 
   sourceGroup SupplyChainGroup @relation("SourceGroup", fields: [sourceGroupId], references: [id])
@@ -1043,6 +1131,18 @@ enum MacroSensitivity {
   INFLATION
 }
 
+enum SupplyChainLayer {
+  INPUT
+  EQUIPMENT
+  COMPONENT
+  INFRASTRUCTURE
+  PLATFORM
+  APPLICATION
+  DISTRIBUTION
+  END_MARKET
+  FINANCING
+}
+
 // ─────────────────────────────────────────────────────────
 // Research Workflow: Catalyst Hypotheses
 // ─────────────────────────────────────────────────────────
@@ -1056,6 +1156,7 @@ model CatalystHypothesis {
   title                    String
   hypothesis               String
   sourceUrlsJson           Json?
+  evidenceJson             Json?
   expectedBeneficiariesJson Json?
   expectedLosersJson       Json?
   technicalVerificationJson Json?
@@ -1185,6 +1286,8 @@ model ModelReview {
   costEstimate  Decimal?        @db.Decimal(12, 6)
   targetType    String?
   targetId      String?
+  prompt        String?
+  payloadJson   Json?
   resultJson    Json?
   createdAt     DateTime        @default(now())
 
@@ -1199,6 +1302,160 @@ enum ModelReviewType {
   GROUP_GALLERY
   CHART_REVIEW
   STRATEGY_REPORT
+}
+
+// ─────────────────────────────────────────────────────────
+// Research Workflow: Gilmo Almanac Knowledge Base
+// ─────────────────────────────────────────────────────────
+
+model AlmanacSource {
+  id                 String   @id @default(cuid())
+  pdfFileName        String   @unique
+  title              String?
+  year               Int?
+  quarter            Int?
+  pageCount          Int
+  embeddedImageCount Int      @default(0)
+  pdfPath            String
+  fileSizeBytes      BigInt?
+  importedAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  reports    AlmanacReport[]
+  charts     AlmanacChart[]
+  tradeCases AlmanacTradeCase[]
+  doctrines  AlmanacDoctrine[]
+
+  @@index([year, quarter])
+}
+
+model AlmanacReport {
+  id                String   @id @default(cuid())
+  sourceId          String
+  reportDate        DateTime @db.Date
+  title             String?
+  pageStart         Int
+  pageEnd           Int
+  marketContext     String?
+  tickersJson       Json?
+  setupTagsJson     Json?
+  catalystTagsJson  Json?
+  mindsetTagsJson   Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  source     AlmanacSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  charts     AlmanacChart[]
+  tradeCases AlmanacTradeCase[]
+  doctrines  AlmanacDoctrine[]
+
+  @@unique([sourceId, reportDate, pageStart])
+  @@index([reportDate])
+  @@index([sourceId, pageStart])
+}
+
+model AlmanacChart {
+  id                 String                  @id @default(cuid())
+  sourceId           String
+  reportId           String?
+  pageNumber         Int
+  imageNumber        Int
+  imagePath          String?
+  chartType          String?
+  width              Int?
+  height             Int?
+  inferredTicker     String?
+  inferredSetupTags  Json?
+  nearbyTextSnippet  String?
+  sourceConfidence   AlmanacSourceConfidence @default(LOW)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  source     AlmanacSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  report     AlmanacReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  tradeCases AlmanacTradeCase[]
+
+  @@unique([sourceId, imageNumber])
+  @@index([sourceId, pageNumber])
+  @@index([inferredTicker])
+}
+
+model AlmanacTradeCase {
+  id                 String                  @id @default(cuid())
+  sourceId           String
+  reportId           String?
+  chartId            String?
+  ticker             String
+  setupTag           String
+  direction          Direction?
+  phase              AlmanacSetupPhase       @default(REFERENCE)
+  keyLevelsJson      Json?
+  catalystTagsJson   Json?
+  mindsetTagsJson    Json?
+  timeframeStart     DateTime?               @db.Date
+  timeframeEnd       DateTime?               @db.Date
+  sourcePage         Int
+  sourceExcerpt      String?
+  sourceConfidence   AlmanacSourceConfidence @default(LOW)
+  label              AlmanacTradeLabel       @default(UNCLEAR)
+  reviewNotes        String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  source AlmanacSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  report AlmanacReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  chart  AlmanacChart?  @relation(fields: [chartId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceId, sourcePage, ticker, setupTag])
+  @@index([ticker])
+  @@index([setupTag])
+  @@index([label])
+  @@index([sourcePage])
+}
+
+model AlmanacDoctrine {
+  id                 String                  @id @default(cuid())
+  sourceId           String?
+  reportId           String?
+  title              String
+  summary            String
+  setupTagsJson      Json?
+  mindsetTagsJson    Json?
+  catalystTagsJson   Json?
+  sourcePage         Int?
+  sourceExcerpt      String?
+  sourceConfidence   AlmanacSourceConfidence @default(MEDIUM)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  source AlmanacSource? @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  report AlmanacReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([title])
+  @@index([sourcePage])
+}
+
+enum AlmanacSourceConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum AlmanacSetupPhase {
+  APPROACHING
+  TOUCHED
+  TRIGGERED
+  FAILED
+  NEGATIVE
+  REFERENCE
+}
+
+enum AlmanacTradeLabel {
+  VALID
+  UNCLEAR
+  FALSE_POSITIVE
+  REFERENCE_ONLY
 }
 
 // ─────────────────────────────────────────────────────────

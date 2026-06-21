@@ -159,6 +159,15 @@ export interface ApiStockDaily {
   atr14: number | null
 }
 
+export interface ApiActiveSwingLevel {
+  type: 'RESISTANCE' | 'SUPPORT'
+  source: 'SWING_HIGH' | 'SWING_LOW'
+  price: number
+  pivotDate: string
+  prominence: number
+  distancePct: number
+}
+
 /** Index daily bar */
 export interface ApiIndexDaily {
   id: string

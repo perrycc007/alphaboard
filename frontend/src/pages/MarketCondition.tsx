@@ -63,6 +63,14 @@ interface EqualWeightStructure {
 interface SetupPerformance {
   windowDays?: number
   sampleCount?: number
+  periods?: Array<{
+    key: string
+    label: string
+    startDate: string
+    endDate: string
+    sampleCount: number
+    outcomeDistribution: DistributionBin[]
+  }>
   groups?: Array<{
     key: string
     family: string
@@ -79,6 +87,7 @@ interface SetupPerformance {
       medianHoldingDays: number | null
       percentGainDistribution: DistributionBin[]
     }>
+    outcomeDistribution: DistributionBin[]
     maxRDistribution: DistributionBin[]
   }>
 }
@@ -299,6 +308,7 @@ function EqualWeightPanel({ equalWeight }: { equalWeight: EqualWeightStructure }
 
 function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPerformance }) {
   const groups = (setupPerformance.groups ?? []).slice(0, 6)
+  const periods = (setupPerformance.periods ?? []).slice(0, 8)
   return (
     <section className="rounded-lg border border-border-default bg-bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -307,6 +317,46 @@ function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPe
           {setupPerformance.sampleCount ?? 0} samples / {setupPerformance.windowDays ?? 60} days
         </span>
       </div>
+      <p className="mt-2 text-xs leading-5 text-text-muted">
+        Target hits are cumulative thresholds. Outcome mix is exclusive, so its buckets add up to 100%.
+      </p>
+
+      {periods.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-xs">
+            <thead className="text-text-muted">
+              <tr className="border-b border-border-muted">
+                <th className="py-2 pr-3 font-medium">Week</th>
+                <th className="py-2 pr-3 font-medium">N</th>
+                <th className="py-2 pr-3 font-medium">Outcome Mix</th>
+                {['Stop', '<2R', '2-3R', '3-4R', '4R+'].map((label) => (
+                  <th key={label} className="py-2 pr-3 font-medium">{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {periods.map((period) => (
+                <tr key={period.key} className="border-b border-border-muted/50">
+                  <td className="py-2 pr-3 font-mono text-text-primary">
+                    {period.startDate}
+                    <span className="text-text-muted"> to {period.endDate}</span>
+                  </td>
+                  <td className="py-2 pr-3 font-mono text-text-secondary">{period.sampleCount}</td>
+                  <td className="py-2 pr-3">
+                    <Distribution bars={period.outcomeDistribution} />
+                  </td>
+                  {period.outcomeDistribution.map((bin) => (
+                    <td key={bin.label} className="py-2 pr-3 font-mono text-text-secondary">
+                      {pct(bin.pct)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[760px] text-left text-xs">
           <thead className="text-text-muted">
@@ -316,9 +366,9 @@ function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPe
               <th className="py-2 pr-3 font-medium">N</th>
               <th className="py-2 pr-3 font-medium">Stop</th>
               {[2, 3, 4].map((target) => (
-                <th key={target} className="py-2 pr-3 font-medium">{target}R Win</th>
+                <th key={target} className="py-2 pr-3 font-medium">{target}R+ Hit</th>
               ))}
-              <th className="py-2 pr-3 font-medium">MaxR Dist</th>
+              <th className="py-2 pr-3 font-medium">Outcome Mix</th>
             </tr>
           </thead>
           <tbody>
@@ -337,7 +387,7 @@ function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPe
                   </td>
                 ))}
                 <td className="py-2 pr-3">
-                  <Distribution bars={group.maxRDistribution} />
+                  <Distribution bars={group.outcomeDistribution ?? group.maxRDistribution} />
                 </td>
               </tr>
             ))}
@@ -355,13 +405,22 @@ function Distribution({ bars }: { bars: DistributionBin[] }) {
       {bars.map((bin) => (
         <div
           key={bin.label}
-          className="bg-accent/70"
+          className={distributionColor(bin.label)}
           style={{ width: `${Math.max(bin.pct * 100, bin.count > 0 ? 4 : 0)}%` }}
-          title={`${bin.label}: ${bin.count}`}
+          title={`${bin.label}: ${bin.count} (${pct(bin.pct)})`}
         />
       ))}
     </div>
   )
+}
+
+function distributionColor(label: string) {
+  if (label === 'Stop' || label === '<0R') return 'bg-bearish/75'
+  if (label === '<2R' || label === '0-1R' || label === '1-2R') return 'bg-warning/75'
+  if (label === '2-3R') return 'bg-accent/70'
+  if (label === '3-4R') return 'bg-bullish/70'
+  if (label === '4R+') return 'bg-bullish'
+  return 'bg-accent/70'
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

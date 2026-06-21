@@ -29,6 +29,7 @@ export interface PipelineRunOptions {
   skipBackfill?: boolean;
   fromStep?: string;
   toStep?: string;
+  scanRunId?: string;
   onStepTiming?: (
     stepId: PipelineStepId,
     status: PipelineStepStatus,
@@ -256,7 +257,7 @@ export class PipelineService implements OnModuleInit {
       // 7. Detect setups (filtered stocks only)
       await this.runSelectedStep(options, selectedSteps, '7', 'Detecting setups', async () => {
         this.logMemory('Before Step 7');
-        await this.setupScanJob.run();
+        await this.setupScanJob.run(options?.scanRunId);
         this.logMemory('After Step 7');
       });
 

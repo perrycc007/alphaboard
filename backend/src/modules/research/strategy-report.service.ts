@@ -15,6 +15,7 @@ import {
   TradableUniverseCandidate,
   UniverseFilterService,
 } from './universe-filter.service';
+import { SetupAuditService } from '../setup/setup-audit.service';
 
 interface ActiveSetupRow {
   stockId: string;
@@ -67,6 +68,7 @@ export class StrategyReportService {
     private readonly focusListService: FocusListService,
     private readonly marketCondition: MarketConditionService,
     private readonly catalystService: CatalystService,
+    private readonly setupAuditService: SetupAuditService,
   ) {}
 
   /**
@@ -95,13 +97,24 @@ export class StrategyReportService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    return this.focusListService.createList({
+    const focusList = await this.focusListService.createList({
       name: `Weekly Focus ${new Date().toISOString().slice(0, 10)}`,
       type: 'WEEKLY',
       expiresAt,
       sourceScanRunId: options.sourceScanRunId,
       items,
     });
+    await this.setupAuditService.markFocusListOutcomes(
+      options.sourceScanRunId,
+      items.map((item) => ({
+        stockId: item.stockId,
+        reason: item.reason,
+        priorityScore: item.priorityScore,
+        setupBias: item.setupBias,
+        identifiedSetup: item.identifiedSetup,
+      })),
+    );
+    return focusList;
   }
 
   /** Assemble the full research report from the latest state. */

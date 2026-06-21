@@ -27,6 +27,7 @@ export function SlidePanel() {
   const stock = useStockDetailStore((s) => s.stock)
   const dailyBars = useStockDetailStore((s) => s.dailyBars)
   const spyBars = useStockDetailStore((s) => s.spyBars)
+  const activeLevels = useStockDetailStore((s) => s.activeLevels)
   const evidence = useStockDetailStore((s) => s.evidence)
   const stageHistory = useStockDetailStore((s) => s.stageHistory)
   const loading = useStockDetailStore((s) => s.loading)
@@ -209,6 +210,7 @@ export function SlidePanel() {
                   dailyBars={dailyBars}
                   spyBars={spyBars}
                   setups={filteredSetups}
+                  activeLevels={activeLevels}
                   height={300}
                   priority
                 />
@@ -248,7 +250,11 @@ export function SlidePanel() {
 
                 {filteredSetups.length > 0 || latestBar ? (
                   <Section title="Key Levels" icon={<BarChart2 className="h-3.5 w-3.5" />}>
-                    <KeyLevels setups={filteredSetups} latestBar={latestBar} />
+                    <KeyLevels
+                      setups={filteredSetups}
+                      latestBar={latestBar}
+                      activeLevels={activeLevels}
+                    />
                   </Section>
                 ) : null}
 
@@ -408,11 +414,25 @@ function StageHistoryRow({ entry }: { entry: ApiStageHistory }) {
 function KeyLevels({
   setups,
   latestBar,
+  activeLevels,
 }: {
   setups: ApiSetup[]
   latestBar: import('@/types').ApiStockDaily | null
+  activeLevels: import('@/types').ApiActiveSwingLevel[]
 }) {
   const levels: { label: string; price: number; color: string }[] = []
+
+  let resistanceCount = 0
+  let supportCount = 0
+  for (const level of activeLevels) {
+    const isResistance = level.type === 'RESISTANCE'
+    const order = isResistance ? ++resistanceCount : ++supportCount
+    levels.push({
+      label: `${isResistance ? `R${order}` : `S${order}`} ${isResistance ? 'Swing High' : 'Swing Low'}`,
+      price: level.price,
+      color: isResistance ? 'text-orange-400' : 'text-bullish',
+    })
+  }
 
   for (const setup of setups) {
     if (setup.pivotPrice != null) {

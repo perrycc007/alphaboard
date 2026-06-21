@@ -45,6 +45,8 @@ export class ModelReviewService {
             : null,
         targetType: options.targetType ?? null,
         targetId: options.targetId ?? null,
+        prompt: options.prompt,
+        payloadJson: (options.payload ?? {}) as Prisma.InputJsonValue,
         resultJson: (response.result ?? {}) as Prisma.InputJsonValue,
       },
     });

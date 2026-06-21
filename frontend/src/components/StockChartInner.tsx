@@ -17,10 +17,8 @@ type CandleSeriesApi = ISeriesApi<'Candlestick', Time>
 type LineSeriesApi = ISeriesApi<'Line', Time>
 
 const MA_LINES = [
-  { key: 'ema6' as const, color: '#8b5cf6', width: 1, label: 'EMA 6' },
   { key: 'ema20' as const, color: '#f59e0b', width: 1, label: 'EMA 20' },
   { key: 'sma50' as const, color: '#3b82f6', width: 1.5, label: 'SMA 50' },
-  { key: 'sma150' as const, color: '#14b8a6', width: 1, label: 'SMA 150' },
   { key: 'sma200' as const, color: '#ef4444', width: 1.5, label: 'SMA 200' },
 ] as const
 
@@ -32,6 +30,7 @@ export default function StockChartInner({
   dailyBars,
   spyBars,
   setups,
+  activeLevels,
   height = 360,
   showMAs = true,
   showSpy = false,
@@ -146,8 +145,26 @@ export default function StockChartInner({
       }
     }
 
-    if (setups && setups.length > 0) {
-      if (showMarkers) {
+    if (activeLevels && activeLevels.length > 0 && !showMarkers) {
+      let resistanceCount = 0
+      let supportCount = 0
+
+      for (const level of activeLevels) {
+        const isResistance = level.type === 'RESISTANCE'
+        const order = isResistance ? ++resistanceCount : ++supportCount
+
+        candleSeries.createPriceLine({
+          price: Number(level.price),
+          color: isResistance ? '#f97316' : '#22c55e',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `${isResistance ? `R${order}` : `S${order}`} ${isResistance ? 'Swing High' : 'Swing Low'}`,
+        })
+      }
+    }
+
+    if (setups && setups.length > 0 && showMarkers) {
         const markers: Array<{
           time: string
           position: 'belowBar' | 'aboveBar'
@@ -181,44 +198,10 @@ export default function StockChartInner({
 
         markers.sort((a, b) => a.time.localeCompare(b.time))
         createSeriesMarkers(candleSeries, markers)
-      } else {
-        for (const setup of setups) {
-          if (setup.pivotPrice != null) {
-            candleSeries.createPriceLine({
-              price: Number(setup.pivotPrice),
-              color: '#8b5cf6',
-              lineWidth: 1,
-              lineStyle: LineStyle.Dashed,
-              axisLabelVisible: true,
-              title: `Pivot (${setup.type})`,
-            })
-          }
-          if (setup.stopPrice != null) {
-            candleSeries.createPriceLine({
-              price: Number(setup.stopPrice),
-              color: '#ef4444',
-              lineWidth: 1,
-              lineStyle: LineStyle.Dotted,
-              axisLabelVisible: true,
-              title: 'Stop',
-            })
-          }
-          if (setup.targetPrice != null) {
-            candleSeries.createPriceLine({
-              price: Number(setup.targetPrice),
-              color: '#22c55e',
-              lineWidth: 1,
-              lineStyle: LineStyle.Dotted,
-              axisLabelVisible: true,
-              title: 'Target',
-            })
-          }
-        }
-      }
     }
 
     chart.timeScale().fitContent()
-  }, [height, setups, showMAs, showMarkers, sortedBars])
+  }, [activeLevels, height, setups, showMAs, showMarkers, sortedBars])
 
   useEffect(() => {
     initChart()

@@ -139,6 +139,7 @@ export class FullScanService {
 
     return this.pipelineService.runFullPipeline({
       ...options,
+      scanRunId: ctx.scanRunId,
       fromStep: pipelineSteps[0],
       toStep: pipelineSteps[pipelineSteps.length - 1],
       onStepTiming: (stepId, status, durationMs, reason) =>

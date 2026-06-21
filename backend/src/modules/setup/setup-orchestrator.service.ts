@@ -37,6 +37,10 @@ import {
 import { appendJsonLog } from '../../common/utils/file-log.util';
 import { TimingSignalService } from './timing-signal.service';
 import { PythonSignalDetectorService } from './python-signal-detector.service';
+import type {
+  SetupAuditDetectedSetup,
+  SetupAuditScanResult,
+} from './setup-audit.service';
 
 // ---------------------------------------------------------------------------
 // Scanner ranking scores
@@ -113,14 +117,24 @@ export class SetupOrchestratorService {
     private readonly pythonSignalDetector: PythonSignalDetectorService,
   ) {}
 
-  async runDailyDetection(stockId: string, bars: Bar[]): Promise<void> {
+  async runDailyDetection(
+    stockId: string,
+    bars: Bar[],
+  ): Promise<SetupAuditScanResult> {
     const swingPoints = detectSignificantSwingPoints(bars);
     const context = await this.buildDailyContext(stockId, bars);
     const detectedAt = bars[bars.length - 1]?.date ?? new Date();
+    const auditResult: SetupAuditScanResult = {
+      detectorSource: 'typescript',
+      created: [],
+      deduped: [],
+      suppressed: [],
+    };
 
     let pythonResults: DetectedSetup[] | null = null;
     try {
       pythonResults = await this.pythonSignalDetector.detectDailySignals(bars);
+      if (pythonResults) auditResult.detectorSource = 'python';
     } catch (error) {
       this.logger.warn(
         `Python signal detector failed for stock ${stockId}; falling back to TypeScript detectors: ${
@@ -131,8 +145,23 @@ export class SetupOrchestratorService {
 
     if (pythonResults) {
       for (const result of pythonResults) {
-        if (result.direction === 'SHORT' && !context.canShortLeader) continue;
-        await this.persistSetup(stockId, result, detectedAt);
+        if (result.direction === 'SHORT' && !context.canShortLeader) {
+          auditResult.suppressed.push(
+            this.toAuditDetectedSetup(result, detectedAt, {
+              detectorSource: auditResult.detectorSource,
+              outcome: 'suppressed',
+              reason: 'SHORT_NOT_ALLOWED',
+            }),
+          );
+          continue;
+        }
+        const persisted = await this.persistSetup(stockId, result, detectedAt);
+        auditResult[persisted.outcome === 'created' ? 'created' : 'deduped'].push(
+          {
+            ...persisted.setup,
+            detectorSource: auditResult.detectorSource,
+          },
+        );
         this.logger.log(
           `Detected ${result.type} via Python signal logic for stock ${stockId}`,
         );
@@ -140,8 +169,24 @@ export class SetupOrchestratorService {
     } else {
       for (const detector of this.dailyDetectors) {
         const result = detector.detect(bars, swingPoints, context);
-        if (result && !(result.direction === 'SHORT' && !context.canShortLeader)) {
-          await this.persistSetup(stockId, result, detectedAt);
+        if (result) {
+          if (result.direction === 'SHORT' && !context.canShortLeader) {
+            auditResult.suppressed.push(
+              this.toAuditDetectedSetup(result, detectedAt, {
+                detectorSource: auditResult.detectorSource,
+                outcome: 'suppressed',
+                reason: 'SHORT_NOT_ALLOWED',
+              }),
+            );
+            continue;
+          }
+          const persisted = await this.persistSetup(stockId, result, detectedAt);
+          auditResult[
+            persisted.outcome === 'created' ? 'created' : 'deduped'
+          ].push({
+            ...persisted.setup,
+            detectorSource: auditResult.detectorSource,
+          });
           this.logger.log(`Detected ${result.type} for stock ${stockId}`);
         }
       }
@@ -149,6 +194,7 @@ export class SetupOrchestratorService {
 
     await this.updateDailySetupStates(stockId, bars);
     await this.expireStaleSetups(stockId, detectedAt);
+    return auditResult;
   }
 
   async processIntradayBar(
@@ -329,7 +375,7 @@ export class SetupOrchestratorService {
     stockId: string,
     detected: DetectedSetup,
     detectedAt: Date,
-  ): Promise<void> {
+  ): Promise<{ outcome: 'created' | 'deduped'; setup: SetupAuditDetectedSetup }> {
     const expiresAt = new Date(detectedAt);
     expiresAt.setDate(expiresAt.getDate() + 42);
 
@@ -356,7 +402,14 @@ export class SetupOrchestratorService {
           direction: detected.direction,
         },
       );
-      return;
+      return {
+        outcome: 'deduped',
+        setup: this.toAuditDetectedSetup(detected, detectedAt, {
+          setupId: recentDuplicate.id,
+          outcome: 'deduped',
+          reason: 'RECENT_DUPLICATE',
+        }),
+      };
     }
 
     const setup = await this.prisma.setup.create({
@@ -395,6 +448,39 @@ export class SetupOrchestratorService {
       riskReward: detected.riskReward,
       evidence: detected.evidence,
     });
+
+    return {
+      outcome: 'created',
+      setup: this.toAuditDetectedSetup(detected, detectedAt, {
+        setupId: setup.id,
+        state: setup.state,
+        outcome: 'created',
+      }),
+    };
+  }
+
+  private toAuditDetectedSetup(
+    detected: DetectedSetup,
+    detectedAt: Date,
+    extra: Partial<SetupAuditDetectedSetup> = {},
+  ): SetupAuditDetectedSetup {
+    return {
+      setupId: extra.setupId,
+      type: detected.type,
+      direction: detected.direction,
+      timeframe: detected.timeframe,
+      state: extra.state,
+      pivotPrice: detected.pivotPrice ?? null,
+      stopPrice: detected.stopPrice ?? null,
+      targetPrice: detected.targetPrice ?? null,
+      riskReward: detected.riskReward ?? null,
+      evidence: detected.evidence ?? [],
+      waitingFor: detected.waitingFor ?? null,
+      detectedAt: detectedAt.toISOString(),
+      detectorSource: extra.detectorSource,
+      outcome: extra.outcome,
+      reason: extra.reason,
+    };
   }
 
   private getDetectionCooldownDays(type: SetupType): number {
@@ -493,6 +579,9 @@ export class SetupOrchestratorService {
     const cooldownMs =
       this.getDetectionCooldownDays(detected.type) * 24 * 60 * 60 * 1000;
     return existing.some((candidate) => {
+      if (candidate.state === SIM_INVALID_RISK_STATE) {
+        return false;
+      }
       if (
         candidate.type !== detected.type ||
         candidate.direction !== detected.direction ||
@@ -1063,15 +1152,7 @@ export class SetupOrchestratorService {
 
         if (setup.type === ('DOUBLE_TOP' as SetupType) && setup.state === 'READY' && setup.pivotPrice) {
           if (latestBar.low < setup.pivotPrice) {
-            setup.state = 'TRIGGERED';
-            setup.entryPrice = setup.pivotPrice;
-            setup.entryDate = dateStr;
-            setup.actualStopPrice = setup.stopPrice;
-            setup.riskAmount =
-              setup.entryPrice != null && setup.actualStopPrice != null
-                ? Math.abs(setup.entryPrice - setup.actualStopPrice)
-                : null;
-            setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+            triggerSimulatedSetup(setup, latestBar, dateStr, abs);
             continue;
           }
         }
@@ -1088,15 +1169,7 @@ export class SetupOrchestratorService {
 
         if (setup.type === ('UNDERCUT_RALLY' as SetupType) && setup.state === 'READY' && setup.pivotPrice) {
           if (latestBar.high > setup.pivotPrice) {
-            setup.state = 'TRIGGERED';
-            setup.entryPrice = setup.pivotPrice;
-            setup.entryDate = dateStr;
-            setup.actualStopPrice = setup.stopPrice;
-            setup.riskAmount =
-              setup.entryPrice != null && setup.actualStopPrice != null
-                ? Math.abs(setup.entryPrice - setup.actualStopPrice)
-                : null;
-            setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+            triggerSimulatedSetup(setup, latestBar, dateStr, abs);
             continue;
           }
         }
@@ -1115,27 +1188,7 @@ export class SetupOrchestratorService {
               latestBar.close < setup.pivotPrice);
 
           if (triggered) {
-            setup.state = 'TRIGGERED';
-            setup.entryPrice = setup.pivotPrice;
-            setup.entryDate = dateStr;
-
-            // Determine actualStopPrice based on trade category
-            if (setup.tradeCategory === 'BREAKOUT') {
-              setup.actualStopPrice = setup.stopPrice;
-            } else {
-              // Reversal: stop = day low (LONG) or day high (SHORT)
-              setup.actualStopPrice =
-                setup.direction === 'LONG'
-                  ? latestBar.low
-                  : latestBar.high;
-            }
-
-            setup.riskAmount =
-              setup.entryPrice != null && setup.actualStopPrice != null
-                ? Math.abs(setup.entryPrice - setup.actualStopPrice)
-                : null;
-
-            setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+            triggerSimulatedSetup(setup, latestBar, dateStr, abs);
             continue;
           }
         }
@@ -1182,6 +1235,51 @@ export class SetupOrchestratorService {
           setup.riskAmount != null &&
           setup.riskAmount > 0
         ) {
+          let exited = false;
+          if (setup.actualStopPrice != null) {
+            const stopHit =
+              (setup.direction === 'LONG' &&
+                latestBar.low <= setup.actualStopPrice) ||
+              (setup.direction === 'SHORT' &&
+                latestBar.high >= setup.actualStopPrice);
+            if (stopHit) {
+              setup.state = 'VIOLATED';
+              setup.stopHit = {
+                hit: true,
+                hitDate: dateStr,
+                daysToHit: setup.entryDate
+                  ? daysBetween(setup.entryDate, dateStr)
+                  : null,
+              };
+              exited = true;
+            }
+          }
+
+          if (exited) {
+            setup.exitPrice = setup.actualStopPrice;
+            setup.exitDate = dateStr;
+            setup.finalR = -1;
+            if (setup.entryPrice !== 0 && setup.actualStopPrice != null) {
+              setup.finalPct =
+                setup.direction === 'LONG'
+                  ? ((setup.actualStopPrice - setup.entryPrice) /
+                      setup.entryPrice) *
+                    100
+                  : ((setup.entryPrice - setup.actualStopPrice) /
+                      setup.entryPrice) *
+                    100;
+            }
+            if (setup.entryDate) {
+              const entryTime = new Date(setup.entryDate).getTime();
+              const exitTime = new Date(dateStr).getTime();
+              setup.holdingDays = Math.round(
+                (exitTime - entryTime) / (1000 * 60 * 60 * 24),
+              );
+            }
+            setup.stateHistory.push({ state: setup.state, date: dateStr });
+            continue;
+          }
+
           let barMaxR: number;
           if (setup.direction === 'LONG') {
             barMaxR = (latestBar.high - setup.entryPrice) / setup.riskAmount;
@@ -1197,27 +1295,6 @@ export class SetupOrchestratorService {
             setup.maxPct = Math.max(setup.maxPct ?? 0, barMaxPct);
           }
           recordFixedRTargets(setup, barMaxR, dateStr);
-
-          // Check stop hit using actualStopPrice
-          let exited = false;
-          if (setup.actualStopPrice != null) {
-            const stopHit =
-              (setup.direction === 'LONG' &&
-                latestBar.close < setup.actualStopPrice) ||
-              (setup.direction === 'SHORT' &&
-                latestBar.close > setup.actualStopPrice);
-            if (stopHit) {
-              setup.state = 'VIOLATED';
-              setup.stopHit = {
-                hit: true,
-                hitDate: dateStr,
-                daysToHit: setup.entryDate
-                  ? daysBetween(setup.entryDate, dateStr)
-                  : null,
-              };
-              exited = true;
-            }
-          }
 
           // Check target reached
           if (!exited && setup.targetPrice != null) {
@@ -1266,7 +1343,7 @@ export class SetupOrchestratorService {
       }
     }
 
-    return results;
+    return results.filter((setup) => setup.state !== SIM_INVALID_RISK_STATE);
   }
 }
 
@@ -1285,6 +1362,7 @@ const REVERSAL_TYPES: SetupType[] = [
   'MA_RALLY_FAILURE' as SetupType,
   'EMA200_KEY_LEVEL' as SetupType,
 ];
+const SIM_INVALID_RISK_STATE = 'INVALID_RISK';
 
 export interface SimulatedSetup {
   id: string;
@@ -1332,6 +1410,49 @@ function initializeRTargets(): Record<string, FixedRTargetResult> {
     '3': { hit: false, hitDate: null, daysToHit: null, pctMove: null },
     '4': { hit: false, hitDate: null, daysToHit: null, pctMove: null },
   };
+}
+
+function triggerSimulatedSetup(
+  setup: SimulatedSetup,
+  triggerBar: Bar,
+  dateStr: string,
+  averageRange: number,
+): void {
+  setup.entryPrice = setup.pivotPrice;
+  setup.entryDate = dateStr;
+  setup.actualStopPrice = getSimulatedStopPrice(setup, triggerBar);
+  setup.riskAmount =
+    setup.entryPrice != null && setup.actualStopPrice != null
+      ? Math.abs(setup.entryPrice - setup.actualStopPrice)
+      : null;
+
+  if (
+    setup.tradeCategory === 'REVERSAL' &&
+    (setup.riskAmount == null || setup.riskAmount <= averageRange)
+  ) {
+    setup.state = SIM_INVALID_RISK_STATE;
+    setup.metadata = {
+      ...setup.metadata,
+      invalidReason: 'RISK_NOT_GREATER_THAN_AVERAGE_BAR_RANGE',
+      averageRange,
+      riskAmount: setup.riskAmount,
+    };
+    setup.stateHistory.push({ state: SIM_INVALID_RISK_STATE, date: dateStr });
+    return;
+  }
+
+  setup.state = 'TRIGGERED';
+  setup.stateHistory.push({ state: 'TRIGGERED', date: dateStr });
+}
+
+function getSimulatedStopPrice(
+  setup: SimulatedSetup,
+  triggerBar: Bar,
+): number | null {
+  if (setup.tradeCategory === 'BREAKOUT') {
+    return setup.stopPrice;
+  }
+  return setup.direction === 'LONG' ? triggerBar.low : triggerBar.high;
 }
 
 function recordFixedRTargets(

@@ -74,6 +74,7 @@ describe('setup performance aggregation', () => {
         family: 'TREND_LONG',
         setupType: 'VCP',
         direction: 'LONG',
+        effectiveDate: new Date('2026-01-05T00:00:00.000Z'),
         maxR: 4.2,
         finalR: 3.1,
         metadata: {
@@ -89,6 +90,7 @@ describe('setup performance aggregation', () => {
         family: 'TREND_LONG',
         setupType: 'VCP',
         direction: 'LONG',
+        effectiveDate: new Date('2026-01-06T00:00:00.000Z'),
         maxR: 2.3,
         finalR: -1,
         metadata: {
@@ -108,7 +110,9 @@ describe('setup performance aggregation', () => {
     expect(group.targets.find((target) => target.targetR === 2)?.winRate).toBe(1);
     expect(group.targets.find((target) => target.targetR === 3)?.winRate).toBe(0.5);
     expect(group.targets.find((target) => target.targetR === 4)?.medianHoldingDays).toBe(8);
+    expect(group.outcomeDistribution.reduce((sum, bin) => sum + bin.pct, 0)).toBe(1);
     expect(group.maxRDistribution.reduce((sum, bin) => sum + bin.count, 0)).toBe(2);
+    expect(summary.periods[0].outcomeDistribution.reduce((sum, bin) => sum + bin.count, 0)).toBe(2);
   });
 });
 

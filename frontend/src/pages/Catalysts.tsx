@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Newspaper, Plus, Loader2 } from 'lucide-react'
+import { Newspaper, Plus, Loader2, RefreshCw } from 'lucide-react'
 import {
   fetchCatalysts,
   createCatalyst,
   updateCatalystStatus,
+  verifyCatalyst,
   type Catalyst,
 } from '@/lib/api/research'
 
@@ -22,6 +23,39 @@ function statusColor(status: string): string {
   }
 }
 
+function verificationColor(verdict: string): string {
+  switch (verdict) {
+    case 'ALIGNED':
+      return 'bg-bullish/10 text-bullish'
+    case 'MIXED':
+      return 'bg-warning-muted text-warning'
+    case 'NOT_ALIGNED':
+      return 'bg-bearish/10 text-bearish'
+    default:
+      return 'bg-secondary text-text-muted'
+  }
+}
+
+function formatVerdict(verdict: string): string {
+  return verdict.replace(/_/g, ' ').toLowerCase()
+}
+
+function conditionColor(condition: string): string {
+  switch (condition) {
+    case 'SETUP_LONG':
+    case 'HEALTHY_STAGE_2':
+      return 'bg-bullish/10 text-bullish'
+    case 'SETUP_SHORT':
+      return 'bg-bearish/10 text-bearish'
+    case 'WEAK':
+      return 'bg-bearish/10 text-bearish'
+    case 'MIXED':
+      return 'bg-warning-muted text-warning'
+    default:
+      return 'bg-secondary text-text-muted'
+  }
+}
+
 export default function Catalysts() {
   const [catalysts, setCatalysts] = useState<Catalyst[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,6 +64,7 @@ export default function Catalysts() {
   const [title, setTitle] = useState('')
   const [hypothesis, setHypothesis] = useState('')
   const [saving, setSaving] = useState(false)
+  const [verifyingId, setVerifyingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -70,6 +105,19 @@ export default function Catalysts() {
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Update failed')
+    }
+  }
+
+  const handleVerify = async (id: string) => {
+    setVerifyingId(id)
+    setError(null)
+    try {
+      await verifyCatalyst(id)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Verification failed')
+    } finally {
+      setVerifyingId(null)
     }
   }
 
@@ -162,6 +210,100 @@ export default function Catalysts() {
                 </span>
               </div>
               <p className="mt-2 text-xs text-text-secondary sm:text-sm">{cat.hypothesis}</p>
+              {cat.technicalVerificationJson ? (
+                <div className="mt-3 border-t border-border-muted pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded px-2 py-0.5 text-[10px] font-medium sm:text-xs ${verificationColor(cat.technicalVerificationJson.verdict)}`}
+                      >
+                        {formatVerdict(cat.technicalVerificationJson.verdict)}
+                      </span>
+                      <span className="text-[10px] text-text-muted sm:text-xs">
+                        {(cat.technicalVerificationJson.counts.withSetup ??
+                          cat.technicalVerificationJson.counts.checked) > 0
+                          ? `${cat.technicalVerificationJson.counts.aligned}/${
+                              cat.technicalVerificationJson.counts.withSetup ??
+                              cat.technicalVerificationJson.counts.checked
+                            } setups aligned`
+                          : '0 active setups'}
+                      </span>
+                      {cat.technicalVerificationJson.setupSide && (
+                        <span className="text-[10px] text-text-muted sm:text-xs">
+                          side: {cat.technicalVerificationJson.setupSide}
+                        </span>
+                      )}
+                      {cat.technicalVerificationJson.themeCondition && (
+                        <span
+                          className={`rounded px-2 py-0.5 text-[10px] font-medium sm:text-xs ${conditionColor(cat.technicalVerificationJson.themeCondition)}`}
+                        >
+                          {formatVerdict(cat.technicalVerificationJson.themeCondition)}
+                        </span>
+                      )}
+                      {cat.technicalVerificationJson.stageHealth && (
+                        <span className="text-[10px] text-text-muted sm:text-xs">
+                          Stage 2:{' '}
+                          {cat.technicalVerificationJson.stageHealth.stageCounts.STAGE_2 ?? 0}
+                          {' / '}Stage 3-4:{' '}
+                          {(cat.technicalVerificationJson.stageHealth.stageCounts.STAGE_3 ?? 0) +
+                            (cat.technicalVerificationJson.stageHealth.stageCounts.STAGE_4 ?? 0)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleVerify(cat.id)}
+                      disabled={verifyingId === cat.id}
+                      className="flex items-center gap-1 rounded-md border border-border-muted px-2 py-0.5 text-[10px] text-text-secondary transition-colors hover:text-text-primary disabled:opacity-60 cursor-pointer sm:text-xs"
+                    >
+                      {verifyingId === cat.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                      Verify setups
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-text-secondary sm:text-xs">
+                    {cat.technicalVerificationJson.summary}
+                  </p>
+                  {cat.technicalVerificationJson.affectedStocks.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {cat.technicalVerificationJson.affectedStocks.slice(0, 10).map((stock) => (
+                        <span
+                          key={`${cat.id}-${stock.ticker}-${stock.role}`}
+                          className={`rounded-md border px-2 py-0.5 text-[10px] ${
+                            stock.aligned
+                              ? 'border-bullish/30 text-bullish'
+                              : 'border-border-muted text-text-muted'
+                          }`}
+                          title={`${stock.reason}${stock.stockStatus ? ` ${stock.stockStatus}.` : ''}`}
+                        >
+                          {stock.ticker} {stock.setupDirection ?? 'none'}
+                          {stock.stage ? ` / ${stock.stage.replace('STAGE_', 'S')}` : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border-muted pt-3">
+                  <span className="text-[11px] text-text-muted sm:text-xs">
+                    Setup verification has not run for this catalyst.
+                  </span>
+                  <button
+                    onClick={() => handleVerify(cat.id)}
+                    disabled={verifyingId === cat.id}
+                    className="flex items-center gap-1 rounded-md border border-border-muted px-2 py-0.5 text-[10px] text-text-secondary transition-colors hover:text-text-primary disabled:opacity-60 cursor-pointer sm:text-xs"
+                  >
+                    {verifyingId === cat.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" />
+                    )}
+                    Verify setups
+                  </button>
+                </div>
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 {STATUSES.filter((s) => s !== cat.status).map((s) => (
                   <button

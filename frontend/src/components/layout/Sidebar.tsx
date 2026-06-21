@@ -4,6 +4,7 @@ import {
   Layers,
   Eye,
   BookOpen,
+  BookMarked,
   Trophy,
   Settings,
   PanelLeftClose,
@@ -16,6 +17,8 @@ import {
   Target,
   Activity,
   Newspaper,
+  ClipboardList,
+  Network,
 } from 'lucide-react'
 import { useSidebarStore } from '@/stores/useSidebarStore'
 import { cn } from '@/lib/utils'
@@ -29,12 +32,15 @@ const NAV_ITEMS = [
   { to: '/screener', label: 'Screener', icon: Filter },
   { to: '/journal', label: 'Journal', icon: BookOpen },
   { to: '/playbook', label: 'Playbook', icon: Trophy },
+  { to: '/almanac', label: 'Almanac', icon: BookMarked },
   { to: '/simulate', label: 'Simulator', icon: BarChart3 },
   { to: '/regimes', label: 'Regimes', icon: Globe2 },
   { to: '/research', label: 'Research', icon: FlaskConical },
   { to: '/focus-list', label: 'Focus List', icon: Target },
+  { to: '/setup-audit', label: 'Setup Audit', icon: ClipboardList },
   { to: '/market-condition', label: 'Condition', icon: Activity },
   { to: '/catalysts', label: 'Catalysts', icon: Newspaper },
+  { to: '/relationships', label: 'Relationships', icon: Network },
   { to: '/label', label: 'Labeling', icon: Tag },
 ] as const
 
