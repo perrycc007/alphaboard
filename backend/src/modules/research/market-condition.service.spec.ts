@@ -71,6 +71,7 @@ describe('setup performance aggregation', () => {
   it('summarizes 2R/3R/4R hit rates, stops, durations, and distributions', () => {
     const summary = buildSetupPerformanceSummary([
       {
+        source: 'LIVE',
         family: 'TREND_LONG',
         setupType: 'VCP',
         direction: 'LONG',
@@ -87,6 +88,7 @@ describe('setup performance aggregation', () => {
         },
       },
       {
+        source: 'SIMULATED',
         family: 'TREND_LONG',
         setupType: 'VCP',
         direction: 'LONG',
@@ -102,17 +104,43 @@ describe('setup performance aggregation', () => {
           stopHit: { hit: true },
         },
       },
+      {
+        source: 'SIMULATED',
+        family: 'TREND_SHORT',
+        setupType: 'FAIL_BREAKOUT',
+        direction: 'SHORT',
+        effectiveDate: new Date('2026-01-12T00:00:00.000Z'),
+        maxR: 3.1,
+        finalR: 2.5,
+        metadata: {
+          rTargets: {
+            '2': { hit: true, daysToHit: 2, pctMove: 4 },
+            '3': { hit: true, daysToHit: 5, pctMove: 8 },
+            '4': { hit: false },
+          },
+          stopHit: { hit: false },
+        },
+      },
     ] as any);
 
-    const group = summary.groups[0];
+    const group = summary.groups.find((item) => item.setupType === 'VCP');
+    expect(summary.sampleCount).toBe(3);
+    expect(summary.sourceCounts).toEqual({ live: 1, simulated: 2, total: 3 });
+    expect(group).toBeDefined();
+    if (!group) throw new Error('missing VCP group');
     expect(group.sampleCount).toBe(2);
+    expect(group.sourceCounts).toEqual({ live: 1, simulated: 1, total: 2 });
     expect(group.stopLossRate).toBe(0.5);
     expect(group.targets.find((target) => target.targetR === 2)?.winRate).toBe(1);
     expect(group.targets.find((target) => target.targetR === 3)?.winRate).toBe(0.5);
     expect(group.targets.find((target) => target.targetR === 4)?.medianHoldingDays).toBe(8);
     expect(group.outcomeDistribution.reduce((sum, bin) => sum + bin.pct, 0)).toBe(1);
     expect(group.maxRDistribution.reduce((sum, bin) => sum + bin.count, 0)).toBe(2);
-    expect(summary.periods[0].outcomeDistribution.reduce((sum, bin) => sum + bin.count, 0)).toBe(2);
+    expect(summary.periods).toHaveLength(2);
+    expect(summary.periods[0].groups[0].setupType).toBe('FAIL_BREAKOUT');
+    expect(summary.periods[0].groups[0].targets.find((target) => target.targetR === 3)?.winRate).toBe(1);
+    expect(summary.periods[1].groups[0].setupType).toBe('VCP');
+    expect(summary.periods[1].outcomeDistribution.reduce((sum, bin) => sum + bin.count, 0)).toBe(2);
   });
 });
 

@@ -63,33 +63,45 @@ interface EqualWeightStructure {
 interface SetupPerformance {
   windowDays?: number
   sampleCount?: number
+  sourceCounts?: SetupPerformanceSourceCounts
   periods?: Array<{
     key: string
     label: string
     startDate: string
     endDate: string
     sampleCount: number
+    sourceCounts?: SetupPerformanceSourceCounts
+    groups?: SetupPerformanceGroup[]
     outcomeDistribution: DistributionBin[]
   }>
-  groups?: Array<{
-    key: string
-    family: string
-    setupType: string
-    direction: string
+  groups?: SetupPerformanceGroup[]
+}
+
+interface SetupPerformanceSourceCounts {
+  live: number
+  simulated: number
+  total: number
+}
+
+interface SetupPerformanceGroup {
+  key: string
+  family: string
+  setupType: string
+  direction: string
+  sampleCount: number
+  sourceCounts?: SetupPerformanceSourceCounts
+  stopLossRate: number | null
+  targets: Array<{
+    targetR: number
     sampleCount: number
-    stopLossRate: number | null
-    targets: Array<{
-      targetR: number
-      sampleCount: number
-      hits: number
-      winRate: number | null
-      averageHoldingDays: number | null
-      medianHoldingDays: number | null
-      percentGainDistribution: DistributionBin[]
-    }>
-    outcomeDistribution: DistributionBin[]
-    maxRDistribution: DistributionBin[]
+    hits: number
+    winRate: number | null
+    averageHoldingDays: number | null
+    medianHoldingDays: number | null
+    percentGainDistribution: DistributionBin[]
   }>
+  outcomeDistribution: DistributionBin[]
+  maxRDistribution: DistributionBin[]
 }
 
 interface DistributionBin {
@@ -309,25 +321,34 @@ function EqualWeightPanel({ equalWeight }: { equalWeight: EqualWeightStructure }
 function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPerformance }) {
   const groups = (setupPerformance.groups ?? []).slice(0, 6)
   const periods = (setupPerformance.periods ?? []).slice(0, 8)
+  const periodSetupRows = periods
+    .flatMap((period) =>
+      (period.groups ?? []).slice(0, 3).map((group) => ({ period, group })),
+    )
+    .slice(0, 24)
   return (
     <section className="rounded-lg border border-border-default bg-bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-sm font-semibold text-text-primary">Setup Performance</h2>
         <span className="text-xs text-text-muted">
-          {setupPerformance.sampleCount ?? 0} samples / {setupPerformance.windowDays ?? 60} days
+          {setupPerformance.sampleCount ?? 0} setup outcomes / {setupPerformance.windowDays ?? 60} days
         </span>
       </div>
       <p className="mt-2 text-xs leading-5 text-text-muted">
         Target hits are cumulative thresholds. Outcome mix is exclusive, so its buckets add up to 100%.
+        {setupPerformance.sourceCounts
+          ? ` ${formatSourceCounts(setupPerformance.sourceCounts)}.`
+          : ''}
       </p>
 
       {periods.length > 0 && (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-xs">
+          <table className="w-full min-w-[720px] text-left text-xs">
             <thead className="text-text-muted">
               <tr className="border-b border-border-muted">
                 <th className="py-2 pr-3 font-medium">Week</th>
-                <th className="py-2 pr-3 font-medium">N</th>
+                <th className="py-2 pr-3 font-medium">Outcomes</th>
+                <th className="py-2 pr-3 font-medium">Source</th>
                 <th className="py-2 pr-3 font-medium">Outcome Mix</th>
                 {['Stop', '<2R', '2-3R', '3-4R', '4R+'].map((label) => (
                   <th key={label} className="py-2 pr-3 font-medium">{label}</th>
@@ -342,6 +363,9 @@ function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPe
                     <span className="text-text-muted"> to {period.endDate}</span>
                   </td>
                   <td className="py-2 pr-3 font-mono text-text-secondary">{period.sampleCount}</td>
+                  <td className="py-2 pr-3 font-mono text-text-secondary">
+                    {formatSourceCounts(period.sourceCounts)}
+                  </td>
                   <td className="py-2 pr-3">
                     <Distribution bars={period.outcomeDistribution} />
                   </td>
@@ -357,13 +381,60 @@ function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPe
         </div>
       )}
 
+      {periodSetupRows.length > 0 && (
+        <div className="mt-5 overflow-x-auto">
+          <div className="mb-2 text-xs font-medium uppercase text-text-muted">Setup Success by Week</div>
+          <table className="w-full min-w-[860px] text-left text-xs">
+            <thead className="text-text-muted">
+              <tr className="border-b border-border-muted">
+                <th className="py-2 pr-3 font-medium">Week</th>
+                <th className="py-2 pr-3 font-medium">Setup</th>
+                <th className="py-2 pr-3 font-medium">Dir</th>
+                <th className="py-2 pr-3 font-medium">Outcomes</th>
+                <th className="py-2 pr-3 font-medium">Source</th>
+                <th className="py-2 pr-3 font-medium">Stop</th>
+                {[2, 3, 4].map((target) => (
+                  <th key={target} className="py-2 pr-3 font-medium">{target}R+ Hit</th>
+                ))}
+                <th className="py-2 pr-3 font-medium">Outcome Mix</th>
+              </tr>
+            </thead>
+            <tbody>
+              {periodSetupRows.map(({ period, group }) => (
+                <tr key={`${period.key}:${group.key}`} className="border-b border-border-muted/50 align-top">
+                  <td className="py-2 pr-3 font-mono text-text-primary">{period.startDate}</td>
+                  <td className="py-2 pr-3 text-text-primary">{group.setupType.replace(/_/g, ' ')}</td>
+                  <td className="py-2 pr-3">
+                    <StatusPill label={group.direction} tone={group.direction === 'SHORT' ? 'bear' : 'bull'} />
+                  </td>
+                  <td className="py-2 pr-3 font-mono text-text-secondary">{group.sampleCount}</td>
+                  <td className="py-2 pr-3 font-mono text-text-secondary">
+                    {formatSourceCounts(group.sourceCounts)}
+                  </td>
+                  <td className="py-2 pr-3 font-mono text-bearish">{pct(group.stopLossRate)}</td>
+                  {group.targets.map((target) => (
+                    <td key={target.targetR} className="py-2 pr-3 font-mono text-text-primary">
+                      {pct(target.winRate)}
+                    </td>
+                  ))}
+                  <td className="py-2 pr-3">
+                    <Distribution bars={group.outcomeDistribution ?? group.maxRDistribution} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-left text-xs">
+        <table className="w-full min-w-[840px] text-left text-xs">
           <thead className="text-text-muted">
             <tr className="border-b border-border-muted">
               <th className="py-2 pr-3 font-medium">Setup</th>
               <th className="py-2 pr-3 font-medium">Dir</th>
-              <th className="py-2 pr-3 font-medium">N</th>
+              <th className="py-2 pr-3 font-medium">Outcomes</th>
+              <th className="py-2 pr-3 font-medium">Source</th>
               <th className="py-2 pr-3 font-medium">Stop</th>
               {[2, 3, 4].map((target) => (
                 <th key={target} className="py-2 pr-3 font-medium">{target}R+ Hit</th>
@@ -377,6 +448,9 @@ function SetupPerformancePanel({ setupPerformance }: { setupPerformance: SetupPe
                 <td className="py-2 pr-3 text-text-primary">{group.setupType.replace(/_/g, ' ')}</td>
                 <td className="py-2 pr-3"><StatusPill label={group.direction} tone={group.direction === 'SHORT' ? 'bear' : 'bull'} /></td>
                 <td className="py-2 pr-3 font-mono text-text-secondary">{group.sampleCount}</td>
+                <td className="py-2 pr-3 font-mono text-text-secondary">
+                  {formatSourceCounts(group.sourceCounts)}
+                </td>
                 <td className="py-2 pr-3 font-mono text-bearish">{pct(group.stopLossRate)}</td>
                 {group.targets.map((target) => (
                   <td key={target.targetR} className="py-2 pr-3">
@@ -473,6 +547,11 @@ function divergenceTone(value?: string): 'bull' | 'bear' | 'neutral' | 'warn' {
 
 function formatNum(value: number | null | undefined, suffix = '') {
   return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}${suffix}` : '-'
+}
+
+function formatSourceCounts(value: SetupPerformanceSourceCounts | null | undefined) {
+  if (!value) return '-'
+  return `live ${value.live} / sim ${value.simulated}`
 }
 
 function signed(value: number) {

@@ -3,6 +3,7 @@ import {
   MarketConditionSnapshot,
   MarketScopeType,
   Prisma,
+  SetupOutcomeSource,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { detectSignificantSwingPoints } from '../setup/primitives';
@@ -485,15 +486,23 @@ interface SetupPerformanceGroup {
   setupType: string;
   direction: string;
   sampleCount: number;
+  sourceCounts: SetupPerformanceSourceCounts;
   stopLossRate: number | null;
   targets: SetupPerformanceTargetSummary[];
   outcomeDistribution: DistributionBin[];
   maxRDistribution: DistributionBin[];
 }
 
+interface SetupPerformanceSourceCounts {
+  live: number;
+  simulated: number;
+  total: number;
+}
+
 interface SetupPerformanceSummary {
   windowDays: number;
   sampleCount: number;
+  sourceCounts: SetupPerformanceSourceCounts;
   periods: SetupPerformancePeriodSummary[];
   groups: SetupPerformanceGroup[];
 }
@@ -510,6 +519,8 @@ interface SetupPerformancePeriodSummary {
   startDate: string;
   endDate: string;
   sampleCount: number;
+  sourceCounts: SetupPerformanceSourceCounts;
+  groups: SetupPerformanceGroup[];
   outcomeDistribution: DistributionBin[];
 }
 
@@ -524,6 +535,7 @@ type RTargetMetadata = Record<
 >;
 
 type SetupOutcomeForAggregation = {
+  source: SetupOutcomeSource;
   family: string;
   setupType: string;
   direction: string;
@@ -537,6 +549,20 @@ export function buildSetupPerformanceSummary(
   rows: SetupOutcomeForAggregation[],
   windowDays = SETUP_PERFORMANCE_WINDOW_DAYS,
 ): SetupPerformanceSummary {
+  const groupSummaries = buildSetupGroupSummaries(rows);
+
+  return {
+    windowDays,
+    sampleCount: rows.length,
+    sourceCounts: buildSourceCounts(rows),
+    periods: buildPeriodSummaries(rows),
+    groups: groupSummaries,
+  };
+}
+
+function buildSetupGroupSummaries(
+  rows: SetupOutcomeForAggregation[],
+): SetupPerformanceGroup[] {
   const groups = new Map<string, SetupOutcomeForAggregation[]>();
   for (const row of rows) {
     const key = `${row.family}:${row.setupType}:${row.direction}`;
@@ -559,6 +585,7 @@ export function buildSetupPerformanceSummary(
         setupType,
         direction,
         sampleCount: bucket.length,
+        sourceCounts: buildSourceCounts(bucket),
         stopLossRate: bucket.length > 0 ? round(stopCount / bucket.length, 3) : null,
         targets: R_TARGETS.map((targetR) => summarizeTarget(bucket, targetR)),
         outcomeDistribution: buildOutcomeDistribution(bucket),
@@ -574,12 +601,7 @@ export function buildSetupPerformanceSummary(
     })
     .sort((a, b) => b.sampleCount - a.sampleCount);
 
-  return {
-    windowDays,
-    sampleCount: rows.length,
-    periods: buildPeriodSummaries(rows),
-    groups: groupSummaries,
-  };
+  return groupSummaries;
 }
 
 function summarizeTarget(
@@ -697,9 +719,25 @@ function buildPeriodSummaries(
         startDate: key,
         endDate: formatDate(end),
         sampleCount: bucket.length,
+        sourceCounts: buildSourceCounts(bucket),
+        groups: buildSetupGroupSummaries(bucket),
         outcomeDistribution: buildOutcomeDistribution(bucket),
       };
     });
+}
+
+function buildSourceCounts(
+  rows: SetupOutcomeForAggregation[],
+): SetupPerformanceSourceCounts {
+  const live = rows.filter((row) => row.source === SetupOutcomeSource.LIVE).length;
+  const simulated = rows.filter(
+    (row) => row.source === SetupOutcomeSource.SIMULATED,
+  ).length;
+  return {
+    live,
+    simulated,
+    total: rows.length,
+  };
 }
 
 function startOfUtcWeek(date: Date): Date {
@@ -1107,6 +1145,7 @@ export class MarketConditionService {
     const rows = await this.prisma.setupOutcome.findMany({
       where: { effectiveDate: { gte: windowStart } },
       select: {
+        source: true,
         family: true,
         setupType: true,
         direction: true,
@@ -1120,6 +1159,7 @@ export class MarketConditionService {
     return this.toInputJson(
       buildSetupPerformanceSummary(
         rows.map((row) => ({
+          source: row.source,
           family: row.family,
           setupType: row.setupType,
           direction: row.direction,

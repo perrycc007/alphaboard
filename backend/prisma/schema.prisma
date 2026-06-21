@@ -204,6 +204,7 @@ model SupplyChainGroup {
   focusListItems   FocusListItem[]
   themeMemberships TickerThemeMembership[]
   catalysts        CatalystHypothesis[]
+  catalystImpacts  CatalystImpact[]
   relationshipsOut GroupRelationship[]      @relation("SourceGroup")
   relationshipsIn  GroupRelationship[]      @relation("TargetGroup")
 
@@ -1153,6 +1154,10 @@ model CatalystHypothesis {
   updatedAt                DateTime       @updatedAt
   themeId                  String?
   groupId                  String?
+  kind                     CatalystKind   @default(CURRENT)
+  eventCategory            String?
+  observedStartDate        DateTime?      @db.Date
+  observedEndDate          DateTime?      @db.Date
   title                    String
   hypothesis               String
   sourceUrlsJson           Json?
@@ -1165,9 +1170,66 @@ model CatalystHypothesis {
 
   theme           Theme?                   @relation(fields: [themeId], references: [id])
   group           SupplyChainGroup?        @relation(fields: [groupId], references: [id])
+  mechanisms      CatalystMechanism[]
   recommendations StrategyRecommendation[]
 
+  @@index([kind, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
+}
+
+model CatalystMechanism {
+  id          String   @id @default(cuid())
+  catalystId String
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  evidenceJson Json?
+  createdAt   DateTime @default(now())
+
+  catalyst CatalystHypothesis @relation(fields: [catalystId], references: [id], onDelete: Cascade)
+  impacts  CatalystImpact[]
+
+  @@unique([catalystId, title])
+  @@index([catalystId, sortOrder])
+}
+
+model CatalystImpact {
+  id               String                  @id @default(cuid())
+  mechanismId      String
+  groupId          String
+  direction        CatalystImpactDirection
+  relationshipType RelationshipType?
+  strengthScore    Decimal?                @db.Decimal(4, 3)
+  timeframe        CatalystImpactTimeframe?
+  notes            String?
+  evidenceJson     Json?
+  createdAt        DateTime                @default(now())
+
+  mechanism CatalystMechanism @relation(fields: [mechanismId], references: [id], onDelete: Cascade)
+  group     SupplyChainGroup  @relation(fields: [groupId], references: [id])
+
+  @@unique([mechanismId, groupId, direction])
+  @@index([groupId])
+  @@index([direction])
+}
+
+enum CatalystKind {
+  CURRENT
+  HISTORICAL
+  PATTERN
+}
+
+enum CatalystImpactDirection {
+  BENEFITS
+  HARMS
+  MIXED
+}
+
+enum CatalystImpactTimeframe {
+  IMMEDIATE
+  SHORT_TERM
+  MEDIUM_TERM
+  LONG_TERM
 }
 
 enum CatalystStatus {

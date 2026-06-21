@@ -13,13 +13,14 @@ import {
   Res,
 } from '@nestjs/common';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import * as path from 'path';
 import type { Response } from 'express';
 import {
   AlmanacSetupPhase,
   AlmanacTradeLabel,
   CatalystStatus,
+  CatalystKind,
   Direction,
   MarketScopeType,
   ModelReviewType,
@@ -249,16 +250,34 @@ export class ResearchController {
     return this.almanacKnowledgeService.getExplorer(filters);
   }
 
+  @Get('almanac/trade-cases/:id/ohlcv')
+  getAlmanacTradeCaseOhlcv(@Param('id') id: string) {
+    return this.almanacKnowledgeService.getTradeCaseOhlcv(id);
+  }
+
+  @Get('almanac/assets/:directory/:file')
+  serveAlmanacAssetByDirectory(
+    @Param('directory') directory: string,
+    @Param('file') file: string,
+    @Res() res: Response,
+  ) {
+    return this.sendAlmanacAsset(`${directory}/${file}`, res);
+  }
+
   @Get('almanac/assets/*')
   serveAlmanacAsset(
     @Param() params: Record<string, string>,
     @Res() res: Response,
   ) {
     const wildcardPath = (params as any)[0] || params['0'] || '';
+    return this.sendAlmanacAsset(wildcardPath, res);
+  }
+
+  private sendAlmanacAsset(wildcardPath: string, res: Response) {
     const repoRoot = path.resolve(process.cwd(), '..');
     const artifactRoot = path.resolve(repoRoot, 'artifacts', 'almanac');
-    const resolved = path.resolve(artifactRoot, wildcardPath);
-    if (!resolved.startsWith(artifactRoot) || !existsSync(resolved)) {
+    const resolved = resolveAlmanacAsset(artifactRoot, wildcardPath);
+    if (!resolved) {
       throw new NotFoundException('Almanac asset not found');
     }
     res.sendFile(resolved);
@@ -270,10 +289,13 @@ export class ResearchController {
     @Param('id') id: string,
     @Body()
     body: {
+      ticker?: string;
+      setupTag?: string;
       label?: AlmanacTradeLabel;
       reviewNotes?: string | null;
       phase?: AlmanacSetupPhase;
       direction?: Direction | null;
+      chartId?: string | null;
     },
   ) {
     return this.almanacKnowledgeService.updateTradeCase(id, body ?? {});
@@ -372,6 +394,8 @@ export class ResearchController {
   /** GET /api/research/relationship-graph -- Supply-chain relationship graph/table data. */
   @Get('relationship-graph')
   getRelationshipGraph(
+    @Query('catalystId') catalystId?: string,
+    @Query('kind') kind?: CatalystKind,
     @Query('theme') theme?: string,
     @Query('group') group?: string,
     @Query('layer') layer?: SupplyChainLayer,
@@ -380,6 +404,8 @@ export class ResearchController {
     @Query('q') q?: string,
   ) {
     return this.relationshipGraphService.getGraph({
+      catalystId,
+      kind,
       theme,
       group,
       layer,
@@ -558,4 +584,35 @@ export class ResearchController {
         return item as SetupType;
       });
   }
+}
+
+function resolveAlmanacAsset(
+  artifactRoot: string,
+  wildcardPath: string,
+): string | null {
+  const resolved = path.resolve(artifactRoot, wildcardPath);
+  if (resolved.startsWith(artifactRoot) && existsSync(resolved)) {
+    return resolved;
+  }
+
+  const parts = wildcardPath.split(/[\\/]+/).filter(Boolean);
+  const fileName = parts.at(-1);
+  const staleDirectory = parts.at(-2) ?? '';
+  const dateMatch = staleDirectory.match(/(20\d{2}).*Q([1-4])/i);
+  if (!fileName || !dateMatch || !existsSync(artifactRoot)) return null;
+
+  const [, year, quarter] = dateMatch;
+  const fallbackDirs = readdirSync(artifactRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => name.includes(year) && new RegExp(`Q${quarter}\\b`, 'i').test(name));
+
+  for (const directory of fallbackDirs) {
+    const candidate = path.resolve(artifactRoot, directory, fileName);
+    if (candidate.startsWith(artifactRoot) && existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }

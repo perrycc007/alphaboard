@@ -35,6 +35,14 @@ type MacroSensitivity =
   | 'YIELDS'
   | 'INFLATION';
 
+type CatalystKind = 'CURRENT' | 'HISTORICAL' | 'PATTERN';
+type CatalystImpactDirection = 'BENEFITS' | 'HARMS' | 'MIXED';
+type CatalystImpactTimeframe =
+  | 'IMMEDIATE'
+  | 'SHORT_TERM'
+  | 'MEDIUM_TERM'
+  | 'LONG_TERM';
+
 interface SourceRef {
   title: string;
   url: string;
@@ -86,12 +94,33 @@ interface CatalystSeed {
   title: string;
   theme: string;
   group?: string;
+  kind: CatalystKind;
+  eventCategory: string;
   hypothesis: string;
   beneficiaries: string[];
   losers: string[];
   confirmation: string[];
   rejection: string[];
   confidence: number;
+  sourceKeys: string[];
+  mechanisms: CatalystMechanismSeed[];
+}
+
+interface CatalystMechanismSeed {
+  title: string;
+  description: string;
+  sourceKeys: string[];
+  impacts: CatalystImpactSeed[];
+}
+
+interface CatalystImpactSeed {
+  theme: string;
+  group: string;
+  direction: CatalystImpactDirection;
+  relationshipType?: RelationshipType;
+  strength: number;
+  timeframe: CatalystImpactTimeframe;
+  notes: string;
   sourceKeys: string[];
 }
 
@@ -214,6 +243,8 @@ const CATALYSTS: CatalystSeed[] = [
     title: 'AI capex and data-center buildout',
     theme: 'AI Infrastructure 2023',
     group: 'AI Chips',
+    kind: 'CURRENT',
+    eventCategory: 'TECH_CYCLE',
     hypothesis:
       'AI capex supports chips, foundry capacity, AI servers, networking, and second-order power/cooling infrastructure.',
     beneficiaries: ['NVDA', 'AMD', 'AVGO', 'TSM', 'ASML', 'ANET', 'SMCI', 'DELL', 'VRT', 'ETN', 'GEV', 'FCX'],
@@ -222,11 +253,39 @@ const CATALYSTS: CatalystSeed[] = [
     rejection: ['SMH fails', 'AI server backlog weakens', 'power names diverge'],
     confidence: 0.78,
     sourceKeys: ['AI1', 'AI3', 'AI6', 'AI9', 'ETF1'],
+    mechanisms: [
+      {
+        title: 'AI compute demand expands',
+        description:
+          'Hyperscaler and enterprise AI spending raises demand for accelerators, foundry capacity, servers, and networking.',
+        sourceKeys: ['AI1', 'AI3', 'AI4', 'AI6', 'AI7'],
+        impacts: [
+          impact('AI Infrastructure 2023', 'AI Chips', 'BENEFITS', 'BENEFITS', 0.95, 'IMMEDIATE', 'AI accelerator demand is the first-order expression of the capex cycle.', ['AI1', 'AI3']),
+          impact('AI Infrastructure 2023', 'Foundry/OSAT', 'BENEFITS', 'SUPPLIER_TO', 0.85, 'SHORT_TERM', 'Advanced-node and packaging capacity becomes a bottleneck as accelerator demand rises.', ['AI4', 'AI15']),
+          impact('AI Infrastructure 2023', 'AI Servers', 'BENEFITS', 'BENEFITS', 0.9, 'SHORT_TERM', 'GPU availability pulls through rack-scale server and integration demand.', ['AI7', 'AI8', 'AI13']),
+          impact('AI Infrastructure 2023', 'Networking', 'BENEFITS', 'BENEFITS', 0.82, 'SHORT_TERM', 'Scale-out AI clusters require high-speed data-center networking.', ['AI6']),
+        ],
+      },
+      {
+        title: 'Power density becomes a constraint',
+        description:
+          'Dense AI racks shift the catalyst into electrical, cooling, grid equipment, power generation, and copper demand.',
+        sourceKeys: ['AI9', 'AI10', 'AI11', 'AI12', 'RAW1'],
+        impacts: [
+          impact('AI Power Nuclear 2024', 'Cooling/Power', 'BENEFITS', 'BENEFITS', 0.9, 'MEDIUM_TERM', 'Power delivery and thermal management become required infrastructure for AI deployment.', ['AI9', 'AI10']),
+          impact('AI Power Nuclear 2024', 'Grid/Equipment', 'BENEFITS', 'BENEFITS', 0.82, 'MEDIUM_TERM', 'Data-center load growth raises demand for grid and electrification equipment.', ['AI11']),
+          impact('AI Power Nuclear 2024', 'Power Generation', 'BENEFITS', 'BENEFITS', 0.68, 'LONG_TERM', 'Large AI loads increase interest in reliable baseload and clean power supply.', ['AI12']),
+          impact('Strategic Raw Materials', 'Copper', 'BENEFITS', 'BENEFITS', 0.72, 'MEDIUM_TERM', 'Grid buildout and electrical equipment demand pull copper into the AI chain.', ['RAW1', 'AI10']),
+        ],
+      },
+    ],
   },
   {
     title: 'Defense rearmament and software-defined military systems',
     theme: 'Defense Aerospace 2025',
     group: 'Defense Primes',
+    kind: 'CURRENT',
+    eventCategory: 'GEOPOLITICS_WAR',
     hypothesis:
       'Geopolitical pressure and defense modernization support primes, missiles/sensors, and defense AI/cyber services.',
     beneficiaries: ['LMT', 'NOC', 'GD', 'RTX', 'BA', 'PLTR', 'BAH', 'LDOS', 'SAIC', 'CACI'],
@@ -235,11 +294,37 @@ const CATALYSTS: CatalystSeed[] = [
     rejection: ['ITA lags', 'contract headlines fail to lift group'],
     confidence: 0.72,
     sourceKeys: ['DEF1', 'DEF2', 'DEF3', 'DEF4', 'DEF5'],
+    mechanisms: [
+      {
+        title: 'Procurement and readiness demand rises',
+        description:
+          'Geopolitical pressure supports primes, aerospace systems, and materials tied to defense platforms.',
+        sourceKeys: ['DEF1', 'DEF2', 'DEF5', 'RAW2', 'RAW3'],
+        impacts: [
+          impact('Defense Aerospace 2025', 'Defense Primes', 'BENEFITS', 'BENEFITS', 0.88, 'MEDIUM_TERM', 'Rearmament and modernization increase demand for defense platforms and systems.', ['DEF1', 'DEF2', 'DEF5']),
+          impact('Strategic Raw Materials', 'Steel', 'BENEFITS', 'SUPPLIER_TO', 0.58, 'MEDIUM_TERM', 'Defense platforms and shipbuilding consume specialty steel.', ['RAW3', 'RAW4']),
+          impact('Strategic Raw Materials', 'Aluminum', 'BENEFITS', 'SUPPLIER_TO', 0.6, 'MEDIUM_TERM', 'Aerospace and defense production consume aluminum.', ['RAW2']),
+        ],
+      },
+      {
+        title: 'Military systems become software-defined',
+        description:
+          'AI, data fusion, cyber, and autonomy become a second-order defense modernization lane.',
+        sourceKeys: ['DEF3', 'DEF4', 'AI1'],
+        impacts: [
+          impact('Defense Aerospace 2025', 'Defense IT/Cyber', 'BENEFITS', 'BENEFITS', 0.76, 'SHORT_TERM', 'Modernization spending supports data, cyber, AI, and mission software providers.', ['DEF3', 'DEF4']),
+          impact('AI Infrastructure 2023', 'AI Chips', 'MIXED', 'LEADS', 0.5, 'LONG_TERM', 'AI compute enables defense AI but export controls and procurement timing can create uneven impact.', ['AI1', 'DEF4']),
+          impact('Defense Aerospace 2025', 'Public Safety AI', 'BENEFITS', 'BENEFITS', 0.48, 'LONG_TERM', 'Defense AI workflows can spill into public safety and evidence management tooling.', ['DEF3', 'DEF4']),
+        ],
+      },
+    ],
   },
   {
     title: 'Agriculture input and crop-cycle recovery',
     theme: 'Agriculture Inputs & Processing',
     group: 'Fertilizer',
+    kind: 'PATTERN',
+    eventCategory: 'INFLATION_COST',
     hypothesis:
       'Crop economics and food demand support fertilizer, crop protection, equipment, and processing/trading names.',
     beneficiaries: ['NTR', 'MOS', 'CF', 'CTVA', 'FMC', 'DE', 'AGCO', 'ADM', 'BG'],
@@ -248,11 +333,36 @@ const CATALYSTS: CatalystSeed[] = [
     rejection: ['MOO weak', 'crop/fertilizer prices roll over'],
     confidence: 0.68,
     sourceKeys: ['AG1', 'AG2', 'AG3', 'AG4', 'ETF2'],
+    mechanisms: [
+      {
+        title: 'Crop economics improve',
+        description:
+          'Better crop economics and planted acreage support fertilizer, seeds, crop protection, and downstream processing.',
+        sourceKeys: ['AG2', 'AG3', 'AG4', 'ETF2'],
+        impacts: [
+          impact('Agriculture Inputs & Processing', 'Fertilizer', 'BENEFITS', 'BENEFITS', 0.78, 'SHORT_TERM', 'Crop economics and acreage can lift nutrient demand.', ['AG2', 'ETF2']),
+          impact('Agriculture Inputs & Processing', 'Seeds/Crop Protection', 'BENEFITS', 'BENEFITS', 0.64, 'MEDIUM_TERM', 'Yield protection spending improves when grower economics stabilize.', ['AG3', 'ETF2']),
+          impact('Agriculture Inputs & Processing', 'Ag Processing/Trading', 'BENEFITS', 'BENEFITS', 0.58, 'MEDIUM_TERM', 'Higher crop volumes and volatility can support processing and merchandising activity.', ['AG4', 'ETF2']),
+        ],
+      },
+      {
+        title: 'Input costs and farm income drive equipment timing',
+        description:
+          'Gas costs affect fertilizer margins, while farm income drives equipment replacement and precision agriculture spend.',
+        sourceKeys: ['AG1', 'AG2', 'RAW1'],
+        impacts: [
+          impact('Strategic Raw Materials', 'Gas/LNG', 'MIXED', 'HURTS', 0.68, 'SHORT_TERM', 'Natural gas can help gas producers but pressure nitrogen fertilizer margins when input costs spike.', ['AG2', 'RAW1']),
+          impact('Agriculture Inputs & Processing', 'Farm Equipment', 'BENEFITS', 'LEADS', 0.56, 'LONG_TERM', 'Farm income tends to lead equipment replacement demand.', ['AG1', 'AG4']),
+        ],
+      },
+    ],
   },
   {
     title: 'Strategic materials pull-through from AI, grid, defense, and infrastructure',
     theme: 'Strategic Raw Materials',
     group: 'Copper',
+    kind: 'CURRENT',
+    eventCategory: 'SUPPLY_CHAIN_CAPACITY',
     hypothesis:
       'AI power, grid investment, defense, agriculture, and infrastructure pull demand through copper, aluminum, steel, lithium, gas, LNG, and refining groups.',
     beneficiaries: ['FCX', 'AA', 'NUE', 'CLF', 'ALB', 'SQM', 'EQT', 'LNG', 'MPC', 'VLO', 'PSX'],
@@ -261,6 +371,31 @@ const CATALYSTS: CatalystSeed[] = [
     rejection: ['XME fails', 'industrial demand weakens'],
     confidence: 0.7,
     sourceKeys: ['RAW1', 'RAW2', 'RAW3', 'RAW4', 'ETF3'],
+    mechanisms: [
+      {
+        title: 'Electrification and grid demand pull metals',
+        description:
+          'AI power, grid investment, and infrastructure spending raise demand for copper, aluminum, and steel.',
+        sourceKeys: ['RAW1', 'RAW2', 'RAW3', 'AI10', 'AI11'],
+        impacts: [
+          impact('Strategic Raw Materials', 'Copper', 'BENEFITS', 'BENEFITS', 0.84, 'MEDIUM_TERM', 'Grid buildout and electrification are copper-intensive.', ['RAW1', 'ETF3']),
+          impact('Strategic Raw Materials', 'Aluminum', 'BENEFITS', 'BENEFITS', 0.62, 'MEDIUM_TERM', 'Grid, aerospace, transport, and packaging can pull aluminum demand.', ['RAW2', 'ETF3']),
+          impact('Strategic Raw Materials', 'Steel', 'BENEFITS', 'BENEFITS', 0.66, 'MEDIUM_TERM', 'Infrastructure, defense, energy, and equipment cycles support steel demand.', ['RAW3', 'RAW4', 'ETF3']),
+          impact('AI Power Nuclear 2024', 'Grid/Equipment', 'BENEFITS', 'SUPPLIER_TO', 0.72, 'MEDIUM_TERM', 'Metals demand confirms and feeds electrification equipment demand.', ['AI11', 'RAW1']),
+        ],
+      },
+      {
+        title: 'Commodity cost pressure reaches downstream users',
+        description:
+          'Materials strength can support producers while pressuring downstream margin absorbers if pricing power is weak.',
+        sourceKeys: ['RAW1', 'RAW2', 'RAW3'],
+        impacts: [
+          impact('Defense Aerospace 2025', 'Defense Primes', 'MIXED', 'SUPPLIER_TO', 0.5, 'MEDIUM_TERM', 'Defense demand consumes metals, but higher input costs can affect margins until contracts reset.', ['DEF5', 'RAW2', 'RAW3']),
+          impact('Agriculture Inputs & Processing', 'Farm Equipment', 'HARMS', 'HURTS', 0.52, 'SHORT_TERM', 'Steel inflation can pressure equipment margins if not passed through.', ['AG1', 'RAW3']),
+          impact('Strategic Raw Materials', 'Refining', 'MIXED', undefined, 0.45, 'SHORT_TERM', 'Industrial demand helps cyclicals but refiners remain more tied to crack spreads than metal prices.', ['RAW1']),
+        ],
+      },
+    ],
   },
 ];
 
@@ -313,6 +448,28 @@ function rel(
     reason,
     sourceKeys,
     lagDays,
+  };
+}
+
+function impact(
+  theme: string,
+  groupName: string,
+  direction: CatalystImpactDirection,
+  relationshipType: RelationshipType | undefined,
+  strength: number,
+  timeframe: CatalystImpactTimeframe,
+  notes: string,
+  sourceKeys: string[],
+): CatalystImpactSeed {
+  return {
+    theme,
+    group: groupName,
+    direction,
+    relationshipType,
+    strength,
+    timeframe,
+    notes,
+    sourceKeys,
   };
 }
 
@@ -532,6 +689,8 @@ async function main(): Promise<void> {
       const data = {
         themeId: theme.id,
         groupId: groupRecord?.id ?? null,
+        kind: seed.kind as never,
+        eventCategory: seed.eventCategory,
         hypothesis: seed.hypothesis,
         sourceUrlsJson: urls(seed.sourceKeys),
         evidenceJson: evidence(seed.sourceKeys, {
@@ -544,15 +703,60 @@ async function main(): Promise<void> {
         status: 'WATCHING' as const,
       };
 
+      let catalystId: string;
       if (existing) {
-        await tx.catalystHypothesis.update({
+        const updated = await tx.catalystHypothesis.update({
           where: { id: existing.id },
           data,
+          select: { id: true },
         });
+        catalystId = updated.id;
       } else {
-        await tx.catalystHypothesis.create({
+        const created = await tx.catalystHypothesis.create({
           data: { title: seed.title, ...data },
+          select: { id: true },
         });
+        catalystId = created.id;
+      }
+
+      await tx.catalystMechanism.deleteMany({ where: { catalystId } });
+      for (let index = 0; index < seed.mechanisms.length; index++) {
+        const mechanismSeed = seed.mechanisms[index];
+        const mechanism = await tx.catalystMechanism.create({
+          data: {
+            catalystId,
+            title: mechanismSeed.title,
+            description: mechanismSeed.description,
+            sortOrder: index,
+            evidenceJson: evidence(mechanismSeed.sourceKeys),
+          },
+          select: { id: true },
+        });
+
+        for (const impactSeed of mechanismSeed.impacts) {
+          const impactGroup = groupByKey.get(
+            groupKey(impactSeed.theme, impactSeed.group),
+          );
+          if (!impactGroup) {
+            throw new Error(
+              `Catalyst impact group missing: ${impactSeed.theme} -> ${impactSeed.group}`,
+            );
+          }
+          await tx.catalystImpact.create({
+            data: {
+              mechanismId: mechanism.id,
+              groupId: impactGroup.id,
+              direction: impactSeed.direction as never,
+              relationshipType: (impactSeed.relationshipType ?? null) as never,
+              strengthScore: new Prisma.Decimal(impactSeed.strength),
+              timeframe: impactSeed.timeframe as never,
+              notes: impactSeed.notes,
+              evidenceJson: evidence(impactSeed.sourceKeys, {
+                reason: impactSeed.notes,
+              }),
+            },
+          });
+        }
       }
     }
   });

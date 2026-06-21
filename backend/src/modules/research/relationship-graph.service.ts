@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
+  CatalystImpactDirection,
+  CatalystImpactTimeframe,
+  CatalystKind,
   CatalystStatus,
   MacroSensitivity,
   Prisma,
@@ -9,6 +12,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface RelationshipGraphFilters {
+  catalystId?: string;
+  kind?: CatalystKind;
   theme?: string;
   group?: string;
   layer?: SupplyChainLayer;
@@ -24,6 +29,7 @@ export interface RelationshipEvidence {
 }
 
 export interface RelationshipGraphResponse {
+  selectedCatalystId: string | null;
   themes: Array<{ id: string; name: string; description: string | null }>;
   groups: Array<{
     id: string;
@@ -60,17 +66,49 @@ export interface RelationshipGraphResponse {
     title: string;
     themeId: string | null;
     groupId: string | null;
+    kind: CatalystKind;
+    eventCategory: string | null;
+    observedStartDate: string | null;
+    observedEndDate: string | null;
     status: CatalystStatus;
     confidenceScore: string | null;
     beneficiaries: unknown;
     losers: unknown;
     evidence: RelationshipEvidence;
   }>;
+  mechanisms: Array<{
+    id: string;
+    catalystId: string;
+    title: string;
+    description: string | null;
+    sortOrder: number;
+    evidence: RelationshipEvidence;
+  }>;
+  impacts: Array<{
+    id: string;
+    catalystId: string;
+    mechanismId: string;
+    groupId: string;
+    direction: CatalystImpactDirection;
+    relationshipType: RelationshipType | null;
+    strengthScore: string | null;
+    timeframe: CatalystImpactTimeframe | null;
+    notes: string | null;
+    evidence: RelationshipEvidence;
+    tickerExamples: Array<{
+      id: string;
+      ticker: string;
+      name: string;
+      role: string | null;
+    }>;
+  }>;
 }
 
 type GroupRow = Awaited<ReturnType<RelationshipGraphService['loadGroups']>>[number];
 type EdgeRow = Awaited<ReturnType<RelationshipGraphService['loadEdges']>>[number];
 type CatalystRow = Awaited<ReturnType<RelationshipGraphService['loadCatalysts']>>[number];
+type MechanismRow = CatalystRow['mechanisms'][number];
+type ImpactRow = MechanismRow['impacts'][number];
 
 @Injectable()
 export class RelationshipGraphService {
@@ -79,6 +117,7 @@ export class RelationshipGraphService {
   async getGraph(
     filters: RelationshipGraphFilters = {},
   ): Promise<RelationshipGraphResponse> {
+    const normalized = normalizeFilters(filters);
     const [groups, edges, catalysts] = await Promise.all([
       this.loadGroups(),
       this.loadEdges(),
@@ -86,25 +125,45 @@ export class RelationshipGraphService {
     ]);
 
     const groupById = new Map(groups.map((group) => [group.id, group]));
-    const selectedGroupIds = this.selectGroupIds(groups, edges, catalysts, filters);
+    const eligibleCatalysts = catalysts.filter((catalyst) =>
+      this.matchesCatalystListFilters(catalyst, groupById, normalized),
+    );
+    const selectedCatalyst = this.selectCatalyst(eligibleCatalysts, normalized);
+    const selectedImpacts = selectedCatalyst
+      ? this.selectImpacts(selectedCatalyst, groupById, normalized)
+      : [];
+    const selectedMechanismIds = new Set(
+      selectedImpacts.map((impact) => impact.mechanismId),
+    );
+    const selectedGroupIds = new Set(selectedImpacts.map((impact) => impact.groupId));
+
+    if (selectedCatalyst?.groupId && !hasImpactScopedFilter(normalized)) {
+      selectedGroupIds.add(selectedCatalyst.groupId);
+    }
+
     const selectedGroups = groups.filter((group) => selectedGroupIds.has(group.id));
-    const selectedThemes = this.toThemes(selectedGroups);
     const selectedEdges = edges.filter(
       (edge) =>
         selectedGroupIds.has(edge.sourceGroupId) &&
         selectedGroupIds.has(edge.targetGroupId) &&
-        this.matchesRelationshipFilters(edge, groupById, filters),
-    );
-    const selectedCatalysts = catalysts.filter((catalyst) =>
-      this.matchesCatalystFilters(catalyst, groupById, selectedGroupIds, filters),
+        this.matchesRelationshipFilters(edge, groupById, normalized),
     );
 
     return {
-      themes: selectedThemes,
+      selectedCatalystId: selectedCatalyst?.id ?? null,
+      themes: this.toThemes(selectedGroups),
       groups: selectedGroups.map((group) => this.toGroupDto(group)),
       stocks: this.toStockDtos(selectedGroups),
       edges: selectedEdges.map((edge) => this.toEdgeDto(edge)),
-      catalysts: selectedCatalysts.map((catalyst) => this.toCatalystDto(catalyst)),
+      catalysts: eligibleCatalysts.map((catalyst) => this.toCatalystDto(catalyst)),
+      mechanisms: selectedCatalyst
+        ? selectedCatalyst.mechanisms
+            .filter((mechanism) => selectedMechanismIds.has(mechanism.id))
+            .map((mechanism) => this.toMechanismDto(mechanism))
+        : [],
+      impacts: selectedImpacts.map((impact) =>
+        this.toImpactDto(impact, selectedCatalyst!.id, groupById),
+      ),
     };
   }
 
@@ -127,6 +186,7 @@ export class RelationshipGraphService {
                     themeId: true,
                     groupId: true,
                     roleDescription: true,
+                    importanceScore: true,
                     evidenceJson: true,
                   },
                 },
@@ -160,97 +220,189 @@ export class RelationshipGraphService {
       include: {
         theme: { select: { id: true, name: true } },
         group: { select: { id: true, name: true, themeId: true, layer: true } },
+        mechanisms: {
+          include: {
+            impacts: {
+              include: {
+                group: {
+                  include: {
+                    theme: { select: { id: true, name: true, description: true } },
+                  },
+                },
+              },
+              orderBy: [{ direction: 'asc' }, { createdAt: 'asc' }],
+            },
+          },
+          orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+        },
       },
-      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      orderBy: [{ createdAt: 'desc' }],
     });
   }
 
-  private selectGroupIds(
-    groups: GroupRow[],
-    edges: EdgeRow[],
+  private selectCatalyst(
     catalysts: CatalystRow[],
     filters: RelationshipGraphFilters,
-  ): Set<string> {
-    const normalized = normalizeFilters(filters);
-    const selected = new Set<string>();
-    const hasFilter =
-      Boolean(normalized.theme) ||
-      Boolean(normalized.group) ||
-      Boolean(normalized.layer) ||
-      Boolean(normalized.eventCategory) ||
-      Boolean(normalized.relationshipType) ||
-      Boolean(normalized.q);
-
-    if (!hasFilter) return new Set(groups.map((group) => group.id));
-
-    for (const group of groups) {
-      if (this.matchesGroupFilters(group, normalized)) selected.add(group.id);
-      if (normalized.q && this.groupHasMatchingStock(group, normalized.q)) {
-        selected.add(group.id);
-      }
+  ): CatalystRow | null {
+    if (filters.catalystId) {
+      return catalysts.find((catalyst) => catalyst.id === filters.catalystId) ?? null;
     }
 
-    for (const edge of edges) {
-      if (this.matchesRelationshipFilters(edge, undefined, normalized)) {
-        selected.add(edge.sourceGroupId);
-        selected.add(edge.targetGroupId);
-      }
-    }
+    const withImpacts = catalysts.filter((catalyst) =>
+      catalyst.mechanisms.some((mechanism) => mechanism.impacts.length > 0),
+    );
+    const kinds = filters.kind
+      ? [filters.kind]
+      : (['CURRENT', 'HISTORICAL', 'PATTERN'] as CatalystKind[]);
 
-    for (const catalyst of catalysts) {
-      if (this.matchesCatalystFilters(catalyst, undefined, undefined, normalized)) {
-        if (catalyst.groupId) selected.add(catalyst.groupId);
-        if (catalyst.themeId) {
-          groups
-            .filter((group) => group.themeId === catalyst.themeId)
-            .forEach((group) => selected.add(group.id));
-        }
-      }
+    for (const kind of kinds) {
+      const catalyst = withImpacts.find((item) => item.kind === kind);
+      if (catalyst) return catalyst;
     }
-
-    return selected;
+    return catalysts[0] ?? null;
   }
 
-  private matchesGroupFilters(
-    group: GroupRow,
+  private selectImpacts(
+    catalyst: CatalystRow,
+    groupById: Map<string, GroupRow>,
+    filters: RelationshipGraphFilters,
+  ): ImpactRow[] {
+    return catalyst.mechanisms.flatMap((mechanism) =>
+      mechanism.impacts.filter((impact) =>
+        this.matchesImpactFilters(catalyst, mechanism, impact, groupById, filters),
+      ),
+    );
+  }
+
+  private matchesCatalystListFilters(
+    catalyst: CatalystRow,
+    groupById: Map<string, GroupRow>,
     filters: RelationshipGraphFilters,
   ): boolean {
-    if (filters.theme && !matchesAny(filters.theme, [group.themeId, group.theme.name])) {
+    if (filters.kind && catalyst.kind !== filters.kind) return false;
+    if (filters.eventCategory && !matches(filters.eventCategory, catalyst.eventCategory)) {
+      return false;
+    }
+    if (filters.catalystId && catalyst.id !== filters.catalystId) return false;
+
+    const impacts = catalyst.mechanisms.flatMap((mechanism) => mechanism.impacts);
+    if (
+      (filters.theme || filters.group || filters.layer || filters.relationshipType) &&
+      !impacts.some((impact) =>
+        this.matchesImpactFilters(catalyst, null, impact, groupById, filters),
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      filters.q &&
+      !matchesAny(filters.q, [
+        catalyst.title,
+        catalyst.hypothesis,
+        catalyst.kind,
+        catalyst.eventCategory,
+        catalyst.theme?.name,
+        catalyst.group?.name,
+        JSON.stringify(catalyst.expectedBeneficiariesJson ?? {}),
+        JSON.stringify(catalyst.expectedLosersJson ?? {}),
+        JSON.stringify(catalyst.evidenceJson ?? {}),
+      ]) &&
+      !catalyst.mechanisms.some((mechanism) =>
+        matchesAny(filters.q!, [
+          mechanism.title,
+          mechanism.description,
+          JSON.stringify(mechanism.evidenceJson ?? {}),
+        ]) ||
+        mechanism.impacts.some((impact) =>
+          this.impactMatchesSearch(impact, groupById, filters.q!),
+        ),
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private matchesImpactFilters(
+    catalyst: CatalystRow,
+    mechanism: MechanismRow | null,
+    impact: ImpactRow,
+    groupById: Map<string, GroupRow>,
+    filters: RelationshipGraphFilters,
+  ): boolean {
+    const group = groupById.get(impact.groupId);
+    if (!group) return false;
+    if (
+      filters.theme &&
+      !matchesAny(filters.theme, [group.themeId, group.theme.name])
+    ) {
       return false;
     }
     if (filters.group && !matchesAny(filters.group, [group.id, group.name])) {
       return false;
     }
-    if (filters.layer && group.layer !== filters.layer) {
+    if (filters.layer && group.layer !== filters.layer) return false;
+    if (filters.relationshipType && impact.relationshipType !== filters.relationshipType) {
+      return false;
+    }
+    if (filters.eventCategory && !matches(filters.eventCategory, catalyst.eventCategory)) {
       return false;
     }
     if (
       filters.q &&
       !matchesAny(filters.q, [
-        group.name,
-        group.theme.name,
-        group.layer,
-        JSON.stringify(group.evidenceJson ?? {}),
-      ])
+        catalyst.title,
+        catalyst.hypothesis,
+        catalyst.kind,
+        catalyst.eventCategory,
+        mechanism?.title,
+        mechanism?.description,
+      ]) &&
+      !this.impactMatchesSearch(impact, groupById, filters.q)
     ) {
       return false;
     }
     return true;
   }
 
-  private groupHasMatchingStock(group: GroupRow, q: string): boolean {
-    return group.themeStocks.some(({ stock }) =>
-      matchesAny(q, [stock.ticker, stock.name, stock.sector, stock.industry]),
-    );
+  private impactMatchesSearch(
+    impact: ImpactRow,
+    groupById: Map<string, GroupRow>,
+    q: string,
+  ): boolean {
+    const group = groupById.get(impact.groupId);
+    if (!group) return false;
+    return matchesAny(q, [
+      group.name,
+      group.theme.name,
+      group.layer,
+      impact.direction,
+      impact.relationshipType,
+      impact.timeframe,
+      impact.notes,
+      JSON.stringify(impact.evidenceJson ?? {}),
+      ...group.themeStocks.flatMap(({ stock }) => [
+        stock.ticker,
+        stock.name,
+        stock.sector,
+        stock.industry,
+        ...stock.themeMemberships.flatMap((membership) => [
+          membership.roleDescription,
+          JSON.stringify(membership.evidenceJson ?? {}),
+        ]),
+      ]),
+    ]);
   }
 
   private matchesRelationshipFilters(
     edge: EdgeRow,
-    groupById: Map<string, GroupRow> | undefined,
+    groupById: Map<string, GroupRow>,
     filters: RelationshipGraphFilters,
   ): boolean {
-    const sourceGroup = groupById?.get(edge.sourceGroupId) ?? edge.sourceGroup;
-    const targetGroup = groupById?.get(edge.targetGroupId) ?? edge.targetGroup;
+    const sourceGroup = groupById.get(edge.sourceGroupId) ?? edge.sourceGroup;
+    const targetGroup = groupById.get(edge.targetGroupId) ?? edge.targetGroup;
     if (
       filters.theme &&
       !matchesAny(filters.theme, [
@@ -280,67 +432,7 @@ export class RelationshipGraphService {
     ) {
       return false;
     }
-    if (filters.eventCategory && !matches(filters.eventCategory, edge.eventCategory)) {
-      return false;
-    }
     if (filters.relationshipType && edge.relationshipType !== filters.relationshipType) {
-      return false;
-    }
-    if (
-      filters.q &&
-      !matchesAny(filters.q, [
-        sourceGroup.name,
-        sourceGroup.theme.name,
-        targetGroup.name,
-        targetGroup.theme.name,
-        edge.relationshipType,
-        edge.macroSensitivity,
-        edge.eventCategory,
-        edge.notes,
-        JSON.stringify(edge.evidenceJson ?? {}),
-      ])
-    ) {
-      return false;
-    }
-    return true;
-  }
-
-  private matchesCatalystFilters(
-    catalyst: CatalystRow,
-    groupById: Map<string, GroupRow> | undefined,
-    selectedGroupIds: Set<string> | undefined,
-    filters: RelationshipGraphFilters,
-  ): boolean {
-    const group = catalyst.groupId
-      ? (groupById?.get(catalyst.groupId) ?? catalyst.group)
-      : null;
-    if (
-      filters.theme &&
-      !matchesAny(filters.theme, [catalyst.themeId, catalyst.theme?.name])
-    ) {
-      return false;
-    }
-    if (filters.group && !matchesAny(filters.group, [catalyst.groupId, group?.name])) {
-      return false;
-    }
-    if (filters.layer && group?.layer !== filters.layer) {
-      return false;
-    }
-    if (selectedGroupIds && catalyst.groupId && !selectedGroupIds.has(catalyst.groupId)) {
-      return false;
-    }
-    if (
-      filters.q &&
-      !matchesAny(filters.q, [
-        catalyst.title,
-        catalyst.hypothesis,
-        catalyst.theme?.name,
-        group?.name,
-        JSON.stringify(catalyst.expectedBeneficiariesJson ?? {}),
-        JSON.stringify(catalyst.expectedLosersJson ?? {}),
-        JSON.stringify(catalyst.evidenceJson ?? {}),
-      ])
-    ) {
       return false;
     }
     return true;
@@ -373,10 +465,7 @@ export class RelationshipGraphService {
     const byStock = new Map<string, RelationshipGraphResponse['stocks'][number]>();
     for (const group of groups) {
       for (const { stock } of group.themeStocks) {
-        const membership =
-          stock.themeMemberships.find(
-            (item) => item.groupId === group.id || item.themeId === group.themeId,
-          ) ?? null;
+        const membership = preferredMembership(stock.themeMemberships, group);
         const existing = byStock.get(stock.id);
         if (existing) {
           if (!existing.groupIds.includes(group.id)) existing.groupIds.push(group.id);
@@ -422,6 +511,10 @@ export class RelationshipGraphService {
       title: catalyst.title,
       themeId: catalyst.themeId,
       groupId: catalyst.groupId,
+      kind: catalyst.kind,
+      eventCategory: catalyst.eventCategory,
+      observedStartDate: dateOnly(catalyst.observedStartDate),
+      observedEndDate: dateOnly(catalyst.observedEndDate),
       status: catalyst.status,
       confidenceScore: catalyst.confidenceScore?.toString() ?? null,
       beneficiaries: catalyst.expectedBeneficiariesJson,
@@ -429,12 +522,67 @@ export class RelationshipGraphService {
       evidence: normalizeEvidence(catalyst.evidenceJson ?? catalyst.sourceUrlsJson),
     };
   }
+
+  private toMechanismDto(
+    mechanism: MechanismRow,
+  ): RelationshipGraphResponse['mechanisms'][number] {
+    return {
+      id: mechanism.id,
+      catalystId: mechanism.catalystId,
+      title: mechanism.title,
+      description: mechanism.description,
+      sortOrder: mechanism.sortOrder,
+      evidence: normalizeEvidence(mechanism.evidenceJson),
+    };
+  }
+
+  private toImpactDto(
+    impact: ImpactRow,
+    catalystId: string,
+    groupById: Map<string, GroupRow>,
+  ): RelationshipGraphResponse['impacts'][number] {
+    return {
+      id: impact.id,
+      catalystId,
+      mechanismId: impact.mechanismId,
+      groupId: impact.groupId,
+      direction: impact.direction,
+      relationshipType: impact.relationshipType,
+      strengthScore: impact.strengthScore?.toString() ?? null,
+      timeframe: impact.timeframe,
+      notes: impact.notes,
+      evidence: normalizeEvidence(impact.evidenceJson),
+      tickerExamples: this.tickerExamplesForGroup(groupById.get(impact.groupId)),
+    };
+  }
+
+  private tickerExamplesForGroup(
+    group: GroupRow | undefined,
+  ): RelationshipGraphResponse['impacts'][number]['tickerExamples'] {
+    if (!group) return [];
+    return [...group.themeStocks]
+      .map(({ stock }) => {
+        const membership = preferredMembership(stock.themeMemberships, group);
+        return {
+          id: stock.id,
+          ticker: stock.ticker,
+          name: stock.name,
+          role: membership?.roleDescription ?? null,
+          importance: membership?.importanceScore?.toNumber() ?? 0,
+        };
+      })
+      .sort((a, b) => b.importance - a.importance || a.ticker.localeCompare(b.ticker))
+      .slice(0, 8)
+      .map(({ importance: _importance, ...stock }) => stock);
+  }
 }
 
 function normalizeFilters(
   filters: RelationshipGraphFilters,
 ): RelationshipGraphFilters {
   return {
+    catalystId: trim(filters.catalystId),
+    kind: filters.kind,
     theme: trim(filters.theme),
     group: trim(filters.group),
     layer: filters.layer,
@@ -442,6 +590,35 @@ function normalizeFilters(
     relationshipType: filters.relationshipType,
     q: trim(filters.q),
   };
+}
+
+function hasImpactScopedFilter(filters: RelationshipGraphFilters): boolean {
+  return Boolean(
+    filters.theme ||
+      filters.group ||
+      filters.layer ||
+      filters.relationshipType ||
+      filters.q,
+  );
+}
+
+function preferredMembership<
+  T extends {
+    themeId: string;
+    groupId: string | null;
+    roleDescription: string | null;
+    importanceScore?: Prisma.Decimal | null;
+    evidenceJson?: Prisma.JsonValue | null;
+  },
+>(
+  memberships: T[],
+  group: { id: string; themeId: string },
+): T | null {
+  return (
+    memberships.find((item) => item.groupId === group.id) ??
+    memberships.find((item) => item.themeId === group.themeId) ??
+    null
+  );
 }
 
 function trim(value: string | undefined): string | undefined {
@@ -456,6 +633,10 @@ function matchesAny(needle: string, values: Array<unknown>): boolean {
 function matches(needle: string, value: unknown): boolean {
   if (value == null) return false;
   return String(value).toLowerCase().includes(needle.toLowerCase());
+}
+
+function dateOnly(value: Date | null): string | null {
+  return value ? value.toISOString().slice(0, 10) : null;
 }
 
 export function normalizeEvidence(value: Prisma.JsonValue): RelationshipEvidence {

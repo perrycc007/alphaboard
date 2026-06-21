@@ -266,6 +266,10 @@ export type SupplyChainLayer =
   | 'END_MARKET'
   | 'FINANCING'
 
+export type CatalystKind = 'CURRENT' | 'HISTORICAL' | 'PATTERN'
+export type CatalystImpactDirection = 'BENEFITS' | 'HARMS' | 'MIXED'
+export type CatalystImpactTimeframe = 'IMMEDIATE' | 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM'
+
 export interface RelationshipEvidenceSource {
   key?: string
   title?: string
@@ -322,6 +326,10 @@ export interface RelationshipCatalyst {
   title: string
   themeId: string | null
   groupId: string | null
+  kind: CatalystKind
+  eventCategory: string | null
+  observedStartDate: string | null
+  observedEndDate: string | null
   status: string
   confidenceScore: string | null
   beneficiaries: unknown
@@ -329,15 +337,50 @@ export interface RelationshipCatalyst {
   evidence: RelationshipEvidence
 }
 
+export interface RelationshipMechanism {
+  id: string
+  catalystId: string
+  title: string
+  description: string | null
+  sortOrder: number
+  evidence: RelationshipEvidence
+}
+
+export interface RelationshipTickerExample {
+  id: string
+  ticker: string
+  name: string
+  role: string | null
+}
+
+export interface RelationshipImpact {
+  id: string
+  catalystId: string
+  mechanismId: string
+  groupId: string
+  direction: CatalystImpactDirection
+  relationshipType: string | null
+  strengthScore: string | null
+  timeframe: CatalystImpactTimeframe | null
+  notes: string | null
+  evidence: RelationshipEvidence
+  tickerExamples: RelationshipTickerExample[]
+}
+
 export interface RelationshipGraph {
+  selectedCatalystId: string | null
   themes: RelationshipTheme[]
   groups: RelationshipGroup[]
   stocks: RelationshipStock[]
   edges: RelationshipEdge[]
   catalysts: RelationshipCatalyst[]
+  mechanisms: RelationshipMechanism[]
+  impacts: RelationshipImpact[]
 }
 
 export interface RelationshipGraphFilters {
+  catalystId?: string
+  kind?: CatalystKind
   theme?: string
   group?: string
   layer?: SupplyChainLayer
@@ -458,6 +501,17 @@ export interface AlmanacExplorerResponse {
   total: number
 }
 
+export interface AlmanacOhlcvResponse {
+  tradeCaseId: string
+  ticker: string
+  status: 'LOCAL' | 'FETCHED' | 'MISSING' | 'INVALID_TICKER'
+  message: string | null
+  reportDate: string | null
+  windowStart: string | null
+  windowEnd: string | null
+  bars: ApiStockDaily[]
+}
+
 export interface AlmanacFilters {
   q?: string
   ticker?: string
@@ -531,6 +585,8 @@ export const fetchAlmanacExplorer = (filters: AlmanacFilters = {}) => {
 
 export const importAlmanacLibrary = (body: {
   extractImages?: boolean
+  linkChartsOnly?: boolean
+  cleanupUnclear?: boolean
   sourceFile?: string
   maxTradeCasesPerReport?: number
 }) => api.post<{ message: string }>('/research/almanac/import', body)
@@ -538,12 +594,18 @@ export const importAlmanacLibrary = (body: {
 export const reviewAlmanacTradeCase = (
   id: string,
   body: {
+    ticker?: string
+    setupTag?: string
     label?: AlmanacTradeLabel
     reviewNotes?: string | null
     phase?: AlmanacSetupPhase
     direction?: 'LONG' | 'SHORT' | null
+    chartId?: string | null
   },
 ) => api.post<AlmanacTradeCase>(`/research/almanac/trade-cases/${id}/review`, body)
+
+export const fetchAlmanacTradeCaseOhlcv = (id: string) =>
+  api.get<AlmanacOhlcvResponse>(`/research/almanac/trade-cases/${id}/ohlcv`)
 
 export const fetchReport = () => api.get<StrategyReport>('/research/report')
 
@@ -585,6 +647,8 @@ export const verifyCatalyst = (id: string) =>
 
 export const buildRelationshipGraphQuery = (filters: RelationshipGraphFilters = {}) => {
   const params = new URLSearchParams()
+  if (filters.catalystId) params.set('catalystId', filters.catalystId)
+  if (filters.kind) params.set('kind', filters.kind)
   if (filters.theme) params.set('theme', filters.theme)
   if (filters.group) params.set('group', filters.group)
   if (filters.layer) params.set('layer', filters.layer)
@@ -596,5 +660,20 @@ export const buildRelationshipGraphQuery = (filters: RelationshipGraphFilters = 
 
 export const fetchRelationshipGraph = (filters: RelationshipGraphFilters = {}) => {
   const query = buildRelationshipGraphQuery(filters)
-  return api.get<RelationshipGraph>(`/research/relationship-graph${query ? `?${query}` : ''}`)
+  return api
+    .get<Partial<RelationshipGraph> | undefined>(`/research/relationship-graph${query ? `?${query}` : ''}`)
+    .then(normalizeRelationshipGraph)
+}
+
+function normalizeRelationshipGraph(graph: Partial<RelationshipGraph> | undefined): RelationshipGraph {
+  return {
+    selectedCatalystId: graph?.selectedCatalystId ?? null,
+    themes: graph?.themes ?? [],
+    groups: graph?.groups ?? [],
+    stocks: graph?.stocks ?? [],
+    edges: graph?.edges ?? [],
+    catalysts: graph?.catalysts ?? [],
+    mechanisms: graph?.mechanisms ?? [],
+    impacts: graph?.impacts ?? [],
+  }
 }
